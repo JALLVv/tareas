@@ -399,8 +399,8 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .cal-nav button:active{transform:scale(0.88);}
 .cal-nav svg{width:16px;height:16px;color:var(--blue);stroke-width:2.5;}
 .cal-weeks{display:flex;flex-direction:column;gap:6px;}
-.cal-week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
-.cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px;}
+.cal-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
+.cal-dow-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-bottom:8px;}
 .cal-dow{text-align:center;font-size:11px;font-weight:700;color:var(--label-3);}
 .cal-day{aspect-ratio:1/1;min-width:0;box-sizing:border-box;
   display:grid;place-items:center;position:relative;border-radius:50%;
@@ -772,14 +772,14 @@ const MotorTareas = (() => {
 
   /* ── Vocabularios compartidos (se inyectan en todas las plantillas) ── */
   const POOLS = {
-    numero:['3','4','5','6','7','8','10','12'],
-    animal:['un flamenco','una pantera','un pulpo','un colibrí','un oso perezoso','una mantis','un guepardo','una medusa','un cuervo','una libélula','un erizo','una nutria'],
-    color:['rojo','azul cobalto','amarillo mostaza','verde menta','magenta','naranja quemado','violeta','turquesa'],
-    emocion:['la nostalgia','la euforia','la calma','la rebeldía','la ternura','el misterio','la valentía','el asombro','la melancolía','la curiosidad'],
-    elemento:['el agua','el fuego','la tierra','el aire','la luz','la sombra'],
-    lugar:['un bosque antiguo','una estación espacial','un mercado de otra época','el fondo del mar','una azotea al amanecer','un desierto silencioso','una biblioteca infinita','un tren en movimiento','una ciudad bajo la lluvia'],
-    textura:['rugoso','suave','metálico','orgánico','translúcido','áspero'],
-    objeto:['una silla','una toalla','un cojín','una botella','un libro','una cuchara','un calcetín','una caja de cartón','una linterna','un trozo de cuerda']
+    numero:['2','3','4','5','6','7','8','9','10','11','12','15','20'],
+    animal:['un flamenco','una pantera','un pulpo','un colibrí','un oso perezoso','una mantis','un guepardo','una medusa','un cuervo','una libélula','un erizo','una nutria','un camaleón','una luciérnaga','un zorro','una ballena','un caballito de mar','un búho','una abeja obrera','un delfín','una tortuga milenaria','un escarabajo','un lince','una garza','un mapache','una salamandra'],
+    color:['rojo','azul cobalto','amarillo mostaza','verde menta','magenta','naranja quemado','violeta','turquesa','coral','índigo','dorado','plateado','verde lima','rosa palo','gris pizarra','ocre','lavanda','carmesí'],
+    emocion:['la nostalgia','la euforia','la calma','la rebeldía','la ternura','el misterio','la valentía','el asombro','la melancolía','la curiosidad','la esperanza','la gratitud','el vértigo','la serenidad','el orgullo','la timidez','la libertad','la añoranza','la determinación','el alivio'],
+    elemento:['el agua','el fuego','la tierra','el aire','la luz','la sombra','el metal','el cristal','el rayo','la niebla','el hielo','el viento'],
+    lugar:['un bosque antiguo','una estación espacial','un mercado de otra época','el fondo del mar','una azotea al amanecer','un desierto silencioso','una biblioteca infinita','un tren en movimiento','una ciudad bajo la lluvia','un faro en plena tormenta','un templo olvidado','una nave abandonada','un jardín secreto','una feria nocturna','un volcán dormido','un callejón de neón','una cueva de cristales','un campo de girasoles','un puente colgante','un café al final del mundo'],
+    textura:['rugoso','suave','metálico','orgánico','translúcido','áspero','esponjoso','sedoso','granulado','elástico','aterciopelado','quebradizo'],
+    objeto:['una silla','una toalla','un cojín','una botella','un libro','una cuchara','un calcetín','una caja de cartón','una linterna','un trozo de cuerda','un paraguas','un espejo de bolsillo','una llave vieja','un imán','una pelota','unas gafas','un reloj parado','un sombrero','una pluma','un dado','un trozo de tiza','una goma elástica','una taza','un clip']
   };
 
   /* ── Giros creativos: el ingrediente que hace cada tarea inesperada ── */
@@ -791,7 +791,24 @@ const MotorTareas = (() => {
     'documentándolo con una foto al terminar','añadiendo una regla absurda inventada por ti',
     'cambiando de lado o de mano cada minuto','con una sonrisa imposible de borrar',
     'como si nadie te estuviera mirando','convirtiéndolo en un ritual solemne',
-    'narrándolo en voz alta como un documental','sin repetir ningún movimiento ya hecho'
+    'narrándolo en voz alta como un documental','sin repetir ningún movimiento ya hecho',
+    'usando solo objetos de un mismo color','con una cuenta atrás de reloj a la vista',
+    'sin levantar los pies del suelo','manteniendo siempre una sonrisa',
+    'con guantes puestos o las manos cubiertas','sosteniendo algo en equilibrio sobre tu cabeza',
+    'sin doblar nunca los codos','hablando solo en rimas',
+    'inventando una palabra nueva cada minuto','con una música de fondo que marque tu ritmo',
+    'en completo silencio, sin un solo sonido','usando solo tres dedos de cada mano',
+    'de pie sobre un solo pie el mayor tiempo posible','reduciendo todo a la mitad de su tamaño habitual',
+    'duplicando cada acción que hagas','tocando las cosas solo con el dorso de la mano',
+    'como si tuvieras 90 años','como si tuvieras 5 años',
+    'imitando el estilo de tu artista favorito','añadiendo un giro de trama inesperado a mitad',
+    'moviéndote como una marioneta','tarareando una melodía sin parar',
+    'poniéndote un límite estricto de tres intentos','explicando en voz alta cada decisión',
+    'taponándote un oído todo el rato','convirtiéndolo en una competición contra el reloj',
+    'de pie si normalmente lo harías sentado (o al revés)','con la regla de no repetir dos veces la misma idea',
+    'como un robot con la batería casi agotada','celebrando en voz alta cada pequeño logro',
+    'usando solo objetos que quepan en una mano','con la mano dominante metida en el bolsillo',
+    'sin pisar las líneas o juntas del suelo','contando en voz alta cada paso del 1 al 10 sin parar'
   ];
 
   /* ── Temas: una atmósfera que tiñe la tarea entera ── */
@@ -800,7 +817,13 @@ const MotorTareas = (() => {
     'una película de cine negro','la naturaleza salvaje','el minimalismo más radical',
     'una cultura que no conoces','el caos ordenado','las cuatro estaciones a la vez',
     'un mundo sin colores','la ciencia ficción retro','lo diminuto e invisible',
-    'una tormenta','un carnaval','la calma de un domingo','un futuro utópico'
+    'una tormenta','un carnaval','la calma de un domingo','un futuro utópico',
+    'una galaxia lejana','el interior de un volcán','un reloj que gira al revés',
+    'las luces de neón de una gran ciudad','un jardín japonés en otoño','la era de los dinosaurios',
+    'un circo ambulante','el ártico helado','una selva tropical al amanecer',
+    'un castillo medieval','el interior de un sueño lúcido','la música de los años 80',
+    'un mercado flotante','las profundidades de una mina','un eclipse total',
+    'el silencio antes de una tormenta','un viaje en globo','lo que harías si fueras invisible'
   ];
 
   /* ── Dinámicas: cómo cambia la tarea según cuántos sean ── */
@@ -809,25 +832,41 @@ const MotorTareas = (() => {
       'Hazlo en solitario y compite contra tu versión de ayer.',
       'Hazlo en solitario, registrando cómo te sientes antes y después.',
       'Reto personal: nadie te ve, así que sé totalmente honesto contigo.',
-      'En solitario, pero comprométete a contárselo a alguien al terminar.'
+      'En solitario, pero comprométete a contárselo a alguien al terminar.',
+      'En solitario: ponte un reto que creas imposible y descubre hasta dónde llegas.',
+      'A solas: hazlo dos veces y quédate con la mejor versión.',
+      'En solitario: grábate o anótalo para revisarlo dentro de un mes.',
+      'Tú contra el reloj: cronométrate y trata de superar tu marca.'
     ],
     '2':[
       'En pareja: túrnense y que cada uno mejore lo que hizo el otro.',
       'En pareja: uno da instrucciones a ciegas y el otro ejecuta; luego cambian.',
       'En pareja: háganlo en espejo, copiándose en simultáneo.',
-      'En pareja: compitan en buena onda y voten quién fue más creativo.'
+      'En pareja: compitan en buena onda y voten quién fue más creativo.',
+      'En pareja: prohibido hablar; comuníquense solo con gestos.',
+      'En pareja: uno empieza y el otro continúa exactamente donde lo dejó.',
+      'En pareja: pónganse retos mutuos y cúmplanlos sobre la marcha.',
+      'En pareja: combinen sus dos ideas más distintas en una sola.'
     ],
     '3':[
       'En trío: roten los roles de creador, ejecutor y observador cada pocos minutos.',
       'En trío: dos colaboran y el tercero documenta y da feedback.',
       'En trío: monten una cadena donde cada uno añade una parte al resultado.',
-      'En trío: cada persona propone una regla y deben cumplirse las tres a la vez.'
+      'En trío: cada persona propone una regla y deben cumplirse las tres a la vez.',
+      'En trío: cada uno aporta una restricción y las tres deben respetarse.',
+      'En trío: monten un relevo donde el resultado pasa de mano en mano.',
+      'En trío: uno dirige con los ojos cerrados y los otros dos ejecutan.',
+      'En trío: voten al final quién sorprendió más y por qué.'
     ],
     '3+':[
       'En grupo: divídanse en equipos y comparen resultados al final.',
       'En grupo: monten una cadena de montaje donde cada persona hace un paso.',
       'En grupo: que cada integrante aporte una variación y combínenlas en una sola.',
-      'En grupo: voten una palabra clave y todos deben incorporarla a su manera.'
+      'En grupo: voten una palabra clave y todos deben incorporarla a su manera.',
+      'En grupo: hagan una ronda donde cada persona sube la apuesta de la anterior.',
+      'En grupo: dividan la tarea en estaciones y roten por todas.',
+      'En grupo: nombren un juez rotativo que puntúe cada vuelta.',
+      'En grupo: el objetivo es que nadie repita lo que ya hizo otro.'
     ]
   };
 
@@ -852,7 +891,11 @@ const MotorTareas = (() => {
         'Crea una coreografía-ejercicio inspirada en cómo se movería {animal} y repítela hasta clavarla.',
         'Diseña un reto de equilibrio y resistencia centrado en {parteCuerpo}.',
         'Combina {movimiento} y {movimiento} en una rutina fluida sin pausas.',
-        'Monta una búsqueda activa: mientras te mueves por el espacio, toca {numero} objetos de color {color}.'
+        'Monta una búsqueda activa: mientras te mueves por el espacio, toca {numero} objetos de color {color}.',
+        'Crea un mini-circuito que alterne {movimiento} y descanso activo durante toda la sesión.',
+        'Inventa un baile de calentamiento inspirado en {emocion} y enséñaselo a alguien (real o imaginario).',
+        'Reta a {parteCuerpo} con una postura de equilibrio que aguantes {numero} respiraciones.',
+        'Diseña un juego de movimiento donde tocar {numero} puntos del espacio sume puntos.'
       ]},
     arte:{nombre:'Arte', emoji:'🎨', color:'#FFB000',
       pools:{material:['carboncillo','acuarela','tijeras y papel','plastilina','tinta','collage de revistas','bolígrafo azul','solo líneas rectas','tu dedo y café']},
@@ -861,7 +904,11 @@ const MotorTareas = (() => {
         'Dibuja {lugar} pero solo con formas geométricas.',
         'Haz un autorretrato con {material} sin levantar el lápiz del papel.',
         'Inventa una criatura mezclando {animal} y {animal}, y dale nombre y mundo.',
-        'Llena una hoja con un patrón infinito basado en algo {textura} y el color {color}.'
+        'Llena una hoja con un patrón infinito basado en algo {textura} y el color {color}.',
+        'Crea una paleta de solo dos colores, {color} entre ellos, y pinta {emocion}.',
+        'Haz un collage exprés que cuente la historia de {lugar}.',
+        'Dibuja el mismo {objeto} tres veces: realista, abstracto y absurdo.',
+        'Diseña un logotipo o símbolo imaginario para {emocion}.'
       ]},
     musica:{nombre:'Música', emoji:'🎵', color:'#7B5CFF',
       pools:{instrumento:['objetos de la cocina','tu voz','palmas y chasquidos','una app de piano','vasos con agua','golpes sobre la mesa'],
@@ -871,7 +918,11 @@ const MotorTareas = (() => {
         'Crea una melodía que suene a {emocion} en estilo {genero}.',
         'Inventa una canción de 4 versos sobre {lugar}.',
         'Versiona una canción que ames transformándola al estilo {genero}.',
-        'Improvisa la banda sonora de {lugar} con {instrumento}.'
+        'Improvisa la banda sonora de {lugar} con {instrumento}.',
+        'Crea un jingle de 10 segundos para anunciar {objeto}.',
+        'Transforma los sonidos de tu entorno en un ritmo de estilo {genero}.',
+        'Compón un estribillo pegadizo sobre {emocion} usando {instrumento}.',
+        'Inventa una nana o canción de cuna ambientada en {lugar}.'
       ]},
     lectura:{nombre:'Lectura', emoji:'📖', color:'#0FB5A8',
       pools:{material:['un libro a tu alcance','un artículo nuevo','un poema','las primeras líneas de 3 libros distintos','una página al azar'],
@@ -881,7 +932,11 @@ const MotorTareas = (() => {
         'Elige {material} y resume su idea principal en una frase de menos de 10 palabras.',
         'Lee algo sobre {tema} que nunca habrías elegido por tu cuenta.',
         'Lee y, al terminar, dibuja la escena que más te impactó.',
-        'Abre {material} por una página al azar y conéctala con tu día de hoy.'
+        'Abre {material} por una página al azar y conéctala con tu día de hoy.',
+        'Lee en voz alta un fragmento dándole la voz de {animal}.',
+        'Busca en {material} una frase y conviértela en tu lema del día.',
+        'Lee {material} e imagina cómo lo contaría alguien de {lugar}.',
+        'Subraya {numero} palabras que no conozcas y deduce su significado por contexto.'
       ]},
     productividad:{nombre:'Productividad', emoji:'✅', color:'#2E5BFF',
       pools:{area:['tu bandeja de entrada','tu escritorio','tu lista de pendientes','tus archivos','tu semana','tus suscripciones'],
@@ -891,7 +946,11 @@ const MotorTareas = (() => {
         'Identifica la tarea que llevas más tiempo evitando y haz solo su primer paso.',
         'Diseña un mini-sistema para que {area} no vuelva a desordenarse.',
         'Haz una lista de {numero} cosas que puedes dejar de hacer a partir de hoy.',
-        'Convierte un objetivo grande y vago en {numero} acciones concretas para esta semana.'
+        'Convierte un objetivo grande y vago en {numero} acciones concretas para esta semana.',
+        'Haz una purga rápida de {area}: quédate solo con lo que de verdad usas.',
+        'Convierte {area} en un sistema visual que se entienda de un solo vistazo.',
+        'Cronométrate {numero} minutos y avanza todo lo posible en una sola tarea, sin pausas.',
+        'Escribe el "no" más liberador que puedes decir hoy y comprométete a cumplirlo.'
       ]},
     estudio:{nombre:'Estudio', emoji:'📚', color:'#FF6B2E',
       pools:{tecnica:['mapas mentales','explicárselo a alguien (o a un peluche)','tarjetas de memoria','el método Feynman','dibujar el concepto','inventar una historia que lo conecte'],
@@ -901,7 +960,11 @@ const MotorTareas = (() => {
         'Explica un concepto difícil como si tuvieras que enseñárselo a {animal}.',
         'Crea {numero} preguntas de examen sobre {asignatura} y respóndelas sin mirar.',
         'Resume {asignatura} en un solo dibujo o esquema visual.',
-        'Conecta lo que estudias con {lugar} mediante una metáfora.'
+        'Conecta lo que estudias con {lugar} mediante una metáfora.',
+        'Graba un audio de 60 segundos explicando {asignatura} de memoria.',
+        'Convierte {asignatura} en una canción o rima fácil de recordar.',
+        'Hazte {numero} preguntas trampa sobre {asignatura} y respóndelas sin mirar.',
+        'Dibuja un mapa mental de {asignatura} usando solo símbolos, sin palabras.'
       ]},
     cocina:{nombre:'Cocina', emoji:'🍳', color:'#FF4D8D',
       pools:{ingrediente:['lo primero que veas en la nevera','algo que casi nunca usas','solo 3 ingredientes','restos de comida','algo de un solo color'],
@@ -911,7 +974,11 @@ const MotorTareas = (() => {
         'Inventa una bebida inspirada en {emocion} y ponle nombre.',
         'Empláta un plato sencillo como si fuera arte, inspirándote en el color {color}.',
         'Prepara algo comestible con {ingrediente} y descríbelo como un crítico gastronómico.',
-        'Diseña el menú de una cena temática sobre {tema}.'
+        'Diseña el menú de una cena temática sobre {tema}.',
+        'Monta un plato de un solo color usando {ingrediente}.',
+        'Inventa una receta de autor con {ingrediente} y escríbela como en un libro de cocina.',
+        'Crea un snack equilibrado con {ingrediente}, {reto}.',
+        'Diseña el postre soñado inspirado en {emocion} y ponle un nombre irresistible.'
       ]},
     limpieza:{nombre:'Limpieza', emoji:'🧹', color:'#00B3E6',
       pools:{zona:['un cajón','una superficie','el rincón más caótico','tu mochila o bolso','el suelo de una habitación','la galería de fotos del móvil'],
@@ -921,7 +988,11 @@ const MotorTareas = (() => {
         'Convierte la limpieza de {zona} en un juego con puntos.',
         'Encuentra {numero} objetos que ya no usas y decide su destino.',
         'Deja {zona} impecable y hazle un antes y después mental.',
-        'Reorganiza {zona} aplicando una sola regla que inventes tú.'
+        'Reorganiza {zona} aplicando una sola regla que inventes tú.',
+        'Aplica a {zona} la regla de "una cosa fuera por cada cosa nueva que entre".',
+        'Reto relámpago: deja {zona} impecable antes de que acabe una canción.',
+        'Reorganiza {zona} por colores o por tamaños, {modo}.',
+        'Encuentra el rincón más olvidado de {zona} y devuélvele la vida.'
       ]},
     creatividad:{nombre:'Creatividad', emoji:'💡', color:'#9B5CFF',
       pools:{},
@@ -930,7 +1001,12 @@ const MotorTareas = (() => {
         'Combina {lugar} y {animal} para diseñar un invento nuevo.',
         'Crea una palabra que no existe para describir {emocion}, con su definición.',
         'Rediseña {objeto} para el año 3000.',
-        'Imagina un mundo donde {elemento} no existe y describe un día allí.'
+        'Imagina un mundo donde {elemento} no existe y describe un día allí.',
+        'Diseña una mascota para {emocion} y dale tres superpoderes.',
+        'Inventa las reglas de un deporte nuevo que se juegue en {lugar}.',
+        'Escribe {numero} titulares de periódico del año 3000.',
+        'Mezcla {objeto} y {animal} en un solo invento y descríbelo con detalle.',
+        'Crea el anuncio publicitario de algo que jamás debería venderse.'
       ]},
     salud:{nombre:'Salud', emoji:'❤️', color:'#16C172',
       pools:{foco:['la hidratación','la postura','el descanso de la vista','la movilidad','tu nivel de energía'],
@@ -941,7 +1017,11 @@ const MotorTareas = (() => {
         'Diseña una pausa activa de recuperación para {parteCuerpo}.',
         'Inventa tu propia rutina de reinicio corporal en {numero} pasos.',
         'Identifica un hábito que te resta energía y planea un sustituto amable.',
-        'Dedica este tiempo solo a {habito}, sin prisa ni distracciones.'
+        'Dedica este tiempo solo a {habito}, sin prisa ni distracciones.',
+        'Diseña tu "botón de reinicio" de {numero} segundos centrado en {parteCuerpo}.',
+        'Crea una rutina de {numero} respiraciones conscientes enfocadas en {foco}.',
+        'Inventa un estiramiento nuevo para {parteCuerpo} y ponle un nombre.',
+        'Convierte {habito} en un pequeño ritual que disfrutes de verdad.'
       ]},
     bienestar:{nombre:'Bienestar', emoji:'🌿', color:'#FF8FB1',
       pools:{practica:['escribir 3 cosas que agradeces','enviar un mensaje amable a alguien','identificar qué necesitas ahora mismo','soltar una preocupación por escrito y romper el papel','crear un pequeño momento de placer']},
@@ -950,7 +1030,11 @@ const MotorTareas = (() => {
         'Escribe {numero} cosas buenas, por mínimas que sean, de tu día.',
         'Diseña tu rincón de calma ideal, aunque sea solo imaginado.',
         'Haz por ti algo amable que normalmente pospones.',
-        'Dedica este tiempo a {practica}.'
+        'Dedica este tiempo a {practica}.',
+        'Escribe una carta de agradecimiento a alguien, aunque nunca la envíes.',
+        'Crea una lista de {numero} pequeños placeres gratuitos que tienes a mano.',
+        'Diseña tu ritual ideal para terminar el día en calma e imagínalo paso a paso.',
+        'Date permiso para no hacer nada productivo durante este rato y obsérvate.'
       ]},
     idiomas:{nombre:'Idiomas', emoji:'🗣️', color:'#FFC400',
       pools:{idioma:['un idioma que estudias','un idioma que te gustaría aprender','tu lengua materna pero al revés','lengua de signos','un idioma inventado por ti'],
@@ -960,7 +1044,11 @@ const MotorTareas = (() => {
         'Aprende {numero} palabras nuevas en {idioma} y úsalas en una historia.',
         'Describe {lugar} usando solo palabras que ya conoces en {idioma}.',
         'Inventa un mini-diálogo entre {animal} y tú en {idioma}.',
-        'Etiqueta mentalmente {numero} objetos a tu alrededor en {idioma}.'
+        'Etiqueta mentalmente {numero} objetos a tu alrededor en {idioma}.',
+        'En {idioma}: cuenta un chiste o intenta un trabalenguas.',
+        'Aprende cómo se dice {emocion} en {idioma} y úsalo en tres frases distintas.',
+        'En {idioma}: describe a {animal} sin nombrarlo y que alguien lo adivine.',
+        'Traduce el título de tu canción favorita a {idioma} de forma creativa.'
       ]},
     programacion:{nombre:'Programación', emoji:'💻', color:'#2BD9C4',
       pools:{reto:['una función que haga algo inútil pero divertido','un script de una sola línea','un mini-puzzle de lógica','refactorizar algo feo','arte ASCII generado con código'],
@@ -971,7 +1059,11 @@ const MotorTareas = (() => {
         'Explica {concepto} con una analogía sobre {lugar}.',
         'Reto: genera {numero} números siguiendo una regla que inventes.',
         'Diseña en papel el algoritmo para {tareaCotidiana}.',
-        'Crea un mini-programa que traduzca {emocion} a colores.'
+        'Crea un mini-programa que traduzca {emocion} a colores.',
+        'Escribe el pseudocódigo para que {animal} resuelva {tareaCotidiana}.',
+        'Diseña una función imaginaria que convierta {emocion} en el color {color}.',
+        'Explica {concepto} a alguien que nunca ha tocado un ordenador.',
+        'Inventa {numero} casos de prueba absurdos para una función cualquiera.'
       ]},
     fotografia:{nombre:'Fotografía', emoji:'📷', color:'#C77DFF',
       pools:{foco:['la luz y la sombra','las texturas','lo diminuto','la simetría','el movimiento','los reflejos','un solo color'],
@@ -981,7 +1073,11 @@ const MotorTareas = (() => {
         'Fotografía {numero} cosas del color {color} que tengas cerca.',
         'Captura {emocion} en una sola imagen.',
         'Cuenta una historia sin palabras en exactamente {numero} fotos.',
-        'Encuentra {lugar} dentro de tu propia casa y fotografíalo.'
+        'Encuentra {lugar} dentro de tu propia casa y fotografíalo.',
+        'Haz {numero} fotos del mismo objeto desde ángulos imposibles.',
+        'Cuenta una historia de principio a fin en 3 fotos, {reto}.',
+        'Busca {foco} en lugares donde nadie se molestaría en mirar.',
+        'Crea un autorretrato en el que no aparezca tu cara.'
       ]},
     naturaleza:{nombre:'Naturaleza', emoji:'🍃', color:'#3FA34D',
       pools:{accion:['observa','escucha','toca','huele','dibuja','recoge con respeto'],
@@ -991,7 +1087,11 @@ const MotorTareas = (() => {
         'Encuentra {numero} tonos distintos del color que domine a tu alrededor.',
         'Observa {elementoNat} como si lo vieras por primera vez y descríbelo.',
         'Crea una pequeña obra efímera con elementos naturales inspirada en {tema}.',
-        'Al aire libre y con los ojos cerrados, identifica {numero} sonidos diferentes.'
+        'Al aire libre y con los ojos cerrados, identifica {numero} sonidos diferentes.',
+        'Sal y {accion} {elementoNat} durante {numero} minutos sin ninguna distracción.',
+        'Crea un pequeño mandala efímero con elementos naturales que encuentres.',
+        'Encuentra {numero} formas o patrones que se repitan en la naturaleza a tu alrededor.',
+        'Adopta {elementoNat} por un rato y obsérvalo como lo haría un científico.'
       ]},
     meditacion:{nombre:'Meditación', emoji:'🧘', color:'#6C8AE4',
       pools:{foco:['la respiración','los sonidos del entorno','las sensaciones del cuerpo','un punto fijo','el espacio entre dos pensamientos'],
@@ -1001,7 +1101,11 @@ const MotorTareas = (() => {
         'Haz un escaneo corporal lento, desde {parteCuerpo} hasta los pies.',
         'Visualiza {lugar} con los cinco sentidos y quédate allí.',
         'Respira contando: inhala en {numero} tiempos, sostén, exhala más largo.',
-        'Observa {emocion} sin juzgarla, como una nube que pasa.'
+        'Observa {emocion} sin juzgarla, como una nube que pasa.',
+        'Haz {numero} respiraciones lentas concentrándote solo en {foco}.',
+        'Relaja {parteCuerpo} conscientemente, parte por parte, sin prisa.',
+        'Imagina que sueltas una preocupación en cada exhalación.',
+        'Observa tus pensamientos como {animal} observaría el horizonte.'
       ]},
     escritura:{nombre:'Escritura', emoji:'✍️', color:'#E8624A',
       pools:{formato:['un microcuento de 50 palabras','una carta que nunca enviarás','un poema sin rimas','la primera página de una novela','un diálogo entre dos desconocidos'],
@@ -1011,7 +1115,11 @@ const MotorTareas = (() => {
         'Cuenta una historia completa en exactamente {numero} frases.',
         'Describe {lugar} usando solo los cinco sentidos, sin nombrarlo.',
         'Escribe un texto inspirado en {emocion} sin usar nunca esa palabra.',
-        'Inventa el diario secreto de {animal} por un día.'
+        'Inventa el diario secreto de {animal} por un día.',
+        'Escribe {formato} que termine con la frase: «y entonces todo cambió».',
+        'Cuenta el mismo suceso cotidiano desde el punto de vista de {animal}.',
+        'Escribe un microrrelato donde {objeto} sea el protagonista absoluto.',
+        'Describe {emocion} como si fuera un lugar que se puede visitar.'
       ]}
   };
 
@@ -1088,11 +1196,17 @@ class GeneradorTareas {
       // ¿la plantilla ya trae tema propio?
       const usaTema = plantilla.includes('{tema}');
 
-      // Capa 1: giro creativo (más probable en tareas largas)
+      // Capa 1: reto creativo (los "giros"). Casi siempre hay al menos uno.
       let giro = null;
-      if(r() < (duracion>=20 ? 0.7 : 0.45)){
+      if(r() < (duracion>=20 ? 0.85 : 0.65)){
         giro = M.pick(M.GIROS, r);
         cuerpo += ' Y hazlo ' + giro + '.';
+        // Reto extra: un segundo desafío distinto para subir la dificultad
+        if(r() < 0.3){
+          let giro2 = giro;
+          for(let i=0;i<8 && giro2===giro;i++) giro2 = M.pick(M.GIROS, r);
+          if(giro2!==giro){ cuerpo += ' Y, como reto extra, ' + giro2 + '.'; giro = giro + ' + ' + giro2; }
+        }
       }
       // Capa 2: tema atmosférico (solo si la plantilla no lo usó ya)
       let tema = null;
@@ -1104,8 +1218,9 @@ class GeneradorTareas {
       const dinamica   = M.pick(M.DINAMICAS[personas] || M.DINAMICAS['solo'], r);
       const marcoTiempo = M.ESCALA[duracion] || '';
 
-      // Firma: identidad única de esta tarea concreta
-      const firma = [clave, duracion, personas, cuerpo, dinamica].join('|');
+      // Firma = el texto visible exacto (cuerpo + dinámica). Así, una tarea ya
+      // mostrada no vuelve a generarse jamás, da igual la duración o el grupo.
+      const firma = [clave, cuerpo, dinamica].join('|');
 
       ultimo = { id:'TSK-'+Math.abs(hash(firma)).toString(36).toUpperCase().padStart(6,'0'),
         firma, categoria:clave, categoriaNombre:cat.nombre, emoji:cat.emoji, color:cat.color,
@@ -1141,7 +1256,23 @@ class GeneradorTareas {
 }
 function hash(str){ let h=0; for(let i=0;i<str.length;i++){ h=(h<<5)-h+str.charCodeAt(i); h|=0; } return h; }
 
-const _genTareas = new GeneradorTareas();
+/* Historial anti-repetición PERSISTENTE: las firmas de todas las tareas ya
+   generadas se guardan en localStorage, de modo que una tarea mostrada una vez
+   no vuelve a aparecer nunca, ni siquiera tras cerrar y reabrir la app. */
+const GEN_HIST_KEY = "rachas_gen_hist_v1";
+const GEN_HIST_MAX = 4000; // tope de seguridad para no llenar localStorage
+function loadGenHist(){
+  try{ const a = JSON.parse(localStorage.getItem(GEN_HIST_KEY)); return new Set(Array.isArray(a)?a:[]); }
+  catch(e){ return new Set(); }
+}
+function saveGenHist(set){
+  try{
+    let arr = [...set];
+    if(arr.length > GEN_HIST_MAX) arr = arr.slice(arr.length - GEN_HIST_MAX);
+    localStorage.setItem(GEN_HIST_KEY, JSON.stringify(arr));
+  }catch(e){}
+}
+const _genTareas = new GeneradorTareas({ historial: loadGenHist() });
 
 /* ---------------------------------------------------------------------
    Duración y puntos
@@ -1283,6 +1414,7 @@ const Generator = (() => {
     try {
       const t = _genTareas.generar({ categoria:catKey(selCat), duracion:selDur, personas:grupoDe(selPeople) });
       texto = t.texto + (t.dinamica ? " " + t.dinamica : "");
+      saveGenHist(_genTareas.historial); // persistir para no repetir nunca
     } catch(e){
       texto = "Dedica este tiempo a tu categoría elegida.";
     }
