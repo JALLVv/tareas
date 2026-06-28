@@ -443,9 +443,13 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 }
 .sheet.show{transform:none;}
 .grabber{width:38px;height:5px;border-radius:3px;background:var(--label-4);margin:9px auto 4px;flex:0 0 auto;}
-.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 12px;flex:0 0 auto;}
-.sheet-head .title{font-size:18px;font-weight:700;letter-spacing:-0.02em;}
+/* Grid de 3 columnas (1fr · auto · 1fr): el título queda centrado de verdad
+   aunque los botones laterales tengan anchos distintos (Cancelar / Guardar…). */
+.sheet-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:8px 18px 12px;flex:0 0 auto;}
+.sheet-head .title{font-size:18px;font-weight:700;letter-spacing:-0.02em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sheet-head .act{font-size:17px;font-weight:600;color:var(--blue);padding:4px 2px;}
+.sheet-head .act:first-child{justify-self:start;text-align:left;}
+.sheet-head .act:last-child{justify-self:end;text-align:right;}
 .sheet-head .act.cancel{font-weight:400;}
 .sheet-head .act[disabled]{color:var(--label-3);}
 .sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 18px 18px;}
@@ -471,8 +475,8 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 input[type=file]{display:none;}
 
 /* Galería del día */
-.day-gallery{display:grid;grid-template-columns:1fr;gap:12px;}
-.gal-item{display:flex;gap:13px;align-items:center;padding:10px;}
+.day-gallery{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
+.gal-item{display:flex;gap:13px;align-items:center;padding:10px;min-width:0;}
 .gal-thumb{width:64px;height:64px;border-radius:14px;overflow:hidden;flex:0 0 auto;background:var(--fill-2);}
 .gal-thumb img{width:100%;height:100%;object-fit:cover;}
 .gal-info{flex:1;min-width:0;}
@@ -576,7 +580,7 @@ input[type=file]{display:none;}
 
 <div id="app">
   <!-- ===================== GENERADOR ===================== -->
-  <section class="view active" id="view-gen" data-title="Generador">
+  <section class="view" id="view-gen" data-title="Generador">
     <h1 class="large-title">Generador</h1>
     <p class="subtitle">Crea una tarea a tu medida y gana el doble de puntos.</p>
 
@@ -598,7 +602,7 @@ input[type=file]{display:none;}
   </section>
 
   <!-- ===================== TAREAS ===================== -->
-  <section class="view" id="view-tasks" data-title="Tareas">
+  <section class="view active" id="view-tasks" data-title="Tareas">
     <h1 class="large-title">Tareas</h1>
     <p class="subtitle">Tus retos de hoy. Completa para sumar puntos.</p>
 
@@ -670,11 +674,11 @@ input[type=file]{display:none;}
 
 <!-- Tab bar -->
 <nav class="tabbar">
-  <button class="tab active" data-view="gen">
+  <button class="tab" data-view="gen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 3l1.8 5.2L21 10l-5.2 1.8L14 17l-1.8-5.2L7 10l5.2-1.8zM6 3v3.4M4.3 4.7h3.4M6 18v3M4.5 19.5h3" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Generador
   </button>
-  <button class="tab" data-view="tasks">
+  <button class="tab active" data-view="tasks">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10 6h10M10 12h10M10 18h10M4 6l1.3 1.3L8 4.6M4 12l1.3 1.3L8 10.6M4 18l1.3 1.3L8 16.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Tareas
   </button>
@@ -2076,7 +2080,7 @@ const Profile = (() => {
       <div class="card gal-item" data-h="${h.id}">
         <div class="gal-thumb" data-thumb="${h.photoId||''}"></div>
         <div class="gal-info">
-          <div class="t">${esc(h.title)}</div>
+          <div class="t">${esc(shortTitle(h.title))}</div>
           <div class="m">${h.time} · ${esc(h.category)} · <span class="pts">${h.points} pts</span>${h.random?' · ✦':''}</div>
         </div>
       </div>`).join("");
@@ -2118,6 +2122,13 @@ const Profile = (() => {
 })();
 function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
 function noPhotoThumb(){return '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--label-3)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5"/></svg></div>';}
+// Resumen del título para listas: si es muy largo (>10 palabras) deja una frase
+// corta identificativa con puntos suspensivos. El título completo se conserva aparte.
+function shortTitle(s, maxWords=10, keep=7){
+  const words=(s||"").trim().split(/\s+/);
+  if(words.length<=maxWords) return s;
+  return words.slice(0,keep).join(" ")+"…";
+}
 
 /* Lightbox */
 const Lightbox = (() => {
@@ -2135,7 +2146,7 @@ const Lightbox = (() => {
    ROUTER — navegación instantánea entre vistas + título compacto
    ===================================================================== */
 const Router = (() => {
-  let cur="gen";
+  let cur="tasks";
   const views={gen:"#view-gen",tasks:"#view-tasks",profile:"#view-profile"};
 
   function go(name){
@@ -2167,6 +2178,7 @@ const Router = (() => {
   function init(){
     $$(".tab").forEach(t=> t.onclick=()=> go(t.getAttribute("data-view")) );
     Object.values(views).forEach(sel=> $(sel).addEventListener("scroll", onScroll, {passive:true}));
+    $("#fab").classList.toggle("show", cur==="tasks");
     updateNavbar();
   }
   return { init, go };
