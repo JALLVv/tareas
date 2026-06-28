@@ -102,7 +102,7 @@ img{display:block;}
   overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   padding:0 16px;
-  padding-top:calc(var(--safe-top) + 6px);
+  padding-top:calc(var(--safe-top) + 22px);
   padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 28px);
   opacity:0;transform:translateY(8px) scale(0.992);
   transition:opacity .34s var(--ease-out), transform .34s var(--ease-out);
@@ -227,7 +227,8 @@ img{display:block;}
   padding:9px 14px;border-radius:11px;font-size:14px;font-weight:600;
   color:var(--label);transition:transform .12s var(--ease-out), background .2s, box-shadow .2s;
 }
-.seg.sel{background:var(--mat-thin);box-shadow:0 1px 4px rgba(0,0,0,0.4), inset 0 0.5px 0 rgba(255,255,255,0.08);}
+.seg.sel{background:var(--blue);color:#fff;font-weight:700;
+  box-shadow:0 4px 14px color-mix(in srgb,var(--blue) 45%,transparent);}
 .seg:active{transform:scale(0.95);}
 
 /* Switch iOS */
@@ -433,7 +434,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 
 .sheet{
   position:fixed;left:0;right:0;bottom:0;z-index:100;
-  max-height:92vh;display:flex;flex-direction:column;
+  max-height:calc(100vh - var(--safe-top) - 24px);display:flex;flex-direction:column;
   background:var(--mat-thick);
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
   border-radius:22px 22px 0 0;border-top:0.5px solid var(--sep);
@@ -1390,6 +1391,20 @@ const dateKey = (d=new Date()) => {
   const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
 };
 const yesterdayKey = () => { const d=new Date(); d.setDate(d.getDate()-1); return dateKey(d); };
+/* Recalcula la racha a partir del historial (días distintos con actividad).
+   Al borrar tareas: si un día se queda sin completadas, deja de contar. */
+function streakFromHistory(history){
+  const days = [...new Set((history||[]).map(h=>h.date).filter(Boolean))].sort();
+  if(!days.length) return { current:0, lastDate:null };
+  const toD = k => { const [y,m,d]=k.split("-").map(Number); return new Date(y,m-1,d); };
+  let run = 1;
+  for(let i=days.length-1; i>0; i--){
+    if((toD(days[i]) - toD(days[i-1]))/86400000 === 1) run++; else break;
+  }
+  const last = days[days.length-1];
+  const current = (last===dateKey() || last===yesterdayKey()) ? run : 0; // viva solo si el último día es hoy o ayer
+  return { current, lastDate:last };
+}
 const timeLabel = (d=new Date()) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
@@ -1777,6 +1792,11 @@ const Tasks = (() => {
         s.tasks   = s.tasks.filter(x=>x.id!==task.id);
         s.history = s.history.filter(h=>h.taskId!==task.id);
         s.points  = Math.max(0, s.points - removedPts);
+        // recalcular la racha: si un día se queda sin completadas, deja de contar
+        const st = streakFromHistory(s.history);
+        s.streak.current  = st.current;
+        s.streak.lastDate = st.lastDate;
+        s.streak.best     = Math.max(s.streak.best||0, st.current);
       });
       // borrar de IndexedDB las fotos de esas completadas
       photoIds.forEach(id=> DB.del(id));
