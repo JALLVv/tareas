@@ -424,6 +424,32 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .cal-day.has.lvl1{background:rgba(48,209,88,0.10);}
 .cal-day.has:active{transform:scale(0.88);}
 
+/* Amigos */
+.friends-head{display:flex;align-items:center;justify-content:space-between;margin:28px 4px 12px;}
+.friends-actions{display:flex;gap:8px;}
+.mini-btn{padding:8px 14px;border-radius:14px;background:var(--fill-2);color:var(--label);
+  font-size:14px;font-weight:600;transition:transform .12s var(--ease-out), background .2s;}
+.mini-btn.accent{background:var(--blue);color:#fff;}
+.mini-btn:active{transform:scale(0.94);}
+.sheet-head .act.danger{color:var(--red);font-weight:600;}
+.friend-card{display:flex;align-items:center;gap:13px;padding:12px 14px;margin-bottom:10px;cursor:pointer;}
+.friend-av{width:46px;height:46px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+  font-size:19px;font-weight:800;color:#fff;background:linear-gradient(135deg,#5E5CE6,#0A84FF);}
+.friend-info{flex:1;min-width:0;}
+.friend-info .fn{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.friend-info .fm{font-size:13px;color:var(--label-2);margin-top:2px;}
+.friend-info .fm .fire{color:var(--orange);}
+.friend-chev{color:var(--label-3);flex:0 0 auto;}
+.friend-chev svg{width:20px;height:20px;}
+.friends-empty{padding:18px 14px;text-align:center;color:var(--label-2);font-size:14px;line-height:1.5;}
+.code-box{width:100%;background:var(--fill-2);border:0.5px solid var(--hairline);border-radius:14px;
+  padding:12px 14px;font-size:13px;color:var(--label);word-break:break-all;font-family:ui-monospace,monospace;
+  max-height:120px;overflow:auto;}
+.friend-profile-head{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 4px;}
+.friend-profile-head .big-av{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;
+  font-size:32px;font-weight:800;color:#fff;background:linear-gradient(135deg,#5E5CE6,#0A84FF);}
+.friend-profile-head .fpn{font-size:22px;font-weight:800;letter-spacing:-0.02em;}
+
 /* =========================================================================
    SHEETS / MODALES
    ========================================================================= */
@@ -667,6 +693,15 @@ input[type=file]{display:none;}
       <div class="cal-dow-row" id="calDow"></div>
       <div class="cal-weeks" id="calGrid"></div>
     </div>
+
+    <div class="friends-head">
+      <span class="section-title" style="margin:0;">Amigos</span>
+      <div class="friends-actions">
+        <button class="mini-btn" id="friendShare">Mi código</button>
+        <button class="mini-btn accent" id="friendAdd">Añadir</button>
+      </div>
+    </div>
+    <div id="friendsList"></div>
   </section>
 </div>
 
@@ -893,8 +928,50 @@ const MotorTareas = (() => {
     20:'Mini-proyecto — planifica un poco, ejecuta y deja margen para pulir.',
     30:'Proyecto medio — divídelo en fases y dedica un bloque a cada una.',
     45:'Proyecto amplio — prepara, desarrolla a fondo y prueba variaciones.',
-    60:'Proyecto completo — 10 min de planificación, el grueso de ejecución y los últimos minutos para revisar y celebrar.'
+    60:'Proyecto completo — 10 min de planificación, el grueso de ejecución y los últimos minutos para revisar y celebrar.',
+    120:'Maratón creativo (2 h) — un proyecto de verdad: planifica, ejecuta por fases y remata con mimo. Tómate descansos cortos y no te rindas.',
+    150:'Modo épico (2 h+) — piénsalo en grande. Divídelo en actos, comprométete hasta el final y celebra a lo grande cuando lo termines.'
   };
+
+  /* ── Tareas ÉPICAS: proyectos largos, locos y muy creativos para 2 h y 2 h+.
+     Usan los vocabularios compartidos y se combinan con giros, temas y dinámicas. ── */
+  const EPICAS = [
+    'Monta una exposición o museo casero sobre {tema}: crea al menos {numero} piezas y un recorrido con cartelitos explicativos.',
+    'Organiza una mini-olimpiada de {numero} pruebas inventadas por ti y compite hasta coronar a un campeón con medalla incluida.',
+    'Escribe el primer capítulo entero de una novela ambientada en {lugar}, con al menos 3 personajes y un final que enganche.',
+    'Cocina un menú completo de {numero} platos inspirado en {tema} y preséntalo como si fuera un restaurante con su carta.',
+    'Diseña y construye una maqueta o estructura de {lugar} con materiales que tengas por casa.',
+    'Crea un cortometraje o fotonovela de principio a fin protagonizado por {animal}, con guion, escenas y créditos.',
+    'Compón, ensaya y graba una canción completa sobre {emocion}, con su letra y su melodía.',
+    'Aprende una habilidad nueva desde cero durante todo el tiempo y grábate haciendo tu primer intento decente.',
+    'Reorganiza por completo una habitación entera y dale una temática basada en {tema}.',
+    'Diseña un juego de mesa jugable (tablero, reglas y fichas) sobre {tema} y pruébalo de verdad.',
+    'Crea un cómic de al menos {numero} viñetas que cuente una aventura épica de {animal} en {lugar}.',
+    'Monta una búsqueda del tesoro con {numero} pistas encadenadas por toda la casa y que alguien (o tú) la resuelva.',
+    'Construye una fortaleza o refugio épico con cojines, mantas y cajas, y decóralo con la temática de {lugar}.',
+    'Escribe, dibuja y encuaderna a mano un mini-libro ilustrado sobre {emocion}.',
+    'Graba un episodio de pódcast de 20-30 minutos hablando con pasión de algo que ames, con intro, secciones y despedida.',
+    'Diseña una rutina de entrenamiento de {numero} estaciones y complétala entera, sudando de verdad.',
+    'Crea un álbum de fotos temático de {tema} con al menos {numero} fotos preparadas con cuidado y sus pies de foto.',
+    'Aprende y cocina una receta típica de otro país de principio a fin, ambientando la mesa como si estuvieras allí.',
+    'Inventa un idioma con su alfabeto, {numero} palabras y una frase célebre, y deja todo escrito en un "diccionario".',
+    'Monta un espectáculo de {numero} actos (magia, chistes, música, lo que sea) y represéntalo de principio a fin.',
+    'Crea una guía de viaje ilustrada (real o imaginaria) de {lugar} con mapa, lugares imprescindibles y consejos.',
+    'Diseña y planta un pequeño rincón verde o un huerto en macetas, dejándolo listo, regado y bonito.',
+    'Escribe una carta enorme a tu yo del futuro contando tu vida actual y tus sueños, y guárdala bien sellada.',
+    'Crea un videojuego en papel jugable (niveles, enemigos y jefe final) ambientado en {lugar}, y juégalo.',
+    'Organiza una sesión de cine temática de {tema}: ambienta el espacio, prepara snacks y un programa doble.',
+    'Haz un vaciado total de un armario o trastero, clasifícalo todo y déjalo como nuevo, decidiendo qué se queda.',
+    'Diseña tu propio juego de cartas con al menos {numero} cartas únicas ilustradas y sus reglas, y echa una partida.',
+    'Pinta un cuadro grande o un mural improvisado inspirado en {tema}, de principio a fin sin rendirte.',
+    'Construye con tus manos algo útil (un estante, una caja, un soporte) y úsalo de verdad al terminar.',
+    'Prepara una "cápsula del tiempo": reúne {numero} objetos y notas que te representen hoy, guárdalos y ponle fecha de apertura.',
+    'Crea de cero un personaje completo (nombre, historia, poderes, enemigos) y dibújalo en {numero} poses distintas.',
+    'Diseña una yincana por tu barrio o tu casa con {numero} retos físicos y mentales, y complétala entera.',
+    'Monta tu propio "canal": graba una intro, un vídeo y una miniatura sobre un tema que domines.',
+    'Cocina y decora un pastel o repostería de principio a fin con una temática basada en {emocion}.',
+    'Escribe el guion y representa una obra de teatro de {numero} escenas, poniendo voz a todos los personajes.'
+  ];
 
   /* ── Las 17 categorías. Cada una aporta plantillas + sus propios vocabularios ── */
   const CATEGORIAS = {
@@ -1224,7 +1301,7 @@ const MotorTareas = (() => {
     return texto;
   }
 
-  return { POOLS, GIROS, TEMAS, DINAMICAS, ESCALA, CATEGORIAS, crearRNG, pick, cap, rellenar };
+  return { POOLS, GIROS, TEMAS, DINAMICAS, ESCALA, EPICAS, CATEGORIAS, crearRNG, pick, cap, rellenar };
 })();
 
 class GeneradorTareas {
@@ -1261,7 +1338,8 @@ class GeneradorTareas {
       const cat = M.CATEGORIAS[clave];
       const pools = { ...M.POOLS, ...(cat.pools||{}), tema: M.TEMAS };
 
-      const plantilla = M.pick(cat.plantillas, r);
+      // En 2 h / 2 h+ se usan tareas épicas (proyectos largos); si no, las de la categoría
+      const plantilla = duracion>=120 ? M.pick(M.EPICAS, r) : M.pick(cat.plantillas, r);
       let cuerpo = M.cap(M.rellenar(plantilla, pools, r));
 
       // ¿la plantilla ya trae tema propio?
@@ -1348,10 +1426,11 @@ const _genTareas = new GeneradorTareas({ historial: loadGenHist() });
 /* ---------------------------------------------------------------------
    Duración y puntos
    --------------------------------------------------------------------- */
-const DURATIONS = [5,10,15,20,30,45,60];
-const durLabel = (m) => m===60 ? "1 hora" : m+" minutos";
-const durShort = (m) => m===60 ? "1 h" : m+" min";
-const basePoints = (m) => m*2;            // 5→10, 10→20, … 60→120
+const DURATIONS = [5,10,15,20,30,45,60,120,150];
+const durLabel = (m) => m===60 ? "1 hora" : m===120 ? "2 horas" : m===150 ? "2 horas o más" : m+" minutos";
+const durShort = (m) => m===60 ? "1 h" : m===120 ? "2 h" : m===150 ? "2 h+" : m+" min";
+// 2 h y 2 h+ otorgan los MISMOS puntos (240 base); el resto es minutos×2
+const basePoints = (m) => m>=120 ? 240 : m*2;   // 5→10, 10→20, … 60→120, 2h y 2h+→240
 const taskPoints = (m,random) => basePoints(m) * (random?2:1);
 
 /* ---------------------------------------------------------------------
@@ -1370,12 +1449,12 @@ const peopleShort = (n)=> n<=1 ? "Individual" : (n>=4 ? "3+ personas" : n+" pers
    --------------------------------------------------------------------- */
 const RANKS = [
   {name:"Principiante", min:0,     desc:"El primer paso siempre cuenta."},
-  {name:"Aprendiz",     min:200,   desc:"Estás cogiendo el ritmo."},
-  {name:"Constante",    min:600,   desc:"La constancia es tu superpoder."},
-  {name:"Disciplinado", min:1500,  desc:"La disciplina te lleva lejos."},
-  {name:"Experto",      min:3000,  desc:"Dominas tu rutina."},
-  {name:"Maestro",      min:6000,  desc:"Un ejemplo de dedicación."},
-  {name:"Leyenda",      min:12000, desc:"Has alcanzado la cima."}
+  {name:"Aprendiz",     min:600,   desc:"Estás cogiendo el ritmo."},
+  {name:"Constante",    min:2000,  desc:"La constancia es tu superpoder."},
+  {name:"Disciplinado", min:5000,  desc:"La disciplina te lleva lejos."},
+  {name:"Experto",      min:11000, desc:"Dominas tu rutina."},
+  {name:"Maestro",      min:22000, desc:"Un ejemplo de dedicación."},
+  {name:"Leyenda",      min:42000, desc:"Has alcanzado la cima."}
 ];
 function rankFor(points){
   let r = RANKS[0], idx = 0;
@@ -1447,7 +1526,8 @@ const Store = (() => {
     tasks:[],          // {id,title,desc,category,minutes,urgent,recurrence:{type,days[]},random,createdAt,done,lastDone}
     history:[],        // {id,taskId,title,category,minutes,points,random,date,time,photoId}
     points:0,
-    streak:{ current:0, best:0, lastDate:null }
+    streak:{ current:0, best:0, lastDate:null },
+    friends:[]         // {id,name,points,streak:{current,best,lastDate},dates:[],addedAt}
   });
   let state;
   function load(){
@@ -1459,6 +1539,7 @@ const Store = (() => {
         state.streak.current = 0;
       }
     }
+    if(!Array.isArray(state.friends)) state.friends = []; // migración: usuarios antiguos
     return state;
   }
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
@@ -2046,6 +2127,7 @@ const Profile = (() => {
     $("#stNormal").textContent = total-rnd;
 
     renderCalendar();
+    Friends.render();
   }
 
   function renderCalendar(dir){
@@ -2145,6 +2227,155 @@ const Profile = (() => {
       compressImage(f,(data)=>{ Store.update(s=>{s.profile.avatar=data;}); render(); }); e.target.value=""; };
   }
   return { init, render, renderCalendar };
+})();
+
+/* =====================================================================
+   FRIENDS — amigos locales por "código de perfil" (app sin servidor).
+   Un amigo se añade pegando su código (instantánea de su perfil:
+   nombre, puntos, racha y días de actividad). Se puede ver su perfil
+   completo (rango, racha, calendario) y eliminarlo.
+   ===================================================================== */
+const Friends = (() => {
+  const PREFIX = "RACHAS1:";
+
+  function myCode(){
+    const s = Store.get();
+    const dates = [...new Set(s.history.map(h=>h.date).filter(Boolean))];
+    const payload = { n:(s.profile.name||"Atleta"), p:s.points, c:s.streak.current, b:s.streak.best, l:s.streak.lastDate, d:dates };
+    try{ return PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); }
+    catch(e){ return PREFIX; }
+  }
+  function parseCode(code){
+    try{
+      const raw=(code||"").trim(); const b64 = raw.startsWith(PREFIX) ? raw.slice(PREFIX.length) : raw;
+      const o = JSON.parse(decodeURIComponent(escape(atob(b64))));
+      if(!o || typeof o.n!=="string") return null;
+      return {
+        name:(o.n||"Amigo").slice(0,40),
+        points:Math.max(0,parseInt(o.p)||0),
+        streak:{ current:Math.max(0,parseInt(o.c)||0), best:Math.max(0,parseInt(o.b)||0), lastDate:o.l||null },
+        dates:Array.isArray(o.d)?o.d.filter(x=>typeof x==="string"):[]
+      };
+    }catch(e){ return null; }
+  }
+
+  function render(){
+    const wrap=$("#friendsList"); if(!wrap) return;
+    const s=Store.get();
+    if(!s.friends.length){
+      wrap.innerHTML=`<div class="card friends-empty">Aún no tienes amigos.<br>Pulsa <b>Añadir</b> y pega su código, o comparte el tuyo con <b>Mi código</b>.</div>`;
+      return;
+    }
+    wrap.innerHTML = s.friends.map(f=>{
+      const ini=(f.name||"A").trim().charAt(0).toUpperCase()||"A";
+      return `<div class="card friend-card" data-fid="${f.id}">
+        <div class="friend-av">${esc(ini)}</div>
+        <div class="friend-info">
+          <div class="fn">${esc(f.name)}</div>
+          <div class="fm">${esc(rankFor(f.points).rank.name)} · ${f.points} pts · <span class="fire">🔥 ${f.streak.current}</span></div>
+        </div>
+        <span class="friend-chev">${chevronSvg()}</span>
+      </div>`;
+    }).join("");
+    $$("[data-fid]",wrap).forEach(c=> c.onclick=()=>{ haptic(); const f=Store.get().friends.find(x=>x.id===c.getAttribute("data-fid")); if(f) openProfile(f); });
+  }
+
+  function shareSheet(){
+    const code=myCode();
+    Sheets.open(`
+      <div class="grabber"></div>
+      <div class="sheet-head"><span class="act cancel" id="fcCancel">Cerrar</span><span class="title">Mi código</span><span class="act" id="fcCopy">Copiar</span></div>
+      <div class="sheet-body">
+        <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">Comparte este código con un amigo para que te añada. Incluye tu nombre, puntos, racha y días de actividad.</p>
+        <div class="code-box" id="fcBox">${esc(code)}</div>
+      </div>`);
+    $("#fcCancel").onclick=Sheets.close;
+    $("#fcCopy").onclick=()=>{
+      try{ navigator.clipboard && navigator.clipboard.writeText(code); }catch(e){}
+      try{ const b=$("#fcBox"),rng=document.createRange(); rng.selectNodeContents(b); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(rng); }catch(e){}
+      haptic(); UI.toast("Código copiado","check","var(--green)");
+    };
+  }
+
+  function addSheet(){
+    Sheets.open(`
+      <div class="grabber"></div>
+      <div class="sheet-head"><span class="act cancel" id="faCancel">Cancelar</span><span class="title">Añadir amigo</span><span class="act" id="faSave">Añadir</span></div>
+      <div class="sheet-body">
+        <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">Pega aquí el código que te compartió tu amigo (empieza por RACHAS1:).</p>
+        <div class="field-block" style="border:0.5px solid var(--hairline);border-radius:14px;"><textarea class="field" id="faInput" rows="3" placeholder="RACHAS1:…"></textarea></div>
+      </div>`);
+    $("#faCancel").onclick=Sheets.close;
+    $("#faSave").onclick=()=>{
+      const f=parseCode($("#faInput").value);
+      if(!f){ UI.toast("Código no válido","check","var(--red)"); return; }
+      Store.update(s=>{ s.friends.unshift({ id:uid(), name:f.name, points:f.points, streak:f.streak, dates:f.dates, addedAt:Date.now() }); });
+      Sheets.close(); render(); haptic(15); UI.toast("Amigo añadido","check","var(--green)");
+    };
+    setTimeout(()=>{ const i=$("#faInput"); if(i) i.focus(); },350);
+  }
+
+  function openProfile(f){
+    let cal=new Date();
+    const dateSet=new Set(f.dates||[]);
+    const ini=(f.name||"A").trim().charAt(0).toUpperCase()||"A";
+    Sheets.open(`
+      <div class="grabber"></div>
+      <div class="sheet-head"><span class="act danger" id="fpDel">Eliminar</span><span class="title">Amigo</span><span class="act" id="fpClose">Cerrar</span></div>
+      <div class="sheet-body">
+        <div class="friend-profile-head">
+          <div class="big-av">${esc(ini)}</div>
+          <div class="fpn">${esc(f.name)}</div>
+          <div class="rank-badge">${trophySvg()} ${esc(rankFor(f.points).rank.name)}</div>
+        </div>
+        <div class="card streak-card" style="margin-top:16px;">
+          <div class="streak-flame">🔥</div>
+          <div class="streak-info"><div class="big">${f.streak.current}${f.streak.current===1?" día":" días"}</div><div class="small">Racha actual</div></div>
+          <div class="streak-best"><div class="v">${f.streak.best}</div><div class="l">Mejor racha</div></div>
+        </div>
+        <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+          <div class="card stat"><div class="v gold">${f.points}</div><div class="l">Puntos totales</div></div>
+          <div class="card stat"><div class="v">${(f.dates||[]).length}</div><div class="l">Días activos</div></div>
+        </div>
+        <div class="card cal-card" style="margin-top:14px;">
+          <div class="cal-head"><span class="m" id="fpMonth">—</span>
+            <div class="cal-nav">
+              <button id="fpPrev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 5l-7 7 7 7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button id="fpNext"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5l7 7-7 7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </div>
+          </div>
+          <div class="cal-dow-row" id="fpDow"></div>
+          <div class="cal-weeks" id="fpGrid"></div>
+        </div>
+      </div>`);
+    $("#fpClose").onclick=Sheets.close;
+    $("#fpDel").onclick=()=>{ haptic(20); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); Sheets.close(); render(); UI.toast("Amigo eliminado","check","var(--red)"); };
+    const months=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+    function draw(){
+      const y=cal.getFullYear(), m=cal.getMonth();
+      $("#fpMonth").textContent = months[m].charAt(0).toUpperCase()+months[m].slice(1)+" "+y;
+      $("#fpDow").innerHTML = ["L","M","X","J","V","S","D"].map(d=>`<div class="cal-dow">${d}</div>`).join("");
+      const lead=(new Date(y,m,1).getDay()+6)%7, days=new Date(y,m+1,0).getDate(), todayK=dateKey();
+      const cells=[];
+      for(let d=1;d<=days;d++){
+        const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const cls=["cal-day"]; if(key===todayK)cls.push("today"); if(dateSet.has(key))cls.push("has","lvl2");
+        const st = d===1 && lead>0 ? ` style="grid-column-start:${lead+1}"` : "";
+        cells.push(`<div class="${cls.join(' ')}"${st}>${d}</div>`);
+      }
+      $("#fpGrid").innerHTML=cells.join("");
+    }
+    $("#fpPrev").onclick=()=>{ cal.setMonth(cal.getMonth()-1); haptic(); draw(); };
+    $("#fpNext").onclick=()=>{ cal.setMonth(cal.getMonth()+1); haptic(); draw(); };
+    draw();
+  }
+
+  function init(){
+    const sh=$("#friendShare"), ad=$("#friendAdd");
+    if(sh) sh.onclick=()=>{ haptic(); shareSheet(); };
+    if(ad) ad.onclick=()=>{ haptic(); addSheet(); };
+  }
+  return { init, render, openProfile };
 })();
 function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
 function noPhotoThumb(){return '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--label-3)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5"/></svg></div>';}
@@ -2287,6 +2518,7 @@ function boot(){
   Generator.init();
   Tasks.init();
   Profile.init();
+  Friends.init();
   Router.init();
   Tasks.render();
   Profile.render();
