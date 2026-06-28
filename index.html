@@ -603,8 +603,7 @@ input[type=file]{display:none;}
     <p class="subtitle">Tus retos de hoy. Completa para sumar puntos.</p>
 
     <div class="segmented" id="taskFilter" style="margin-top:6px;">
-      <div class="seg sel" data-f="all">Todas</div>
-      <div class="seg" data-f="pending">Pendientes</div>
+      <div class="seg sel" data-f="pending">Pendientes</div>
       <div class="seg" data-f="done">Completadas</div>
     </div>
 
@@ -1639,7 +1638,7 @@ const Sheets = (() => {
    TASKS — crear, listar, completar (con foto), borrar
    ===================================================================== */
 const Tasks = (() => {
-  let filter = "all";
+  let filter = "pending";
 
   const RECUR = [
     {k:"once",  l:"Solo hoy"},
@@ -1758,15 +1757,28 @@ const Tasks = (() => {
       <div class="sheet-body photo-modal">
         <div class="ico danger">${trashSvg()}</div>
         <h3>¿Eliminar esta tarea?</h3>
-        <p>“${esc(task.title)}” se quitará de tu lista. Las completadas anteriores y sus fotos se conservan.</p>
+        <p>“${esc(task.title)}” se quitará de tu lista. Si ya la habías completado, sus puntos se descontarán y se borrarán su registro y su foto.</p>
         <button class="btn danger" id="cdConfirm">Eliminar tarea</button>
       </div>`;
     Sheets.open(head);
     $("#cdCancel").onclick = Sheets.close;
     $("#cdConfirm").onclick = ()=>{
       haptic(20);
-      Store.update(s=>{ s.tasks = s.tasks.filter(x=>x.id!==task.id); });
-      Sheets.close(); render(); UI.toast("Tarea eliminada","check","var(--red)");
+      let removedPts = 0;
+      const photoIds = [];
+      Store.update(s=>{
+        // revertir las completadas de esta tarea: sumar sus puntos y recoger sus fotos
+        s.history.forEach(h=>{ if(h.taskId===task.id){ removedPts += (h.points||0); if(h.photoId) photoIds.push(h.photoId); } });
+        // quitar la tarea, descontar sus puntos y borrar sus registros del historial
+        s.tasks   = s.tasks.filter(x=>x.id!==task.id);
+        s.history = s.history.filter(h=>h.taskId!==task.id);
+        s.points  = Math.max(0, s.points - removedPts);
+      });
+      // borrar de IndexedDB las fotos de esas completadas
+      photoIds.forEach(id=> DB.del(id));
+      Sheets.close(); render();
+      if (UI.renderProfile) UI.renderProfile();
+      UI.toast(removedPts>0 ? `Tarea eliminada · −${removedPts} pts` : "Tarea eliminada", "check", "var(--red)");
     };
   }
   function emptyState(title,sub){
