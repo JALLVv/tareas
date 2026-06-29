@@ -297,8 +297,10 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .task-meta{display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;}
 .tag{font-size:11.5px;font-weight:600;color:var(--label-2);}
 .tag.dot::before{content:"·";margin-right:6px;color:var(--label-3);}
-.tag.urgent{color:var(--red);}
 .tag.rnd{color:var(--purple);}
+/* Tarea urgente: burbuja roja */
+.task-card.urgent{background:rgba(255,69,58,0.16);box-shadow:inset 0 0 0 1px rgba(255,69,58,0.40);}
+.task-card.urgent.done{background:rgba(255,69,58,0.08);}
 .tag.pts{color:var(--yellow);}
 .task-check{width:30px;height:30px;border-radius:50%;border:2px solid var(--label-3);flex:0 0 auto;
   display:grid;place-items:center;transition:transform .15s var(--ease-out), background .2s, border-color .2s;}
@@ -425,16 +427,24 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .cal-day.has:active{transform:scale(0.88);}
 
 /* Amigos */
-.friends-head{display:flex;align-items:center;justify-content:space-between;margin:28px 4px 12px;}
+.friends-toggle{position:absolute;top:calc(var(--safe-top) + 20px);right:16px;z-index:5;
+  width:42px;height:42px;border-radius:50%;background:var(--fill-2);display:grid;place-items:center;
+  -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:transform .12s var(--ease-out), background .2s;}
+.friends-toggle:active{transform:scale(0.9);}
+.friends-toggle svg{width:23px;height:23px;color:var(--blue);}
+.friends-sheet-head{display:flex;align-items:center;gap:8px;margin:2px 0 16px;}
+.friends-sheet-head .mini-btn{flex:1;text-align:center;}
 .friends-actions{display:flex;gap:8px;}
-.mini-btn{padding:8px 14px;border-radius:14px;background:var(--fill-2);color:var(--label);
+.mini-btn{padding:9px 14px;border-radius:14px;background:var(--fill-2);color:var(--label);
   font-size:14px;font-weight:600;transition:transform .12s var(--ease-out), background .2s;}
 .mini-btn.accent{background:var(--blue);color:#fff;}
+.mini-btn.danger{background:rgba(255,69,58,0.18);color:var(--red);}
 .mini-btn:active{transform:scale(0.94);}
 .sheet-head .act.danger{color:var(--red);font-weight:600;}
 .friend-card{display:flex;align-items:center;gap:13px;padding:12px 14px;margin-bottom:10px;cursor:pointer;}
-.friend-av{width:46px;height:46px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+.friend-av{width:46px;height:46px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;overflow:hidden;
   font-size:19px;font-weight:800;color:#fff;background:linear-gradient(135deg,#5E5CE6,#0A84FF);}
+.friend-av img,.friend-profile-head .big-av img{width:100%;height:100%;object-fit:cover;}
 .friend-info{flex:1;min-width:0;}
 .friend-info .fn{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .friend-info .fm{font-size:13px;color:var(--label-2);margin-top:2px;}
@@ -446,7 +456,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
   padding:12px 14px;font-size:13px;color:var(--label);word-break:break-all;font-family:ui-monospace,monospace;
   max-height:120px;overflow:auto;}
 .friend-profile-head{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 4px;}
-.friend-profile-head .big-av{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;
+.friend-profile-head .big-av{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;overflow:hidden;
   font-size:32px;font-weight:800;color:#fff;background:linear-gradient(135deg,#5E5CE6,#0A84FF);}
 .friend-profile-head .fpn{font-size:22px;font-weight:800;letter-spacing:-0.02em;}
 
@@ -482,6 +492,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 18px 18px;}
 .sheet-body .lbl-sm{font-size:13px;font-weight:600;color:var(--label-2);margin:18px 4px 8px;text-transform:none;}
 .sheet-body .lbl-sm:first-child{margin-top:6px;}
+.hint{font-size:12.5px;color:var(--label-3);margin:8px 4px 0;line-height:1.4;}
 
 /* Modal de completar / foto */
 .photo-modal{text-align:center;}
@@ -644,6 +655,9 @@ input[type=file]{display:none;}
   <!-- ===================== PERFIL ===================== -->
   <section class="view" id="view-profile" data-title="Perfil">
     <h1 class="large-title">Perfil</h1>
+    <button class="friends-toggle" id="friendsBtn" aria-label="Amigos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0111 0M16.5 6.2a3 3 0 010 5.6M17.5 13.3a5.5 5.5 0 013.2 4.7"/></svg>
+    </button>
 
     <div class="profile-head">
       <div class="avatar" id="avatar" role="button">
@@ -693,15 +707,6 @@ input[type=file]{display:none;}
       <div class="cal-dow-row" id="calDow"></div>
       <div class="cal-weeks" id="calGrid"></div>
     </div>
-
-    <div class="friends-head">
-      <span class="section-title" style="margin:0;">Amigos</span>
-      <div class="friends-actions">
-        <button class="mini-btn" id="friendShare">Mi código</button>
-        <button class="mini-btn accent" id="friendAdd">Añadir</button>
-      </div>
-    </div>
-    <div id="friendsList"></div>
   </section>
 </div>
 
@@ -1753,7 +1758,25 @@ const Tasks = (() => {
     {k:"monthly",l:"Cada mes"},
     {k:"custom",l:"Personalizado"}
   ];
-  const DAYS = ["L","M","X","J","V","S","D"]; // 0=Lunes
+  const DAYS = ["Lu","Ma","Mi","Ju","Vi","Sá","Do"]; // 0=Lunes (etiquetas del selector)
+  const DAYNAMES = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"];
+  // Convierte un conjunto de días (0=lunes) en un texto natural
+  function daysLabel(daysArr){
+    const ds = [...new Set(daysArr)].sort((a,b)=>a-b);
+    if(!ds.length) return "Personalizado";
+    const key = ds.join(",");
+    if(key==="0,1,2,3,4") return "Entre semana";
+    if(key==="5,6") return "Fin de semana";
+    if(ds.length===7) return "Todos los días";
+    const consec = ds.every((d,i)=> i===0 || d===ds[i-1]+1);
+    let txt;
+    if(consec && ds.length>=3) txt = `de ${DAYNAMES[ds[0]]} a ${DAYNAMES[ds[ds.length-1]]}`;
+    else {
+      const names = ds.map(i=>DAYNAMES[i]);
+      txt = names.length===1 ? names[0] : names.slice(0,-1).join(", ") + " y " + names[names.length-1];
+    }
+    return txt.charAt(0).toUpperCase()+txt.slice(1);
+  }
   function recurLabel(r){
     if(!r) return "Solo hoy";
     if(r.type==="once") return "Solo hoy";
@@ -1762,7 +1785,7 @@ const Tasks = (() => {
     if(r.type==="monthly") return "Cada mes";
     if(r.type==="custom"){
       if(!r.days||!r.days.length) return "Personalizado";
-      return r.days.slice().sort((a,b)=>a-b).map(i=>DAYS[i]).join(" ");
+      return daysLabel(r.days);
     }
     return "Solo hoy";
   }
@@ -1770,13 +1793,22 @@ const Tasks = (() => {
     if (t.recurrence && t.recurrence.type!=="once") return t.lastDone===dateKey();
     return !!t.done;
   };
+  // ¿la tarea está programada para hoy? Solo limita si "Mostrar solo esos días" está activo
+  const scheduledToday = (t)=>{
+    const r=t.recurrence;
+    if(t.onlyOnDays && r && r.type==="custom" && r.days && r.days.length){
+      const todayIdx=(new Date().getDay()+6)%7; // 0=lunes
+      return r.days.includes(todayIdx);
+    }
+    return true;
+  };
 
   /* ---------- LISTA ---------- */
   function render(){
     const wrap = $("#taskListWrap");
     const s = Store.get();
     let list = s.tasks.slice();
-    if (filter==="pending") list = list.filter(t=>!isDoneToday(t));
+    if (filter==="pending") list = list.filter(t=>!isDoneToday(t) && scheduledToday(t));
     if (filter==="done")    list = list.filter(t=>isDoneToday(t));
     // urgentes y pendientes primero
     list.sort((a,b)=>{
@@ -1808,11 +1840,10 @@ const Tasks = (() => {
     meta.push(`<span class="tag dot">${durShort(t.minutes)}</span>`);
     if (t.people>1) meta.push(`<span class="tag dot ppl">${peopleShort(t.people)}</span>`);
     meta.push(`<span class="tag dot">${esc(recurLabel(t.recurrence))}</span>`);
-    if (t.urgent) meta.push(`<span class="tag dot urgent">Urgente</span>`);
     if (t.random) meta.push(`<span class="tag dot rnd">✦ x2</span>`);
     meta.push(`<span class="tag dot pts">${pts} pts</span>`);
     return `
-      <div class="card task-card${done?" done":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
+      <div class="card task-card${done?" done":""}${t.urgent?" urgent":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
         <div class="task-icon" style="background:${color}">${Icons.get(t.category)}</div>
         <div class="task-body" data-tap="${t.id}" role="button">
           <div class="task-title">${esc(t.title)}</div>
@@ -1908,6 +1939,7 @@ const Tasks = (() => {
     let urgent= editing ? !!existing.urgent : false;
     let recur = editing && existing.recurrence ? existing.recurrence.type : "once";
     let days  = editing && existing.recurrence && existing.recurrence.days ? existing.recurrence.days.slice() : [];
+    let onlyDays = editing ? !!existing.onlyOnDays : false;
     if(!CATEGORIES.some(c=>c.name===cat)) cat = CATEGORIES[0].name;
 
     const body = `
@@ -1926,7 +1958,13 @@ const Tasks = (() => {
       </div>
       <div class="lbl-sm">Repetición</div>
       <div class="segmented" id="ctRecur"></div>
-      <div id="ctDaysWrap" style="display:${recur==="custom"?"block":"none"};"><div class="lbl-sm">Días</div><div class="daypicker" id="ctDays"></div></div>
+      <div id="ctDaysWrap" style="display:${recur==="custom"?"block":"none"};">
+        <div class="lbl-sm">Días</div><div class="daypicker" id="ctDays"></div>
+        <div class="form-group" style="margin-top:14px;">
+          <div class="row"><span class="lbl">Mostrar solo esos días</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyDays"><div class="knob"></div></div></div>
+        </div>
+        <div class="hint">Si está activado, la tarea solo aparecerá en tu lista los días seleccionados.</div>
+      </div>
       <button class="btn" id="ctSave" style="margin-top:24px;">${editing?"Guardar cambios":"Guardar tarea"}</button>
       ${editing?`<button class="btn danger ghost" id="ctDelete" style="margin-top:12px;">${trashSvg()} Eliminar tarea</button>`:""}
     `;
@@ -1955,6 +1993,8 @@ const Tasks = (() => {
 
     const sw = $("#ctUrgent",sheet);
     sw.onclick = ()=>{ urgent=!urgent; sw.classList.toggle("on",urgent); haptic(); };
+    const swOnly = $("#ctOnlyDays",sheet);
+    if(swOnly) swOnly.onclick = ()=>{ onlyDays=!onlyDays; swOnly.classList.toggle("on",onlyDays); haptic(); };
 
     const titleInput = $("#ctTitle",sheet);
     const saveBtn = $("#ctSave",sheet);
@@ -1971,11 +2011,11 @@ const Tasks = (() => {
       Store.update(s=>{
         if(editing){
           const t = s.tasks.find(x=>x.id===existing.id);
-          if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent; t.recurrence=rec; }
+          if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent; t.recurrence=rec; t.onlyOnDays=onlyDays; }
         } else {
           s.tasks.unshift({
             id:uid(), title, desc, category:cat, minutes:dur, people:ppl, urgent,
-            recurrence:rec, random:false, createdAt:Date.now(), done:false, lastDone:null
+            recurrence:rec, onlyOnDays:onlyDays, random:false, createdAt:Date.now(), done:false, lastDone:null
           });
         }
       });
@@ -2075,6 +2115,19 @@ function compressImage(file, cb){
   };
   reader.readAsDataURL(file);
 }
+// Reescala un dataURL a una miniatura (para compartir perfil con amigos)
+function downscaleDataUrl(dataUrl, max, q){
+  return new Promise(res=>{
+    if(!dataUrl) return res(null);
+    const im=new Image();
+    im.onload=()=>{ let {width:w,height:h}=im;
+      if(w>h && w>max){ h=h*max/w; w=max; } else if(h>max){ w=w*max/h; h=max; }
+      const c=document.createElement("canvas"); c.width=Math.round(w); c.height=Math.round(h);
+      c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+      try{ res(c.toDataURL("image/jpeg",q)); }catch(e){ res(dataUrl); } };
+    im.onerror=()=>res(dataUrl); im.src=dataUrl;
+  });
+}
 
 /* =====================================================================
    PROFILE — dashboard, rango, racha, calendario, galería, lightbox
@@ -2127,7 +2180,6 @@ const Profile = (() => {
     $("#stNormal").textContent = total-rnd;
 
     renderCalendar();
-    Friends.render();
   }
 
   function renderCalendar(dir){
@@ -2141,7 +2193,7 @@ const Profile = (() => {
     const counts={};
     s.history.forEach(h=>{ if(h.date && h.date.startsWith(`${y}-${String(m+1).padStart(2,'0')}`)) counts[h.date]=(counts[h.date]||0)+1; });
 
-    const dows=["L","M","X","J","V","S","D"];
+    const dows=["Lu","Ma","Mi","Ju","Vi","Sá","Do"];
     $("#calDow").innerHTML = dows.map(d=>`<div class="cal-dow">${d}</div>`).join("");
 
     const first=new Date(y,m,1);
@@ -2231,102 +2283,151 @@ const Profile = (() => {
 
 /* =====================================================================
    FRIENDS — amigos locales por "código de perfil" (app sin servidor).
-   Un amigo se añade pegando su código (instantánea de su perfil:
-   nombre, puntos, racha y días de actividad). Se puede ver su perfil
-   completo (rango, racha, calendario) y eliminarlo.
+   El código (RACHAS1:...) lleva nombre, foto de perfil, puntos, racha e
+   historial reciente con título y miniatura de cada tarea. Se ve el perfil
+   completo (avatar, racha, calendario con fotos por día), se actualiza
+   pegando un código nuevo y se elimina.
    ===================================================================== */
 const Friends = (() => {
   const PREFIX = "RACHAS1:";
+  const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
-  function myCode(){
-    const s = Store.get();
-    const dates = [...new Set(s.history.map(h=>h.date).filter(Boolean))];
-    const payload = { n:(s.profile.name||"Atleta"), p:s.points, c:s.streak.current, b:s.streak.best, l:s.streak.lastDate, d:dates };
-    try{ return PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); }
-    catch(e){ return PREFIX; }
+  // Genera mi código (incluye avatar e historial con miniaturas). Es asíncrono.
+  async function buildMyCode(){
+    const s=Store.get();
+    const avatar = s.profile.avatar ? await downscaleDataUrl(s.profile.avatar, 96, 0.6) : null;
+    const recent = s.history.slice(0,120); // historial más reciente primero
+    const h=[];
+    for(const e of recent){
+      let ph=null;
+      if(e.photoId){ const d=await DB.get(e.photoId); if(d) ph=await downscaleDataUrl(d, 240, 0.55); }
+      h.push({ d:e.date, t:e.title, ct:e.category, pt:e.points, tm:e.time, ph });
+    }
+    const payload={ v:2, n:s.profile.name||"Atleta", a:avatar, p:s.points, c:s.streak.current, b:s.streak.best, l:s.streak.lastDate, h };
+    try{ return PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); }catch(e){ return PREFIX; }
   }
   function parseCode(code){
     try{
-      const raw=(code||"").trim(); const b64 = raw.startsWith(PREFIX) ? raw.slice(PREFIX.length) : raw;
-      const o = JSON.parse(decodeURIComponent(escape(atob(b64))));
+      const raw=(code||"").trim(); const b64=raw.startsWith(PREFIX)?raw.slice(PREFIX.length):raw;
+      const o=JSON.parse(decodeURIComponent(escape(atob(b64))));
       if(!o || typeof o.n!=="string") return null;
+      let entries=[];
+      if(Array.isArray(o.h)) entries=o.h.filter(e=>e&&e.d).map(e=>({date:e.d,title:(e.t||"").slice(0,200),category:e.ct||"",points:Math.max(0,parseInt(e.pt)||0),time:e.tm||"",photo:(typeof e.ph==="string"?e.ph:null)}));
+      else if(Array.isArray(o.d)) entries=o.d.filter(x=>typeof x==="string").map(d=>({date:d,title:"",category:"",points:0,time:"",photo:null}));
       return {
         name:(o.n||"Amigo").slice(0,40),
+        avatar:(typeof o.a==="string"?o.a:null),
         points:Math.max(0,parseInt(o.p)||0),
         streak:{ current:Math.max(0,parseInt(o.c)||0), best:Math.max(0,parseInt(o.b)||0), lastDate:o.l||null },
-        dates:Array.isArray(o.d)?o.d.filter(x=>typeof x==="string"):[]
+        entries
       };
     }catch(e){ return null; }
   }
+  // Importa un perfil parseado: guarda las fotos en IndexedDB y devuelve el amigo
+  async function importFriend(p, id){
+    const history=[];
+    for(let i=0;i<p.entries.length;i++){
+      const e=p.entries[i]; let photoKey=null;
+      if(e.photo){ photoKey=`f_${id}_${i}`; try{ await DB.put(photoKey,e.photo); }catch(_){} }
+      history.push({ date:e.date, title:e.title, category:e.category, points:e.points, time:e.time, photoKey });
+    }
+    const dates=[...new Set(history.map(x=>x.date).filter(Boolean))];
+    return { id, name:p.name, avatar:p.avatar, points:p.points, streak:p.streak, dates, history, addedAt:Date.now() };
+  }
+  function deletePhotos(f){ (f.history||[]).forEach(e=>{ if(e.photoKey) DB.del(e.photoKey); }); }
+  const avHtml = (f, cls)=> f.avatar ? `<div class="${cls}"><img src="${f.avatar}" alt=""></div>` : `<div class="${cls}">${esc((f.name||"A").trim().charAt(0).toUpperCase()||"A")}</div>`;
 
-  function render(){
+  /* ---------- Sheet principal de amigos (menú desplegable) ---------- */
+  function openSheet(){
+    Sheets.open(`
+      <div class="grabber"></div>
+      <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Amigos</span><span class="act" id="frClose">Cerrar</span></div>
+      <div class="sheet-body">
+        <div class="friends-sheet-head">
+          <button class="mini-btn" id="friendShare">Mi código</button>
+          <button class="mini-btn accent" id="friendAdd">Añadir amigo</button>
+        </div>
+        <div id="friendsList"></div>
+      </div>`);
+    $("#frClose").onclick=Sheets.close;
+    $("#friendShare").onclick=()=>{ haptic(); shareSheet(); };
+    $("#friendAdd").onclick=()=>{ haptic(); addSheet(); };
+    renderList();
+  }
+  function renderList(){
     const wrap=$("#friendsList"); if(!wrap) return;
     const s=Store.get();
     if(!s.friends.length){
-      wrap.innerHTML=`<div class="card friends-empty">Aún no tienes amigos.<br>Pulsa <b>Añadir</b> y pega su código, o comparte el tuyo con <b>Mi código</b>.</div>`;
+      wrap.innerHTML=`<div class="card friends-empty">Aún no tienes amigos.<br>Pulsa <b>Añadir amigo</b> y pega su código, o comparte el tuyo con <b>Mi código</b>.</div>`;
       return;
     }
-    wrap.innerHTML = s.friends.map(f=>{
-      const ini=(f.name||"A").trim().charAt(0).toUpperCase()||"A";
-      return `<div class="card friend-card" data-fid="${f.id}">
-        <div class="friend-av">${esc(ini)}</div>
+    wrap.innerHTML=s.friends.map(f=>`<div class="card friend-card" data-fid="${f.id}">
+        ${avHtml(f,"friend-av")}
         <div class="friend-info">
           <div class="fn">${esc(f.name)}</div>
           <div class="fm">${esc(rankFor(f.points).rank.name)} · ${f.points} pts · <span class="fire">🔥 ${f.streak.current}</span></div>
         </div>
         <span class="friend-chev">${chevronSvg()}</span>
-      </div>`;
-    }).join("");
+      </div>`).join("");
     $$("[data-fid]",wrap).forEach(c=> c.onclick=()=>{ haptic(); const f=Store.get().friends.find(x=>x.id===c.getAttribute("data-fid")); if(f) openProfile(f); });
   }
 
   function shareSheet(){
-    const code=myCode();
     Sheets.open(`
       <div class="grabber"></div>
-      <div class="sheet-head"><span class="act cancel" id="fcCancel">Cerrar</span><span class="title">Mi código</span><span class="act" id="fcCopy">Copiar</span></div>
+      <div class="sheet-head"><span class="act" id="fcBack">‹ Atrás</span><span class="title">Mi código</span><span class="act" id="fcCopy">Copiar</span></div>
       <div class="sheet-body">
-        <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">Comparte este código con un amigo para que te añada. Incluye tu nombre, puntos, racha y días de actividad.</p>
-        <div class="code-box" id="fcBox">${esc(code)}</div>
+        <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">Comparte este código para que un amigo te añada. Incluye tu foto, puntos, racha y tus tareas con foto.</p>
+        <div class="code-box" id="fcBox">Generando código…</div>
       </div>`);
-    $("#fcCancel").onclick=Sheets.close;
-    $("#fcCopy").onclick=()=>{
-      try{ navigator.clipboard && navigator.clipboard.writeText(code); }catch(e){}
-      try{ const b=$("#fcBox"),rng=document.createRange(); rng.selectNodeContents(b); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(rng); }catch(e){}
-      haptic(); UI.toast("Código copiado","check","var(--green)");
-    };
+    $("#fcBack").onclick=openSheet;
+    buildMyCode().then(code=>{
+      const b=$("#fcBox"); if(b) b.textContent=code;
+      const cp=$("#fcCopy"); if(cp) cp.onclick=()=>{
+        try{ navigator.clipboard && navigator.clipboard.writeText(code); }catch(e){}
+        try{ const box=$("#fcBox"),rng=document.createRange(); rng.selectNodeContents(box); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(rng); }catch(e){}
+        haptic(); UI.toast("Código copiado","check","var(--green)");
+      };
+    });
   }
 
-  function addSheet(){
+  function pasteSheet(title, onCode){
     Sheets.open(`
       <div class="grabber"></div>
-      <div class="sheet-head"><span class="act cancel" id="faCancel">Cancelar</span><span class="title">Añadir amigo</span><span class="act" id="faSave">Añadir</span></div>
+      <div class="sheet-head"><span class="act cancel" id="paCancel">Cancelar</span><span class="title">${esc(title)}</span><span class="act" id="paSave">Listo</span></div>
       <div class="sheet-body">
-        <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">Pega aquí el código que te compartió tu amigo (empieza por RACHAS1:).</p>
-        <div class="field-block" style="border:0.5px solid var(--hairline);border-radius:14px;"><textarea class="field" id="faInput" rows="3" placeholder="RACHAS1:…"></textarea></div>
+        <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">Pega aquí el código (empieza por RACHAS1:).</p>
+        <div class="field-block" style="border:0.5px solid var(--hairline);border-radius:14px;"><textarea class="field" id="paInput" rows="3" placeholder="RACHAS1:…"></textarea></div>
       </div>`);
-    $("#faCancel").onclick=Sheets.close;
-    $("#faSave").onclick=()=>{
-      const f=parseCode($("#faInput").value);
-      if(!f){ UI.toast("Código no válido","check","var(--red)"); return; }
-      Store.update(s=>{ s.friends.unshift({ id:uid(), name:f.name, points:f.points, streak:f.streak, dates:f.dates, addedAt:Date.now() }); });
-      Sheets.close(); render(); haptic(15); UI.toast("Amigo añadido","check","var(--green)");
-    };
-    setTimeout(()=>{ const i=$("#faInput"); if(i) i.focus(); },350);
+    $("#paCancel").onclick=openSheet;
+    $("#paSave").onclick=()=>onCode($("#paInput").value);
+    setTimeout(()=>{ const i=$("#paInput"); if(i) i.focus(); },350);
+  }
+  function addSheet(){
+    pasteSheet("Añadir amigo", async (code)=>{
+      const p=parseCode(code);
+      if(!p){ UI.toast("Código no válido","check","var(--red)"); return; }
+      const friend=await importFriend(p, uid());
+      Store.update(s=>{ s.friends.unshift(friend); });
+      haptic(15); UI.toast("Amigo añadido","check","var(--green)"); openSheet();
+    });
   }
 
   function openProfile(f){
     let cal=new Date();
     const dateSet=new Set(f.dates||[]);
-    const ini=(f.name||"A").trim().charAt(0).toUpperCase()||"A";
     Sheets.open(`
       <div class="grabber"></div>
-      <div class="sheet-head"><span class="act danger" id="fpDel">Eliminar</span><span class="title">Amigo</span><span class="act" id="fpClose">Cerrar</span></div>
+      <div class="sheet-head"><span class="act" id="fpBack">‹ Atrás</span><span class="title">Amigo</span><span class="act" id="fpClose">Cerrar</span></div>
       <div class="sheet-body">
         <div class="friend-profile-head">
-          <div class="big-av">${esc(ini)}</div>
+          ${avHtml(f,"big-av")}
           <div class="fpn">${esc(f.name)}</div>
           <div class="rank-badge">${trophySvg()} ${esc(rankFor(f.points).rank.name)}</div>
+        </div>
+        <div class="friends-actions" style="justify-content:center;margin-top:14px;">
+          <button class="mini-btn accent" id="fpRefresh">↻ Actualizar</button>
+          <button class="mini-btn danger" id="fpDel">Eliminar</button>
         </div>
         <div class="card streak-card" style="margin-top:16px;">
           <div class="streak-flame">🔥</div>
@@ -2348,34 +2449,72 @@ const Friends = (() => {
           <div class="cal-weeks" id="fpGrid"></div>
         </div>
       </div>`);
+    $("#fpBack").onclick=openSheet;
     $("#fpClose").onclick=Sheets.close;
-    $("#fpDel").onclick=()=>{ haptic(20); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); Sheets.close(); render(); UI.toast("Amigo eliminado","check","var(--red)"); };
-    const months=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+    $("#fpDel").onclick=()=>{ haptic(20); deletePhotos(f); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); };
+    $("#fpRefresh").onclick=()=>{
+      pasteSheet("Actualizar a "+f.name, async (code)=>{
+        const p=parseCode(code);
+        if(!p){ UI.toast("Código no válido","check","var(--red)"); return; }
+        deletePhotos(f);
+        const updated=await importFriend(p, f.id);
+        Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
+        haptic(15); UI.toast("Perfil actualizado","check","var(--green)"); openProfile(updated);
+      });
+    };
     function draw(){
       const y=cal.getFullYear(), m=cal.getMonth();
-      $("#fpMonth").textContent = months[m].charAt(0).toUpperCase()+months[m].slice(1)+" "+y;
-      $("#fpDow").innerHTML = ["L","M","X","J","V","S","D"].map(d=>`<div class="cal-dow">${d}</div>`).join("");
+      $("#fpMonth").textContent = MONTHS[m].charAt(0).toUpperCase()+MONTHS[m].slice(1)+" "+y;
+      $("#fpDow").innerHTML = ["Lu","Ma","Mi","Ju","Vi","Sá","Do"].map(d=>`<div class="cal-dow">${d}</div>`).join("");
       const lead=(new Date(y,m,1).getDay()+6)%7, days=new Date(y,m+1,0).getDate(), todayK=dateKey();
       const cells=[];
       for(let d=1;d<=days;d++){
         const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        const cls=["cal-day"]; if(key===todayK)cls.push("today"); if(dateSet.has(key))cls.push("has","lvl2");
+        const has=dateSet.has(key);
+        const cls=["cal-day"]; if(key===todayK)cls.push("today"); if(has)cls.push("has","lvl2");
         const st = d===1 && lead>0 ? ` style="grid-column-start:${lead+1}"` : "";
-        cells.push(`<div class="${cls.join(' ')}"${st}>${d}</div>`);
+        cells.push(`<div class="${cls.join(' ')}"${st} ${has?`data-fday="${key}"`:""}>${d}</div>`);
       }
-      $("#fpGrid").innerHTML=cells.join("");
+      const grid=$("#fpGrid"); grid.innerHTML=cells.join("");
+      $$("[data-fday]",grid).forEach(c=> c.onclick=()=> openFriendDay(f, c.getAttribute("data-fday")) );
     }
     $("#fpPrev").onclick=()=>{ cal.setMonth(cal.getMonth()-1); haptic(); draw(); };
     $("#fpNext").onclick=()=>{ cal.setMonth(cal.getMonth()+1); haptic(); draw(); };
     draw();
   }
 
-  function init(){
-    const sh=$("#friendShare"), ad=$("#friendAdd");
-    if(sh) sh.onclick=()=>{ haptic(); shareSheet(); };
-    if(ad) ad.onclick=()=>{ haptic(); addSheet(); };
+  // Galería del día de un amigo: fotos + títulos (mismo formato que el perfil)
+  function openFriendDay(f, key){
+    haptic();
+    const items=(f.history||[]).filter(h=>h.date===key).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
+    const [y,mo,d]=key.split("-");
+    const title=`${parseInt(d)} de ${MONTHS[parseInt(mo)-1]}`;
+    Sheets.open(`
+      <div class="grabber"></div>
+      <div class="sheet-head"><span class="act" id="fdBack">‹ Atrás</span><span class="title">${title}</span><span class="act" id="fdClose">Listo</span></div>
+      <div class="sheet-body"><div class="day-gallery" id="fdList"></div></div>`);
+    $("#fdBack").onclick=()=>openProfile(f);
+    $("#fdClose").onclick=Sheets.close;
+    const listEl=$("#fdList");
+    listEl.innerHTML = items.length ? items.map(h=>`
+      <div class="card gal-item">
+        <div class="gal-thumb"></div>
+        <div class="gal-info">
+          <div class="t">${esc(shortTitle(h.title||"Tarea"))}</div>
+          <div class="m">${esc(h.time||"")}${h.category?" · "+esc(h.category):""}${h.points?` · <span class="pts">${h.points} pts</span>`:""}</div>
+        </div>
+      </div>`).join("") : `<div class="card friends-empty">Sin tareas registradas este día.</div>`;
+    items.forEach(async (h,idx)=>{
+      const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
+      if(h.photoKey){ const data=await DB.get(h.photoKey);
+        if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); thumb.parentElement.onclick=()=>Lightbox.show(data,{title:h.title,time:h.time,category:h.category,points:h.points}); }
+        else thumb.innerHTML=noPhotoThumb();
+      } else thumb.innerHTML=noPhotoThumb();
+    });
   }
-  return { init, render, openProfile };
+
+  function init(){ const b=$("#friendsBtn"); if(b) b.onclick=()=>{ haptic(); openSheet(); }; }
+  return { init, openSheet, openProfile };
 })();
 function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
 function noPhotoThumb(){return '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--label-3)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5"/></svg></div>';}
