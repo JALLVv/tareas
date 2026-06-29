@@ -42,21 +42,20 @@ El JavaScript dentro de `index.html` está organizado en módulos independientes
 
 ---
 
-## Amigos en la nube (opcional)
+## Amigos (en la nube, con Supabase)
 
-Por defecto la app es **100% local**: no se envía nada a internet. De forma **opcional** puedes activar la sincronización con **Supabase** para tener "amigos en vivo" (añadir por ID y ver su perfil siempre actualizado, sin pegar códigos).
+Tu progreso (tareas, puntos, racha, calendario) se guarda **en tu dispositivo**. La función de **amigos** usa **Supabase** para que puedas añadir a otros por su **ID** y ver su perfil **siempre actualizado** (se refresca solo al abrirlo, sin pegar nada). Las fotos y el avatar se guardan en Supabase Storage a máxima calidad.
 
-Para habilitarla:
+Para que los amigos funcionen, configura una vez tu proyecto:
 1. Crea un proyecto gratis en [supabase.com](https://supabase.com).
 2. En **SQL Editor**, ejecuta el contenido de [`supabase-setup.sql`](supabase-setup.sql) (crea tablas, políticas RLS y el bucket de fotos).
 3. En **Authentication → Sign In / Providers**, activa **Anonymous sign-ins**.
 4. En `index.html`, pon tu **URL** y tu **anon key** en las constantes `SUPABASE_URL` y `SUPABASE_ANON`.
-5. En la app: **Perfil → icono de amigos → interruptor "Amigos en la nube"**.
 
-Mientras esté apagado (o si no configuras Supabase), todo sigue funcionando offline con el sistema de **códigos** (`RACHAS1:…`). La *anon key* es pública por diseño; la seguridad la imponen las políticas RLS del archivo SQL.
+Uso en la app: **Perfil → icono de amigos**. Comparte tu **ID** (botón "Mi ID") y añade a otros con el suyo ("Añadir amigo"). La *anon key* es pública por diseño; la seguridad la imponen las políticas RLS del archivo SQL.
 
 ## Notas
 
 - La cámara/galería usa el selector de fotos nativo del sistema; en iPhone permite **Tomar foto** o **Elegir de la fototeca**.
-- Si borras los datos del navegador o usas modo privado, se pierde el progreso (todo es local).
-- Con "Amigos en la nube" activado, tu perfil (nombre, foto, puntos, racha y tareas con foto) se sube a tu proyecto de Supabase para que tus amigos lo vean. Es opt-in y puedes apagarlo cuando quieras.
+- Si borras los datos del navegador o usas modo privado, se pierde el progreso local. Tu identidad de amigos (ID) va ligada al dispositivo/navegador.
+- Para los amigos, tu perfil (nombre, foto, puntos, racha y tareas con foto) se sube a tu proyecto de Supabase para que ellos lo vean. El resto del progreso sigue siendo local.
