@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     if (error) throw error;
 
     const payload = JSON.stringify({
-      title: title || "Rachas · Tareas",
+      title: title || "Tareas",
       body: body || "Tienes una nueva notificación",
       photo: photo || null,
       url: url || "./",

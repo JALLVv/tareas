@@ -2,7 +2,7 @@
    App-shell offline caching. The app stores all user data in
    localStorage + IndexedDB, so caching the shell is enough to run offline. */
 
-const CACHE = "rachas-v26";
+const CACHE = "rachas-v27";
 
 const SHELL = [
   "./",
@@ -60,7 +60,7 @@ self.addEventListener("push", (event) => {
   try { data = event.data ? event.data.json() : {}; } catch (e) {
     try { data = { body: event.data && event.data.text() }; } catch (_) {}
   }
-  const title = data.title || "Rachas · Tareas";
+  const title = data.title || "Tareas";
   const options = {
     body: data.body || "Tienes una nueva notificación",
     icon: "./icons/icon-192.png",
