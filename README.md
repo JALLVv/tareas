@@ -54,6 +54,38 @@ Para que los amigos funcionen, configura una vez tu proyecto:
 
 Uso en la app: **Perfil → icono de amigos**. Comparte tu **ID** (botón "Mi ID") y añade a otros con el suyo ("Añadir amigo"). La *anon key* es pública por diseño; la seguridad la imponen las políticas RLS del archivo SQL.
 
+## Tareas compartidas y notificaciones
+
+Al **crear** o **generar** una tarea puedes elegir un amigo con quien hacerla
+(bloque "Compartir con un amigo"). La tarea aparece en la lista de los dos con
+la etiqueta «con *Nombre*». Si **cualquiera** de los dos la completa, esa **foto
+se sube para ambos** y la tarea se marca como hecha para los dos; si uno la
+borra, se borra para ambos.
+
+La sección **Notificaciones** (campana en la pestaña *Tareas*) avisa cuando un
+amigo te añade a una tarea o la completa (mostrando su foto, en el mismo formato
+del calendario). Los avisos salen también en el **menú de notificaciones del
+dispositivo**: con la app abierta (primer plano) de inmediato, y con la app
+cerrada mediante **push en segundo plano**.
+
+### Activar el push en segundo plano (una vez)
+
+1. En **SQL Editor**, vuelve a ejecutar [`supabase-setup.sql`](supabase-setup.sql)
+   (añade las tablas `shared_tasks`, `notifications` y `push_subscriptions`).
+2. Genera claves VAPID: `npx web-push generate-vapid-keys`.
+3. Pega la clave **pública** en `index.html` (constante `VAPID_PUBLIC`).
+4. Guarda los secretos del proyecto e implementa la Edge Function:
+   ```bash
+   supabase secrets set VAPID_PUBLIC_KEY="<pública>"
+   supabase secrets set VAPID_PRIVATE_KEY="<privada>"
+   supabase secrets set VAPID_SUBJECT="mailto:tu@correo.com"
+   supabase functions deploy send-push
+   ```
+   El código está en [`supabase/functions/send-push/index.ts`](supabase/functions/send-push/index.ts).
+5. En el iPhone, el push solo funciona con la **PWA instalada** en la pantalla de
+   inicio (Compartir → Añadir a pantalla de inicio) y tras aceptar el permiso de
+   notificaciones (botón "Activar" en la sección Notificaciones).
+
 ## Notas
 
 - La cámara/galería usa el selector de fotos nativo del sistema; en iPhone permite **Tomar foto** o **Elegir de la fototeca**.

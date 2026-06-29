@@ -302,6 +302,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .tag{font-size:13.5px;font-weight:600;color:var(--label-2);}
 .tag.dot::before{content:"·";margin-right:6px;color:var(--label-3);}
 .tag.rnd{color:var(--purple);}
+.tag.shared{color:var(--indigo);font-weight:700;}
 /* Tarea urgente: burbuja roja, bien marcada */
 .task-card.urgent{background:rgba(255,69,58,0.32);box-shadow:inset 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,69,58,0.30);}
 .task-card.urgent.done{background:rgba(255,69,58,0.14);box-shadow:inset 0 0 0 1px rgba(255,69,58,0.45);}
@@ -436,6 +437,14 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:transform .12s var(--ease-out), background .2s;}
 .friends-toggle:active{transform:scale(0.9);}
 .friends-toggle svg{width:23px;height:23px;color:var(--blue);}
+.notif-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;
+  background:var(--red);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--bg);}
+.notif-item{align-items:center;}
+.notif-ic{width:64px;height:64px;border-radius:14px;flex:0 0 auto;display:grid;place-items:center;}
+.notif-ic.done{background:rgba(48,209,88,0.16);color:var(--green);}
+.notif-ic.add{background:rgba(94,92,230,0.18);color:var(--indigo);}
+.notif-ic svg{width:26px;height:26px;}
+.notif-item .gal-info .t b{color:var(--label);}
 .friends-sheet-head{display:flex;align-items:center;gap:8px;margin:2px 0 16px;}
 .friends-sheet-head .mini-btn{flex:1;text-align:center;}
 .friends-actions{display:flex;gap:8px;}
@@ -649,6 +658,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   <!-- ===================== TAREAS ===================== -->
   <section class="view active" id="view-tasks" data-title="Tareas">
     <h1 class="large-title">Tareas</h1>
+    <button class="friends-toggle" id="notifBtn" aria-label="Notificaciones">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 004 0"/></svg>
+      <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+    </button>
     <p class="subtitle">Tus retos de hoy. Completa para sumar puntos.</p>
 
     <div class="segmented" id="taskFilter" style="margin-top:6px;">
@@ -1540,7 +1553,9 @@ const Store = (() => {
     points:0,
     streak:{ current:0, best:0, lastDate:null },
     friends:[],        // {id,cloudId,name,avatar,points,streak,dates:[],history:[],addedAt}
-    cloud:{ syncedCompletions:[], avatarUrl:null, avatarSrc:null }
+    cloud:{ syncedCompletions:[], avatarUrl:null, avatarSrc:null },
+    notifs:[],         // notificaciones descargadas de la nube
+    notifSeen:[]       // ids ya mostrados como aviso del sistema
   });
   let state;
   function load(){
@@ -1556,6 +1571,8 @@ const Store = (() => {
     const nf = state.friends.filter(f=> f && f.cloudId); // amigos solo por nube (se eliminó el sistema de códigos)
     if(nf.length!==state.friends.length){ state.friends=nf; save(); }
     if(!state.cloud) state.cloud={ syncedCompletions:[], avatarUrl:null, avatarSrc:null };
+    if(!Array.isArray(state.notifs)) state.notifs=[];
+    if(!Array.isArray(state.notifSeen)) state.notifSeen=[];
     return state;
   }
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
@@ -1593,6 +1610,7 @@ const Generator = (() => {
   let selDur = 10;
   let selPeople = 1;             // 1=solo · 2 · 3 · 4(=3+)
   let current = null;            // {title, category, minutes, people, points}
+  let genPartner = null;         // amigo con quien compartir la tarea generada
 
   const catKey  = (name)=> name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); // "Música" -> "musica"
   const grupoDe = (k)=> k<=1 ? "solo" : k===2 ? "2" : k===3 ? "3" : "3+";
@@ -1609,7 +1627,7 @@ const Generator = (() => {
     current = { title:texto, category:selCat, minutes:selDur, people:selPeople, points:taskPoints(selDur,true) };
     return current;
   }
-  function clearOutput(){ current=null; const o=$("#genOutput"); if(o) o.innerHTML=""; }
+  function clearOutput(){ current=null; genPartner=null; const o=$("#genOutput"); if(o) o.innerHTML=""; }
 
   function renderCats(){
     const wrap = $("#genCats"); wrap.innerHTML="";
@@ -1651,12 +1669,24 @@ const Generator = (() => {
           <span class="pill pts">${starSvg()} ${current.points} pts</span>
         </div>
       </div>
+      ${Cloud.configured()?`<div id="genShareWrap" style="margin-top:14px"><div class="lbl-sm">Compartir con un amigo</div><div class="chips" id="genShare"></div><div class="hint" id="genShareHint" style="display:none">Si tú o tu amigo la completáis o la borráis, se hace para los dos.</div></div>`:""}
       <div class="gen-actions">
         <button class="btn secondary" id="genSwap">${refreshSvg()} Generar otra</button>
         <button class="btn" id="genAdd">${plusSvg()} Agregar</button>
       </div>`;
     out.querySelector("#genSwap").onclick = ()=>{ haptic(); build(); animateSwap(); };
     out.querySelector("#genAdd").onclick = ()=>{ haptic(12); addCurrent(); };
+    renderGenShare();
+  }
+  function renderGenShare(){
+    const w=$("#genShare"); if(!w) return; w.innerHTML="";
+    const friends=Store.get().friends.filter(f=>f.cloudId);
+    if(!friends.length){ w.innerHTML=`<span class="hint" style="margin:0">Añade amigos (Perfil → icono de amigos) para compartir tareas.</span>`; return; }
+    friends.forEach(f=>{ const chip=el("button","chip"+(genPartner&&genPartner.cloudId===f.cloudId?" sel":""));
+      chip.style.setProperty("--accent","#5E5CE6");
+      chip.innerHTML=`<span class="friend-av" style="width:22px;height:22px;font-size:11px">${f.avatar?`<img src="${esc(f.avatar)}">`:esc((f.name||"A").charAt(0).toUpperCase())}</span>${esc(f.name)}`;
+      chip.onclick=()=>{ genPartner = (genPartner&&genPartner.cloudId===f.cloudId)?null:{cloudId:f.cloudId,name:f.name}; haptic(); renderGenShare(); const h=$("#genShareHint"); if(h) h.style.display=genPartner?"block":"none"; };
+      w.appendChild(chip); });
   }
   function animateSwap(){
     renderOutput();
@@ -1665,16 +1695,28 @@ const Generator = (() => {
   }
   function addCurrent(){
     if(!current) return;
+    const newId=uid();
+    const rec={type:"once",days:[]};
+    const partner=genPartner;
     Store.update(s=>{
-      s.tasks.unshift({
-        id:uid(), title:current.title, desc:"", category:current.category,
-        minutes:current.minutes, people:current.people||1, urgent:false, recurrence:{type:"once",days:[]},
+      const nt={
+        id:newId, title:current.title, desc:"", category:current.category,
+        minutes:current.minutes, people:current.people||1, urgent:false, recurrence:rec,
         random:true, createdAt:Date.now(), done:false, lastDone:null
-      });
+      };
+      if(partner){ nt.shared=true; nt.sharedId=newId; nt.ownerId=Cloud.myId(); nt.partnerId=partner.cloudId; nt.partnerName=partner.name; }
+      s.tasks.unshift(nt);
     });
-    UI.toast("Añadida a tus tareas", "check", "var(--green)");
+    if(partner){
+      const meName=Store.get().profile.name||"Atleta";
+      Cloud.createShared({ id:newId, owner_id:Cloud.myId(), owner_name:meName, partner_id:partner.cloudId, partner_name:partner.name,
+        title:current.title, descr:"", category:current.category, minutes:current.minutes, people:current.people||1, urgent:false, recurrence:rec, only_on_days:false, status:'pending' })
+        .then(ok=>{ if(ok) Cloud.notify(partner.cloudId, 'shared_added', current.title); });
+    }
+    UI.toast(partner?`Compartida con ${esc(partner.name)}`:"Añadida a tus tareas", "check", "var(--green)");
     UI.renderTasks();
     UI.flashTab("tasks");
+    clearOutput();
   }
   function generate(){ haptic(12); build(); renderOutput();
     requestAnimationFrame(()=>{ const o=$("#genOutput"); o && o.scrollIntoView({behavior:"smooth",block:"nearest"}); });
@@ -1861,6 +1903,61 @@ const Tasks = (() => {
     if(keep.length!==s.tasks.length) Store.update(st=>{ st.tasks=keep; });
   }
 
+  /* ---------- TAREAS COMPARTIDAS: sincroniza con la nube ----------
+     Recibe las que te comparten, refleja su estado, y si uno la completa,
+     se marca hecha para ambos (con la misma foto, puntos y en el calendario). */
+  async function syncShared(){
+    if(!Cloud.enabled()) return;
+    const myId=Cloud.myId(); if(!myId) return;
+    const rows=await Cloud.fetchShared();
+    const rowById={}; rows.forEach(r=>rowById[r.id]=r);
+    const s=Store.get();
+    let tasks=s.tasks.slice(), changed=false;
+    // A) quitar las compartidas locales cuya fila ya no existe (borradas por el otro)
+    const keep=tasks.filter(t=> !(t.shared && t.sharedId && !rowById[t.sharedId]));
+    if(keep.length!==tasks.length){ tasks=keep; changed=true; }
+    // B) añadir las que me han compartido y aún no tengo (pendientes)
+    rows.forEach(r=>{
+      if(r.status==='done') return;
+      if(tasks.some(t=>t.sharedId===r.id)) return;
+      const amOwner=r.owner_id===myId;
+      tasks.unshift({ id:r.id, title:r.title, desc:r.descr||"", category:r.category, minutes:r.minutes||10, people:r.people||1,
+        urgent:!!r.urgent, recurrence:r.recurrence||{type:'once',days:[]}, onlyOnDays:!!r.only_on_days,
+        random:false, createdAt:Date.now(), done:false, lastDone:null,
+        shared:true, sharedId:r.id, ownerId:r.owner_id, partnerId:amOwner?r.partner_id:r.owner_id, partnerName:amOwner?r.partner_name:r.owner_name });
+      changed=true;
+    });
+    // C) actualizar nombre/estado y procesar completadas
+    const newHist=[]; let addPts=0;
+    tasks.forEach(t=>{
+      if(!t.shared || !t.sharedId) return;
+      const r=rowById[t.sharedId]; if(!r) return;
+      const amOwner=r.owner_id===myId;
+      const pn=amOwner?r.partner_name:r.owner_name; if(pn && t.partnerName!==pn){ t.partnerName=pn; changed=true; }
+      if(r.status==='done'){
+        const rec=t.recurrence; if(rec && rec.type!=='once' && rec.type!=='date') t.lastDone=r.done_date||dateKey(); else t.done=true;
+        const histId='sh_'+r.id;
+        // solo el compañero (no el que la completó) añade el registro: foto + puntos + calendario
+        if(r.completed_by!==myId && !s.history.some(h=>h.id===histId)){
+          newHist.push({ id:histId, taskId:t.id, title:t.title, category:t.category, minutes:t.minutes,
+            points:r.points||0, random:false, date:r.done_date||dateKey(), time:r.done_time||"", photoUrl:r.photo_url||null, shared:true, partnerName:t.partnerName||"" });
+          addPts+=(r.points||0); changed=true;
+        }
+      }
+    });
+    if(!changed) return;
+    Store.update(st=>{
+      st.tasks=tasks;
+      if(newHist.length){
+        st.history=newHist.concat(st.history);
+        st.points+=addPts;
+        const stk=streakFromHistory(st.history);
+        st.streak.current=stk.current; st.streak.best=Math.max(st.streak.best||0,stk.best); st.streak.lastDate=stk.lastDate;
+      }
+    });
+    render(); if(UI.renderProfile) UI.renderProfile();
+  }
+
   /* ---------- LISTA ---------- */
   function render(){
     cleanupExpired();
@@ -1897,6 +1994,7 @@ const Tasks = (() => {
     const meta = [];
     // solo el día (recurrencia) y los puntos
     meta.push(`<span class="tag">${esc(recurLabel(t.recurrence))}</span>`);
+    if(t.shared && t.partnerName) meta.push(`<span class="tag dot shared">con ${esc(t.partnerName)}</span>`);
     meta.push(`<span class="tag dot pts">${pts} pts</span>`);
     return `
       <div class="card task-card${done?" done":""}${t.urgent?" urgent":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
@@ -1977,6 +2075,7 @@ const Tasks = (() => {
       Sheets.close(); render();
       if (UI.renderProfile) UI.renderProfile();
       if (Cloud.enabled()){ Cloud.pushProfile(); Cloud.reconcile(); } // refleja la eliminación en la nube
+      if (task.shared && task.sharedId && Cloud.enabled()) Cloud.deleteShared(task.sharedId); // se borra para ambos
       UI.toast(removedPts>0 ? `Tarea eliminada · −${removedPts} pts` : "Tarea eliminada", "check", "var(--red)");
     };
   }
@@ -1998,6 +2097,7 @@ const Tasks = (() => {
     let days  = editing && existing.recurrence && existing.recurrence.days ? existing.recurrence.days.slice() : [];
     let onlyDays = editing ? !!existing.onlyOnDays : false;
     let taskDate = editing && existing.recurrence && existing.recurrence.date ? existing.recurrence.date : "";
+    let partner = null; // amigo con quien se comparte (solo al crear)
     if(!CATEGORIES.some(c=>c.name===cat)) cat = CATEGORIES[0].name;
 
     const body = `
@@ -2031,6 +2131,7 @@ const Tasks = (() => {
         </div>
         <div class="hint">Si está activado, la tarea solo aparecerá en tu lista el día de su fecha. Si pasa sin completarla, se elimina sola.</div>
       </div>
+      ${(!editing && Cloud.configured())?`<div id="ctShareWrap"><div class="lbl-sm">Compartir con un amigo</div><div class="chips" id="ctShare"></div><div class="hint" id="ctShareHint" style="display:none">Si tú o tu amigo la completáis o la borráis, se hace para los dos.</div></div>`:""}
       <button class="btn" id="ctSave" style="margin-top:24px;">${editing?"Guardar cambios":"Guardar tarea"}</button>
       ${editing?`<button class="btn danger ghost" id="ctDelete" style="margin-top:12px;">${trashSvg()} Eliminar tarea</button>`:""}
     `;
@@ -2056,7 +2157,15 @@ const Tasks = (() => {
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
         cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
         w.appendChild(cell); }); };
-    renderCats(); renderPeople(); renderDur(); renderRecur(); renderDays();
+    const renderShare = ()=>{ const w=$("#ctShare",sheet); if(!w) return; w.innerHTML="";
+      const friends=Store.get().friends.filter(f=>f.cloudId);
+      if(!friends.length){ w.innerHTML=`<span class="hint" style="margin:0">Añade amigos (Perfil → icono de amigos) para compartir tareas.</span>`; return; }
+      friends.forEach(f=>{ const chip=el("button","chip"+(partner&&partner.cloudId===f.cloudId?" sel":""));
+        chip.style.setProperty("--accent","#5E5CE6");
+        chip.innerHTML=`<span class="friend-av" style="width:22px;height:22px;font-size:11px">${f.avatar?`<img src="${esc(f.avatar)}">`:esc((f.name||"A").charAt(0).toUpperCase())}</span>${esc(f.name)}`;
+        chip.onclick=()=>{ partner = (partner&&partner.cloudId===f.cloudId)?null:{cloudId:f.cloudId,name:f.name}; haptic(); renderShare(); const h=$("#ctShareHint",sheet); if(h) h.style.display=partner?"block":"none"; };
+        w.appendChild(chip); }); };
+    renderCats(); renderPeople(); renderDur(); renderRecur(); renderDays(); renderShare();
 
     const sw = $("#ctUrgent",sheet);
     sw.onclick = ()=>{ urgent=!urgent; sw.classList.toggle("on",urgent); haptic(); };
@@ -2081,19 +2190,27 @@ const Tasks = (() => {
       const desc = $("#ctDesc",sheet).value.trim();
       const rec = {type:recur, days:days.slice()};
       if(recur==="date") rec.date = taskDate; // fecha concreta (YYYY-MM-DD)
+      const newId = uid();
       Store.update(s=>{
         if(editing){
           const t = s.tasks.find(x=>x.id===existing.id);
           if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent; t.recurrence=rec; t.onlyOnDays=onlyDays; }
         } else {
-          s.tasks.unshift({
-            id:uid(), title, desc, category:cat, minutes:dur, people:ppl, urgent,
-            recurrence:rec, onlyOnDays:onlyDays, random:false, createdAt:Date.now(), done:false, lastDone:null
-          });
+          const nt={ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
+            recurrence:rec, onlyOnDays:onlyDays, random:false, createdAt:Date.now(), done:false, lastDone:null };
+          if(partner){ nt.shared=true; nt.sharedId=newId; nt.ownerId=Cloud.myId(); nt.partnerId=partner.cloudId; nt.partnerName=partner.name; }
+          s.tasks.unshift(nt);
         }
       });
+      // compartir en la nube
+      if(!editing && partner){
+        const meName=Store.get().profile.name||"Atleta";
+        Cloud.createShared({ id:newId, owner_id:Cloud.myId(), owner_name:meName, partner_id:partner.cloudId, partner_name:partner.name,
+          title, descr:desc, category:cat, minutes:dur, people:ppl, urgent, recurrence:rec, only_on_days:onlyDays, status:'pending' })
+          .then(ok=>{ if(ok) Cloud.notify(partner.cloudId, 'shared_added', title); });
+      }
       haptic(15); Sheets.close(); render();
-      UI.toast(editing?"Cambios guardados":"Tarea creada","check","var(--green)");
+      UI.toast(editing?"Cambios guardados":(partner?`Compartida con ${esc(partner.name)}`:"Tarea creada"),"check","var(--green)");
     };
     if(editing){ const delBtn=$("#ctDelete",sheet); if(delBtn) delBtn.onclick=()=>{ haptic(); confirmDelete(existing); }; }
     if(!editing) setTimeout(()=>titleInput.focus(),350);
@@ -2141,7 +2258,8 @@ const Tasks = (() => {
       const entry = {
         id:uid(), taskId:task.id, title:task.title, category:task.category,
         minutes:task.minutes, points:pts, random:task.random,
-        date:dateKey(now), time:timeLabel(now), photoId: photoData?photoId:null
+        date:dateKey(now), time:timeLabel(now), photoId: photoData?photoId:null,
+        shared: !!task.shared, partnerName: task.shared?(task.partnerName||""):undefined
       };
       // marcar la tarea
       Store.update(s=>{
@@ -2153,7 +2271,20 @@ const Tasks = (() => {
       render(); UI.renderProfile();
       // sincronizar con la nube (si está activada)
       if (Cloud.enabled()){ Cloud.pushCompletion(entry, photoData); Cloud.pushProfile(); }
+      // tarea compartida: subir la foto, marcar la fila como hecha y avisar al compañero
+      if (task.shared && task.sharedId && Cloud.enabled() && photoData){
+        (async ()=>{
+          const url = await uploadSharedPhoto(task.sharedId, photoData);
+          await Cloud.completeShared(task.sharedId, { status:'done', completed_by:Cloud.myId(), photo_url:url, points:pts, done_date:entry.date, done_time:entry.time });
+          const other = (task.ownerId===Cloud.myId()) ? task.partnerId : task.ownerId;
+          if(other) Cloud.notify(other, 'shared_done', task.title, url);
+        })();
+      }
     };
+  }
+  // sube la foto de una tarea compartida al Storage y devuelve su URL pública
+  async function uploadSharedPhoto(sharedId, dataUrl){
+    try{ return await Cloud.uploadShared(sharedId, dataUrl); }catch(e){ return null; }
   }
 
   function setFilter(f){ filter=f; render(); }
@@ -2164,7 +2295,7 @@ const Tasks = (() => {
       haptic(); setFilter(seg.getAttribute("data-f"));
     });
   }
-  return { init, render, openCreate };
+  return { init, render, openCreate, syncShared };
 })();
 
 function camSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 015.5 7H8l1.5-2.2h5L16 7h2.5A1.5 1.5 0 0120 8.5V17a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17z"/><circle cx="12" cy="12.5" r="3.2"/></svg>';}
@@ -2313,19 +2444,22 @@ const Profile = (() => {
     const listEl=$("#dgList");
     listEl.innerHTML = items.map(h=>`
       <div class="card gal-item" data-h="${h.id}">
-        <div class="gal-thumb" data-thumb="${h.photoId||''}"></div>
+        <div class="gal-thumb"></div>
         <div class="gal-info">
-          <div class="t">${esc(shortTitle(h.title))}</div>
+          <div class="t">${esc(shortTitle(h.title))}${h.shared&&h.partnerName?` · <span class="pts" style="color:var(--indigo)">con ${esc(h.partnerName)}</span>`:''}</div>
           <div class="m">${h.time} · ${esc(h.category)} · <span class="pts">${h.points} pts</span>${h.random?' · ✦':''}</div>
         </div>
       </div>`).join("");
-    // cargar miniaturas desde IndexedDB
-    items.forEach(async h=>{
-      const thumb=listEl.querySelector(`.gal-thumb[data-thumb="${h.photoId||''}"]`);
+    // cargar miniaturas: desde IndexedDB (locales) o por URL (tareas compartidas)
+    items.forEach(async (h,idx)=>{
+      const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
       if(h.photoId){ const data=await DB.get(h.photoId);
         if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); thumb.parentElement.onclick=()=>Lightbox.show(data,h); }
         else thumb.innerHTML=noPhotoThumb();
-      } else { if(thumb) thumb.innerHTML=noPhotoThumb(); }
+      } else if(h.photoUrl){
+        const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
+        thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl,h);
+      } else { thumb.innerHTML=noPhotoThumb(); }
     });
   }
 
@@ -2364,6 +2498,8 @@ const Profile = (() => {
    ===================================================================== */
 const SUPABASE_URL  = "https://muvqfjyzneszkptsjxgi.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11dnFmanl6bmVzemtwdHNqeGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDI0NjIsImV4cCI6MjA5ODI3ODQ2Mn0.Ud4QhDc2EsTKPQoHtEaubH3jMTppI4CKDZKZqGf2Uao";
+// Clave pública VAPID para notificaciones push (la privada vive en la Edge Function)
+const VAPID_PUBLIC = "BPCOiDb2J__u8QWjCDIZ1BNLltxFEnlg-qryM4-ajzhPznfqrRSf2tNR010gKIp7gOyFgX2S1dtozvREBlE7MzE";
 
 const Cloud = (() => {
   let client=null, uid=null, ready=false, initing=null;
@@ -2481,7 +2617,83 @@ const Cloud = (() => {
     return true;
   }
 
-  return { configured, enabled, init, myId, pushProfile, pushCompletion, syncBacklog, reconcile, forceResync, pullFriend };
+  /* ---------- Tareas compartidas ---------- */
+  async function createShared(row){
+    if(!enabled() || !await init() || !client) return false;
+    try{ const { error }=await client.from('shared_tasks').insert(row); if(error) throw error; return true; }
+    catch(e){ console.warn("createShared:", e && e.message); return false; }
+  }
+  async function fetchShared(){
+    if(!enabled() || !await init() || !client) return [];
+    try{ const { data }=await client.from('shared_tasks').select('*').or(`owner_id.eq.${uid},partner_id.eq.${uid}`); return data||[]; }
+    catch(e){ console.warn("fetchShared:", e && e.message); return []; }
+  }
+  async function completeShared(id, fields){
+    if(!enabled() || !await init() || !client) return false;
+    try{ const { error }=await client.from('shared_tasks').update(fields).eq('id', id); if(error) throw error; return true; }
+    catch(e){ console.warn("completeShared:", e && e.message); return false; }
+  }
+  async function deleteShared(id){
+    if(!enabled() || !await init() || !client) return;
+    try{ await client.from('shared_tasks').delete().eq('id', id); }catch(e){ console.warn("deleteShared:", e && e.message); }
+  }
+  async function uploadShared(sharedId, dataUrl){
+    if(!enabled() || !await init() || !client) return null;
+    return await uploadDataUrl(`${uid}/shared_${sharedId}.jpg`, dataUrl); // foto en tu carpeta (lectura pública)
+  }
+
+  /* ---------- Notificaciones ---------- */
+  async function notify(recipientId, type, taskTitle, photoUrl){
+    if(!enabled() || !await init() || !client || recipientId===uid) return;
+    const actorName=(Store.get().profile.name||"Atleta");
+    try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null }); }
+    catch(e){ console.warn("notify:", e && e.message); }
+    // push en segundo plano (vía Edge Function)
+    const body = type==='shared_added' ? `${actorName} te añadió a una tarea` : `${actorName} completó una tarea`;
+    sendPush(recipientId, "Rachas · Tareas", body, photoUrl);
+  }
+  async function fetchNotifs(){
+    if(!enabled() || !await init() || !client) return [];
+    try{ const { data }=await client.from('notifications').select('*').eq('recipient_id',uid).order('created_at',{ascending:false}).limit(100); return data||[]; }
+    catch(e){ console.warn("fetchNotifs:", e && e.message); return []; }
+  }
+  async function markNotifsRead(){
+    if(!enabled() || !await init() || !client) return;
+    try{ await client.from('notifications').update({ read:true }).eq('recipient_id',uid).eq('read',false); }catch(e){}
+  }
+  async function clearNotif(id){
+    if(!enabled() || !await init() || !client) return;
+    try{ await client.from('notifications').delete().eq('id', id); }catch(e){}
+  }
+
+  /* ---------- Push en segundo plano ---------- */
+  function urlB64ToUint8(base64){
+    const pad="=".repeat((4-base64.length%4)%4); const b=(base64+pad).replace(/-/g,"+").replace(/_/g,"/");
+    const raw=atob(b); const out=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i); return out;
+  }
+  async function ensurePush(){
+    try{
+      if(!enabled() || !await init() || !client) return false;
+      if(!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+      if(Notification.permission==="denied") return false;
+      if(Notification.permission!=="granted"){ const p=await Notification.requestPermission(); if(p!=="granted") return false; }
+      const reg=await navigator.serviceWorker.ready;
+      let sub=await reg.pushManager.getSubscription();
+      if(!sub){ sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToUint8(VAPID_PUBLIC) }); }
+      const json=sub.toJSON();
+      await client.from('push_subscriptions').upsert({ user_id:uid, endpoint:sub.endpoint, subscription:json, updated_at:new Date().toISOString() });
+      return true;
+    }catch(e){ console.warn("ensurePush:", e && e.message); return false; }
+  }
+  async function sendPush(recipientId, title, body, photoUrl){
+    try{
+      if(!client || !uid) return;
+      await client.functions.invoke('send-push', { body:{ recipientId, title, body, photo:photoUrl||null } });
+    }catch(e){ console.warn("sendPush:", e && e.message); }
+  }
+
+  return { configured, enabled, init, myId, pushProfile, pushCompletion, syncBacklog, reconcile, forceResync, pullFriend,
+    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, ensurePush };
 })();
 
 /* =====================================================================
@@ -2718,7 +2930,65 @@ const Friends = (() => {
 
   function init(){ const b=$("#friendsBtn"); if(b) b.onclick=()=>{ haptic(); openSheet(); }; }
   return { init, openSheet, openProfile, syncFriends };
-})();function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
+})();
+
+/* =====================================================================
+   NOTIFS — sección de notificaciones (un amigo te añadió/completó una
+   tarea). Aviso del sistema en primer plano + push en segundo plano.
+   ===================================================================== */
+const Notifs = (() => {
+  function timeAgo(iso){
+    try{ const d=(Date.now()-new Date(iso).getTime())/1000;
+      if(d<60) return "ahora"; if(d<3600) return `hace ${Math.floor(d/60)} min`;
+      if(d<86400) return `hace ${Math.floor(d/3600)} h`; return `hace ${Math.floor(d/86400)} d`;
+    }catch(e){ return ""; }
+  }
+  function updateBadge(){
+    const list=Store.get().notifs||[]; const n=list.filter(x=>!x.read).length;
+    const b=$("#notifBadge"); if(b){ b.style.display=n?"grid":"none"; b.textContent=n>9?"9+":String(n); }
+  }
+  async function refresh(){
+    if(!Cloud.enabled()) return;
+    const list=await Cloud.fetchNotifs();
+    const seen=Store.get().notifSeen||[];
+    const fresh=list.filter(n=>!seen.includes(n.id));
+    Store.update(s=>{ s.notifs=list; });
+    updateBadge();
+    // aviso del sistema en primer plano (con la app abierta)
+    if(fresh.length && "Notification" in window && Notification.permission==="granted"){
+      fresh.slice(0,3).forEach(n=>{
+        const body = n.type==='shared_done' ? `${n.actor_name} completó una tarea` : `${n.actor_name} te añadió a una tarea`;
+        try{ const opt={ body, icon:"icons/icon-192.png", tag:n.id }; if(n.photo_url) opt.image=n.photo_url; new Notification("Rachas · Tareas", opt); }catch(e){}
+      });
+    }
+    Store.update(s=>{ s.notifSeen=list.map(n=>n.id); });
+  }
+  function notifHtml(n){
+    const done=n.type==='shared_done';
+    const text = done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea` : `<b>${esc(n.actor_name||"Un amigo")}</b> te añadió a una tarea`;
+    const thumb = (done && n.photo_url) ? `<div class="gal-thumb"><img src="${esc(n.photo_url)}"></div>` : `<div class="notif-ic ${done?'done':'add'}">${done?checkSvg():plusSvg()}</div>`;
+    return `<div class="card gal-item notif-item" ${done&&n.photo_url?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}" data-when="${esc(n.actor_name||'')}"`:''}>
+      ${thumb}
+      <div class="gal-info"><div class="t">${text}</div><div class="m">${esc(n.task_title||'')}${n.task_title?' · ':''}${timeAgo(n.created_at)}</div></div>
+    </div>`;
+  }
+  function openSheet(){
+    haptic();
+    const list=Store.get().notifs||[];
+    Sheets.open(`
+      <div class="grabber"></div>
+      <div class="sheet-head"><span class="act" id="ntPerm" style="${("Notification" in window && Notification.permission==='granted')?'opacity:0':''}">Activar</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
+      <div class="sheet-body"><div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.</div>'}</div></div>`);
+    $("#ntClose").onclick=Sheets.close;
+    const pm=$("#ntPerm"); if(pm) pm.onclick=()=>{ Cloud.ensurePush(); };
+    $$("#ntList [data-photo]").forEach(c=> c.onclick=()=> Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}) );
+    // marcar como leídas
+    Cloud.markNotifsRead(); Store.update(s=>{ (s.notifs||[]).forEach(n=>n.read=true); }); updateBadge();
+  }
+  function init(){ const b=$("#notifBtn"); if(b) b.onclick=openSheet; updateBadge(); }
+  return { init, refresh, openSheet, updateBadge };
+})();
+function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
 function noPhotoThumb(){return '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--label-3)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5"/></svg></div>';}
 // Resumen del título para listas: si es muy largo (>10 palabras) deja una frase
 // corta identificativa con puntos suspensivos. El título completo se conserva aparte.
@@ -2860,12 +3130,27 @@ function boot(){
   Tasks.init();
   Profile.init();
   Friends.init();
+  Notifs.init();
   Router.init();
   Tasks.render();
   Profile.render();
 
   // Nube (si está activada): inicia sesión y sube perfil + historial en segundo plano
-  if (Cloud.enabled()){ Cloud.init().then(id=>{ if(id){ Cloud.pushProfile(); Cloud.syncBacklog().then(()=>Cloud.reconcile()); Friends.syncFriends(); } }); }
+  if (Cloud.enabled()){
+    Cloud.init().then(id=>{
+      if(!id) return;
+      Cloud.pushProfile();
+      Cloud.syncBacklog().then(()=>Cloud.reconcile());
+      Friends.syncFriends();
+      Tasks.syncShared();   // reconcilia tareas compartidas
+      Notifs.refresh();     // trae notificaciones + avisa en primer plano
+      Cloud.ensurePush();   // registra push en segundo plano (si hay permiso)
+      // Sondeo periódico: tareas compartidas + notificaciones nuevas
+      setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); }, 12000);
+      // Al volver a primer plano, refresca de inmediato
+      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); } });
+    });
+  }
 
   // efecto pulsado en cualquier botón con clase .btn (feedback háptico simulado)
   document.addEventListener("touchstart",(e)=>{ const b=e.target.closest(".btn,.chip,.seg,.tab"); if(b) haptic(6); },{passive:true});
