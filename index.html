@@ -294,13 +294,13 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .task-body{flex:1;min-width:0;}
 .task-title{font-size:16px;font-weight:600;letter-spacing:-0.01em;line-height:1.25;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.task-meta{display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;}
-.tag{font-size:11.5px;font-weight:600;color:var(--label-2);}
+.task-meta{display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap;}
+.tag{font-size:13.5px;font-weight:600;color:var(--label-2);}
 .tag.dot::before{content:"·";margin-right:6px;color:var(--label-3);}
 .tag.rnd{color:var(--purple);}
-/* Tarea urgente: burbuja roja */
-.task-card.urgent{background:rgba(255,69,58,0.16);box-shadow:inset 0 0 0 1px rgba(255,69,58,0.40);}
-.task-card.urgent.done{background:rgba(255,69,58,0.08);}
+/* Tarea urgente: burbuja roja, bien marcada */
+.task-card.urgent{background:rgba(255,69,58,0.32);box-shadow:inset 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,69,58,0.30);}
+.task-card.urgent.done{background:rgba(255,69,58,0.14);box-shadow:inset 0 0 0 1px rgba(255,69,58,0.45);}
 .tag.pts{color:var(--yellow);}
 .task-check{width:30px;height:30px;border-radius:50%;border:2px solid var(--label-3);flex:0 0 auto;
   display:grid;place-items:center;transition:transform .15s var(--ease-out), background .2s, border-color .2s;}
@@ -527,7 +527,7 @@ input[type=file]{display:none;}
   display:flex;align-items:center;justify-content:center;flex-direction:column;
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);padding:env(safe-area-inset-top) 16px;}
 .lightbox.show{opacity:1;pointer-events:auto;}
-.lightbox img{max-width:100%;max-height:74vh;border-radius:16px;object-fit:contain;
+.lightbox img{width:100%;height:74vh;border-radius:16px;object-fit:contain;
   transform:scale(0.92);transition:transform .35s var(--ease-out);}
 .lightbox.show img{transform:none;}
 .lightbox .lb-info{margin-top:18px;text-align:center;}
@@ -1803,8 +1803,39 @@ const Tasks = (() => {
     return true;
   };
 
+  /* ---------- AUTO-ELIMINACIÓN de tareas vencidas ----------
+     - "Solo hoy": si no se completó, se borra al día siguiente.
+     - "Personalizado": si pasa un día programado sin completarla, se borra. */
+  function mostRecentDueBefore(todayKey, days){
+    const [y,m,d]=todayKey.split("-").map(Number); const base=new Date(y,m-1,d);
+    for(let i=1;i<=7;i++){ const dd=new Date(base); dd.setDate(dd.getDate()-i);
+      if(days.includes((dd.getDay()+6)%7)) return dateKey(dd); }
+    return null;
+  }
+  function isExpired(t, today){
+    const r=t.recurrence;
+    const created = dateKey(new Date(t.createdAt||Date.now()));
+    if(!r || r.type==="once"){
+      return !t.done && created < today;            // solo hoy sin completar y ya pasó el día
+    }
+    if(r.type==="custom" && r.days && r.days.length){
+      const todayIdx=(new Date().getDay()+6)%7;
+      if(r.days.includes(todayIdx)) return false;     // hoy es día programado: dale la oportunidad
+      const due = mostRecentDueBefore(today, r.days);
+      if(!due || created > due) return false;         // aún no existía ese día programado
+      return t.lastDone !== due;                       // pasó un día programado sin completarla
+    }
+    return false; // daily / weekly / monthly no caducan
+  }
+  function cleanupExpired(){
+    const s=Store.get(); const today=dateKey();
+    const keep = s.tasks.filter(t=>!isExpired(t,today));
+    if(keep.length!==s.tasks.length) Store.update(st=>{ st.tasks=keep; });
+  }
+
   /* ---------- LISTA ---------- */
   function render(){
+    cleanupExpired();
     const wrap = $("#taskListWrap");
     const s = Store.get();
     let list = s.tasks.slice();
@@ -1836,11 +1867,8 @@ const Tasks = (() => {
     const done = isDoneToday(t);
     const pts = taskPoints(t.minutes,t.random);
     const meta = [];
-    meta.push(`<span class="tag">${esc(t.category)}</span>`);
-    meta.push(`<span class="tag dot">${durShort(t.minutes)}</span>`);
-    if (t.people>1) meta.push(`<span class="tag dot ppl">${peopleShort(t.people)}</span>`);
-    meta.push(`<span class="tag dot">${esc(recurLabel(t.recurrence))}</span>`);
-    if (t.random) meta.push(`<span class="tag dot rnd">✦ x2</span>`);
+    // solo el día (recurrencia) y los puntos
+    meta.push(`<span class="tag">${esc(recurLabel(t.recurrence))}</span>`);
     meta.push(`<span class="tag dot pts">${pts} pts</span>`);
     return `
       <div class="card task-card${done?" done":""}${t.urgent?" urgent":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
@@ -1984,7 +2012,7 @@ const Tasks = (() => {
       DURATIONS.forEach(m=>{ const seg=el("div","seg"+(m===dur?" sel":""),durShort(m)); seg.onclick=()=>{dur=m;haptic();renderDur();}; w.appendChild(seg); }); };
     const renderRecur = ()=>{ const w=$("#ctRecur",sheet); w.innerHTML="";
       RECUR.forEach(r=>{ const seg=el("div","seg"+(r.k===recur?" sel":""),r.l); seg.onclick=()=>{recur=r.k;haptic();renderRecur();
-        $("#ctDaysWrap",sheet).style.display = recur==="custom"?"block":"none"; }; w.appendChild(seg); }); };
+        $("#ctDaysWrap",sheet).style.display = recur==="custom"?"block":"none"; validate(); }; w.appendChild(seg); }); };
     const renderDays = ()=>{ const w=$("#ctDays",sheet); w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
         cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
@@ -1998,7 +2026,8 @@ const Tasks = (() => {
 
     const titleInput = $("#ctTitle",sheet);
     const saveBtn = $("#ctSave",sheet);
-    function validate(){ saveBtn.disabled = !titleInput.value.trim(); }
+    // En "Personalizado" hay que elegir al menos un día; si no, no se puede guardar
+    function validate(){ saveBtn.disabled = !titleInput.value.trim() || (recur==="custom" && days.length===0); }
     titleInput.addEventListener("input", validate);
     validate();
 
@@ -2300,7 +2329,7 @@ const Friends = (() => {
     const h=[];
     for(const e of recent){
       let ph=null;
-      if(e.photoId){ const d=await DB.get(e.photoId); if(d) ph=await downscaleDataUrl(d, 240, 0.55); }
+      if(e.photoId){ const d=await DB.get(e.photoId); if(d) ph=await downscaleDataUrl(d, 480, 0.6); }
       h.push({ d:e.date, t:e.title, ct:e.category, pt:e.points, tm:e.time, ph });
     }
     const payload={ v:2, n:s.profile.name||"Atleta", a:avatar, p:s.points, c:s.streak.current, b:s.streak.best, l:s.streak.lastDate, h };
@@ -2452,15 +2481,24 @@ const Friends = (() => {
     $("#fpBack").onclick=openSheet;
     $("#fpClose").onclick=Sheets.close;
     $("#fpDel").onclick=()=>{ haptic(20); deletePhotos(f); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); };
-    $("#fpRefresh").onclick=()=>{
-      pasteSheet("Actualizar a "+f.name, async (code)=>{
-        const p=parseCode(code);
-        if(!p){ UI.toast("Código no válido","check","var(--red)"); return; }
-        deletePhotos(f);
-        const updated=await importFriend(p, f.id);
-        Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
-        haptic(15); UI.toast("Perfil actualizado","check","var(--green)"); openProfile(updated);
-      });
+    async function applyUpdate(code){
+      const p=parseCode(code);
+      if(!p) return false;
+      deletePhotos(f);
+      const updated=await importFriend(p, f.id);
+      Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
+      haptic(15); UI.toast("Perfil actualizado","check","var(--green)"); openProfile(updated);
+      return true;
+    }
+    // Actualiza automáticamente leyendo el código del portapapeles; si no se
+    // puede (o no es válido), pide pegarlo manualmente como respaldo.
+    $("#fpRefresh").onclick=async ()=>{
+      haptic();
+      let code=null;
+      try{ if(navigator.clipboard && navigator.clipboard.readText) code=await navigator.clipboard.readText(); }catch(e){}
+      if(code && parseCode(code)){ await applyUpdate(code); return; }
+      UI.toast("Copia el código del amigo y pégalo","check","var(--blue)");
+      pasteSheet("Actualizar a "+f.name, async (c)=>{ if(!(await applyUpdate(c))) UI.toast("Código no válido","check","var(--red)"); });
     };
     function draw(){
       const y=cal.getFullYear(), m=cal.getMonth();
