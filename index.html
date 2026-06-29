@@ -527,10 +527,12 @@ input[type=file]{display:none;}
   display:flex;align-items:center;justify-content:center;flex-direction:column;
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);padding:env(safe-area-inset-top) 16px;}
 .lightbox.show{opacity:1;pointer-events:auto;}
-.lightbox img{width:100%;height:74vh;border-radius:16px;object-fit:contain;
+/* La imagen se ajusta a su tamaño (sin caja fija) para que no quede hueco
+   entre la foto y el título y las esquinas redondeadas se vean en la foto. */
+.lightbox img{max-width:100%;max-height:72vh;width:auto;height:auto;border-radius:20px;
   transform:scale(0.92);transition:transform .35s var(--ease-out);}
 .lightbox.show img{transform:none;}
-.lightbox .lb-info{margin-top:18px;text-align:center;}
+.lightbox .lb-info{margin-top:12px;text-align:center;}
 .lightbox .lb-info .t{font-size:18px;font-weight:700;}
 .lightbox .lb-info .m{font-size:13px;color:var(--label-2);margin-top:5px;}
 .lightbox .lb-close{position:absolute;top:calc(env(safe-area-inset-top) + 14px);right:18px;
@@ -2324,12 +2326,13 @@ const Friends = (() => {
   // Genera mi código (incluye avatar e historial con miniaturas). Es asíncrono.
   async function buildMyCode(){
     const s=Store.get();
-    const avatar = s.profile.avatar ? await downscaleDataUrl(s.profile.avatar, 96, 0.6) : null;
-    const recent = s.history.slice(0,120); // historial más reciente primero
+    // resoluciones mayores para que el avatar y las fotos no se vean borrosos
+    const avatar = s.profile.avatar ? await downscaleDataUrl(s.profile.avatar, 256, 0.72) : null;
+    const recent = s.history.slice(0,60); // historial más reciente (limitado para que el código no sea enorme)
     const h=[];
     for(const e of recent){
       let ph=null;
-      if(e.photoId){ const d=await DB.get(e.photoId); if(d) ph=await downscaleDataUrl(d, 480, 0.6); }
+      if(e.photoId){ const d=await DB.get(e.photoId); if(d) ph=await downscaleDataUrl(d, 720, 0.62); }
       h.push({ d:e.date, t:e.title, ct:e.category, pt:e.points, tm:e.time, ph });
     }
     const payload={ v:2, n:s.profile.name||"Atleta", a:avatar, p:s.points, c:s.streak.current, b:s.streak.best, l:s.streak.lastDate, h };
