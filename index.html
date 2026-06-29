@@ -1955,6 +1955,12 @@ const Tasks = (() => {
         st.streak.current=stk.current; st.streak.best=Math.max(st.streak.best||0,stk.best); st.streak.lastDate=stk.lastDate;
       }
     });
+    // subir a la nube las completadas compartidas que acabo de recibir, para que
+    // aparezcan en MI calendario (el que ven mis amigos) y se reflejen mis puntos
+    if(newHist.length && Cloud.enabled()){
+      newHist.forEach(h=> Cloud.pushSharedCompletion(h));
+      Cloud.pushProfile();
+    }
     render(); if(UI.renderProfile) UI.renderProfile();
   }
 
@@ -2565,6 +2571,17 @@ const Cloud = (() => {
       if(photoOk) markSynced(entry.id);
     }catch(e){ console.warn("pushCompletion:", e && e.message); }
   }
+  // sube una completada de tarea COMPARTIDA recibida del compañero: usa la
+  // foto que ya está en el Storage del que la completó (no se vuelve a subir).
+  // Así aparece en TU calendario en la nube (el que ven tus amigos).
+  async function pushSharedCompletion(entry){
+    if(!enabled() || !await init() || !client) return;
+    try{
+      await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
+        category:entry.category, points:entry.points, time:entry.time, photo_url:entry.photoUrl||null });
+      markSynced(entry.id);
+    }catch(e){ console.warn("pushSharedCompletion:", e && e.message); }
+  }
   // sube al servidor las completadas que aún no se han sincronizado (máx 60 recientes)
   async function syncBacklog(){
     if(!enabled() || !await init() || !client) return;
@@ -2650,7 +2667,7 @@ const Cloud = (() => {
     catch(e){ console.warn("notify:", e && e.message); }
     // push en segundo plano (vía Edge Function)
     const body = type==='shared_added' ? `${actorName} te añadió a una tarea` : `${actorName} completó una tarea`;
-    sendPush(recipientId, "Rachas · Tareas", body, photoUrl);
+    sendPush(recipientId, "Tareas", body, photoUrl);
   }
   async function fetchNotifs(){
     if(!enabled() || !await init() || !client) return [];
@@ -2692,7 +2709,7 @@ const Cloud = (() => {
     }catch(e){ console.warn("sendPush:", e && e.message); }
   }
 
-  return { configured, enabled, init, myId, pushProfile, pushCompletion, syncBacklog, reconcile, forceResync, pullFriend,
+  return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
     createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, ensurePush };
 })();
 
@@ -2958,7 +2975,7 @@ const Notifs = (() => {
     if(fresh.length && "Notification" in window && Notification.permission==="granted"){
       fresh.slice(0,3).forEach(n=>{
         const body = n.type==='shared_done' ? `${n.actor_name} completó una tarea` : `${n.actor_name} te añadió a una tarea`;
-        try{ const opt={ body, icon:"icons/icon-192.png", tag:n.id }; if(n.photo_url) opt.image=n.photo_url; new Notification("Rachas · Tareas", opt); }catch(e){}
+        try{ const opt={ body, icon:"icons/icon-192.png", tag:n.id }; if(n.photo_url) opt.image=n.photo_url; new Notification("Tareas", opt); }catch(e){}
       });
     }
     Store.update(s=>{ s.notifSeen=list.map(n=>n.id); });
@@ -2980,7 +2997,12 @@ const Notifs = (() => {
       <div class="sheet-head"><span class="act" id="ntPerm" style="${("Notification" in window && Notification.permission==='granted')?'opacity:0':''}">Activar</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
       <div class="sheet-body"><div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.</div>'}</div></div>`);
     $("#ntClose").onclick=Sheets.close;
-    const pm=$("#ntPerm"); if(pm) pm.onclick=()=>{ Cloud.ensurePush(); };
+    const pm=$("#ntPerm"); if(pm) pm.onclick=async ()=>{
+      pm.textContent="Activando…";
+      const ok=await Cloud.ensurePush();
+      if(ok){ pm.style.opacity="0"; UI.toast("Notificaciones activadas","check","var(--green)"); }
+      else { pm.textContent="Activar"; UI.toast(Notification && Notification.permission==='denied' ? "Permiso bloqueado: actívalo en Ajustes" : "No se pudo activar (instala la app en pantalla de inicio)","bell","var(--red)"); }
+    };
     $$("#ntList [data-photo]").forEach(c=> c.onclick=()=> Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}) );
     // marcar como leídas
     Cloud.markNotifsRead(); Store.update(s=>{ (s.notifs||[]).forEach(n=>n.read=true); }); updateBadge();
