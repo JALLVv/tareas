@@ -40,6 +40,10 @@ create table if not exists public.completions (
   created_at timestamptz default now()
 );
 
+-- Para tareas compartidas: con quién se completó (se muestra «con X» / «contigo»).
+alter table public.completions add column if not exists partner_id   uuid;
+alter table public.completions add column if not exists partner_name text;
+
 alter table public.completions enable row level security;
 
 drop policy if exists "completions_read"   on public.completions;

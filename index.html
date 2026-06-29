@@ -1940,7 +1940,7 @@ const Tasks = (() => {
         // solo el compañero (no el que la completó) añade el registro: foto + puntos + calendario
         if(r.completed_by!==myId && !s.history.some(h=>h.id===histId)){
           newHist.push({ id:histId, taskId:t.id, title:t.title, category:t.category, minutes:t.minutes,
-            points:r.points||0, random:false, date:r.done_date||dateKey(), time:r.done_time||"", photoUrl:r.photo_url||null, shared:true, partnerName:t.partnerName||"" });
+            points:r.points||0, random:false, date:r.done_date||dateKey(), time:r.done_time||"", photoUrl:r.photo_url||null, shared:true, partnerName:t.partnerName||"", partnerId:t.partnerId||null });
           addPts+=(r.points||0); changed=true;
         }
       }
@@ -2265,7 +2265,8 @@ const Tasks = (() => {
         id:uid(), taskId:task.id, title:task.title, category:task.category,
         minutes:task.minutes, points:pts, random:task.random,
         date:dateKey(now), time:timeLabel(now), photoId: photoData?photoId:null,
-        shared: !!task.shared, partnerName: task.shared?(task.partnerName||""):undefined
+        shared: !!task.shared, partnerName: task.shared?(task.partnerName||""):undefined,
+        partnerId: task.shared?(task.partnerId||null):undefined
       };
       // marcar la tarea
       Store.update(s=>{
@@ -2565,7 +2566,8 @@ const Cloud = (() => {
     }
     try{
       await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
-        category:entry.category, points:entry.points, time:entry.time, photo_url });
+        category:entry.category, points:entry.points, time:entry.time, photo_url,
+        partner_id:entry.partnerId||null, partner_name:entry.partnerName||null });
       // solo se marca como sincronizada si la foto subió (o no había). Si la foto
       // falló, se reintenta en el próximo arranque (syncBacklog).
       if(photoOk) markSynced(entry.id);
@@ -2578,7 +2580,8 @@ const Cloud = (() => {
     if(!enabled() || !await init() || !client) return;
     try{
       await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
-        category:entry.category, points:entry.points, time:entry.time, photo_url:entry.photoUrl||null });
+        category:entry.category, points:entry.points, time:entry.time, photo_url:entry.photoUrl||null,
+        partner_id:entry.partnerId||null, partner_name:entry.partnerName||null });
       markSynced(entry.id);
     }catch(e){ console.warn("pushSharedCompletion:", e && e.message); }
   }
@@ -2588,8 +2591,15 @@ const Cloud = (() => {
     const s=Store.get(); const done=(s.cloud&&s.cloud.syncedCompletions)||[];
     const pending=s.history.filter(h=>!done.includes(h.id)).slice(0,60);
     for(const h of pending){
-      let photo=null; if(h.photoId){ try{ photo=await DB.get(h.photoId); }catch(e){} }
-      await pushCompletion({ id:h.id, date:h.date, title:h.title, category:h.category, points:h.points, time:h.time }, photo);
+      if(h.shared && h.photoUrl && !h.photoId){
+        // completada compartida recibida del compañero: la foto ya está en la nube
+        await pushSharedCompletion({ id:h.id, date:h.date, title:h.title, category:h.category, points:h.points, time:h.time,
+          photoUrl:h.photoUrl, partnerId:h.partnerId, partnerName:h.partnerName });
+      } else {
+        let photo=null; if(h.photoId){ try{ photo=await DB.get(h.photoId); }catch(e){} }
+        await pushCompletion({ id:h.id, date:h.date, title:h.title, category:h.category, points:h.points, time:h.time,
+          partnerId:h.partnerId, partnerName:h.partnerName }, photo);
+      }
     }
   }
 
@@ -2618,7 +2628,7 @@ const Cloud = (() => {
       if(e1) throw e1;
       if(!prof) return null;
       const { data:comps } = await client.from('completions').select('*').eq('user_id',id).order('date',{ascending:false}).limit(500);
-      const history=(comps||[]).map(c=>({ date:c.date, title:c.title||"", category:c.category||"", points:c.points||0, time:c.time||"", photoUrl:c.photo_url||null }));
+      const history=(comps||[]).map(c=>({ date:c.date, title:c.title||"", category:c.category||"", points:c.points||0, time:c.time||"", photoUrl:c.photo_url||null, partnerId:c.partner_id||null, partnerName:c.partner_name||"" }));
       const dates=[...new Set(history.map(h=>h.date).filter(Boolean))];
       return { cloudId:id, name:prof.name||"Amigo", avatar:prof.avatar_url||null,
         points:prof.points||0, streak:{current:prof.streak_current||0, best:prof.streak_best||0, lastDate:null}, dates, history };
@@ -2708,9 +2718,24 @@ const Cloud = (() => {
       await client.functions.invoke('send-push', { body:{ recipientId, title, body, photo:photoUrl||null } });
     }catch(e){ console.warn("sendPush:", e && e.message); }
   }
+  // Envía una notificación de PRUEBA a tus propios dispositivos. Sirve para
+  // diagnosticar el push: si llega, toda la cadena (Edge Function + claves +
+  // suscripción) funciona. Devuelve {ok, error, sent}.
+  async function testPush(){
+    try{
+      if(!enabled() || !await init() || !client) return { ok:false, error:"sin conexión" };
+      const reg = ("serviceWorker" in navigator) ? await navigator.serviceWorker.ready : null;
+      const sub = reg ? await reg.pushManager.getSubscription() : null;
+      if(!sub) return { ok:false, error:"no estás suscrito (pulsa Activar)" };
+      const { data, error } = await client.functions.invoke('send-push',
+        { body:{ recipientId:uid, title:"Tareas", body:"Notificación de prueba ✅" } });
+      if(error) return { ok:false, error:(error.message||"la función send-push falló") };
+      return { ok:true, sent:(data&&data.sent)||0 };
+    }catch(e){ return { ok:false, error:(e&&e.message)||"error" }; }
+  }
 
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
-    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, ensurePush };
+    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, ensurePush, testPush };
 })();
 
 /* =====================================================================
@@ -2928,12 +2953,14 @@ const Friends = (() => {
     $("#fdBack").onclick=()=>openProfile(f);
     $("#fdClose").onclick=Sheets.close;
     const listEl=$("#fdList");
+    const myCloudId=Cloud.myId&&Cloud.myId();
+    const withWhom=(h)=>{ if(!h.partnerId&&!h.partnerName) return ""; const txt=(myCloudId&&h.partnerId===myCloudId)?"contigo":("con "+esc(h.partnerName||"un amigo")); return ` · <span class="pts" style="color:var(--indigo)">${txt}</span>`; };
     listEl.innerHTML = items.length ? items.map(h=>`
       <div class="card gal-item">
         <div class="gal-thumb"></div>
         <div class="gal-info">
           <div class="t">${esc(shortTitle(h.title||"Tarea"))}</div>
-          <div class="m">${esc(h.time||"")}${h.category?" · "+esc(h.category):""}${h.points?` · <span class="pts">${h.points} pts</span>`:""}</div>
+          <div class="m">${esc(h.time||"")}${h.category?" · "+esc(h.category):""}${h.points?` · <span class="pts">${h.points} pts</span>`:""}${withWhom(h)}</div>
         </div>
       </div>`).join("") : `<div class="card friends-empty">Sin tareas registradas este día.</div>`;
     items.forEach((h,idx)=>{
@@ -2992,16 +3019,26 @@ const Notifs = (() => {
   function openSheet(){
     haptic();
     const list=Store.get().notifs||[];
+    const granted=("Notification" in window && Notification.permission==='granted');
     Sheets.open(`
       <div class="grabber"></div>
-      <div class="sheet-head"><span class="act" id="ntPerm" style="${("Notification" in window && Notification.permission==='granted')?'opacity:0':''}">Activar</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
+      <div class="sheet-head"><span class="act" id="ntPerm">${granted?"Probar":"Activar"}</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
       <div class="sheet-body"><div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.</div>'}</div></div>`);
     $("#ntClose").onclick=Sheets.close;
-    const pm=$("#ntPerm"); if(pm) pm.onclick=async ()=>{
+    const pm=$("#ntPerm");
+    async function runTest(){
+      pm.textContent="Enviando…";
+      const r=await Cloud.testPush();
+      pm.textContent="Probar";
+      if(r.ok) UI.toast("Prueba enviada: debería llegarte ahora","check","var(--green)");
+      else UI.toast("No llegó: "+(r.error||"revisa la función send-push"),"bell","var(--red)");
+    }
+    if(pm) pm.onclick=async ()=>{
+      if(Notification.permission==='granted'){ runTest(); return; }
       pm.textContent="Activando…";
       const ok=await Cloud.ensurePush();
-      if(ok){ pm.style.opacity="0"; UI.toast("Notificaciones activadas","check","var(--green)"); }
-      else { pm.textContent="Activar"; UI.toast(Notification && Notification.permission==='denied' ? "Permiso bloqueado: actívalo en Ajustes" : "No se pudo activar (instala la app en pantalla de inicio)","bell","var(--red)"); }
+      if(ok){ UI.toast("Notificaciones activadas","check","var(--green)"); runTest(); }
+      else { pm.textContent="Activar"; UI.toast(Notification.permission==='denied' ? "Permiso bloqueado: actívalo en Ajustes del iPhone" : "No se pudo activar (abre la app desde el icono de inicio)","bell","var(--red)"); }
     };
     $$("#ntList [data-photo]").forEach(c=> c.onclick=()=> Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}) );
     // marcar como leídas
