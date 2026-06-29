@@ -60,13 +60,16 @@ on conflict (id) do update set public = true;
 drop policy if exists "photos_read"   on storage.objects;
 drop policy if exists "photos_insert" on storage.objects;
 drop policy if exists "photos_update" on storage.objects;
+drop policy if exists "photos_delete" on storage.objects;
 
 -- Lectura pública (para mostrar avatar y fotos de los amigos).
 create policy "photos_read"   on storage.objects for select using (bucket_id = 'photos');
--- Solo puedes subir/actualizar fotos dentro de tu propia carpeta (tu uid).
+-- Solo puedes subir/actualizar/borrar fotos dentro de tu propia carpeta (tu uid).
 create policy "photos_insert" on storage.objects for insert to authenticated
   with check (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "photos_update" on storage.objects for update to authenticated
+  using (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "photos_delete" on storage.objects for delete to authenticated
   using (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- =====================================================================
