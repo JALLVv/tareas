@@ -1958,7 +1958,7 @@ const Tasks = (() => {
       photoIds.forEach(id=> DB.del(id));
       Sheets.close(); render();
       if (UI.renderProfile) UI.renderProfile();
-      if (Cloud.enabled()) Cloud.pushProfile();
+      if (Cloud.enabled()){ Cloud.pushProfile(); Cloud.reconcile(); } // refleja la eliminación en la nube
       UI.toast(removedPts>0 ? `Tarea eliminada · −${removedPts} pts` : "Tarea eliminada", "check", "var(--red)");
     };
   }
@@ -2401,6 +2401,23 @@ const Cloud = (() => {
     }
   }
 
+  // Borra del servidor las completadas que ya NO existen en tu historial local
+  // (tareas eliminadas). Limpia filas, fotos del Storage y el registro local.
+  async function reconcile(){
+    if(!enabled() || !await init() || !client) return;
+    try{
+      const { data, error } = await client.from('completions').select('id').eq('user_id', uid);
+      if(error) throw error;
+      const cloudIds=(data||[]).map(r=>r.id);
+      const localIds=new Set(Store.get().history.map(h=>h.id));
+      const toDelete=cloudIds.filter(id=>!localIds.has(id));
+      if(!toDelete.length) return;
+      await client.from('completions').delete().in('id', toDelete).eq('user_id', uid);
+      try{ await client.storage.from('photos').remove(toDelete.map(id=>`${uid}/${id}.jpg`)); }catch(e){}
+      Store.update(s=>{ if(s.cloud&&s.cloud.syncedCompletions) s.cloud.syncedCompletions=s.cloud.syncedCompletions.filter(x=>!toDelete.includes(x)); });
+    }catch(e){ console.warn("reconcile:", e && e.message); }
+  }
+
   // descarga el perfil + completadas de un amigo (en vivo)
   async function pullFriend(id){
     if(!await init() || !client) return null;
@@ -2416,7 +2433,7 @@ const Cloud = (() => {
     }catch(e){ console.warn("pullFriend:", e && e.message); return null; }
   }
 
-  return { configured, enabled, init, myId, pushProfile, pushCompletion, syncBacklog, pullFriend };
+  return { configured, enabled, init, myId, pushProfile, pushCompletion, syncBacklog, reconcile, pullFriend };
 })();
 
 /* =====================================================================
@@ -2787,7 +2804,7 @@ function boot(){
   Profile.render();
 
   // Nube (si está activada): inicia sesión y sube perfil + historial en segundo plano
-  if (Cloud.enabled()){ Cloud.init().then(id=>{ if(id){ Cloud.pushProfile(); Cloud.syncBacklog(); Friends.syncFriends(); } }); }
+  if (Cloud.enabled()){ Cloud.init().then(id=>{ if(id){ Cloud.pushProfile(); Cloud.syncBacklog().then(()=>Cloud.reconcile()); Friends.syncFriends(); } }); }
 
   // efecto pulsado en cualquier botón con clase .btn (feedback háptico simulado)
   document.addEventListener("touchstart",(e)=>{ const b=e.target.closest(".btn,.chip,.seg,.tab"); if(b) haptic(6); },{passive:true});
