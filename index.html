@@ -2430,8 +2430,9 @@ const Friends = (() => {
 
   const initial = (n)=> esc((n||"A").trim().charAt(0).toUpperCase()||"A");
   const avHtml = (f, cls)=> f.avatar ? `<div class="${cls}"><img src="${esc(f.avatar)}" alt=""></div>` : `<div class="${cls}">${initial(f.name)}</div>`;
-  // ¿cambió algo relevante del amigo? (para no re-renderizar sin necesidad)
-  const fsig = (f)=> JSON.stringify([f.name,f.avatar,f.points,f.streak&&f.streak.current,f.streak&&f.streak.best,(f.dates||[]).length,(f.history||[]).length]);
+  // ¿cambió algo relevante del amigo? (para no re-renderizar sin necesidad).
+  // Incluye las fotos del historial: si aparece/cambia una foto, se re-pinta.
+  const fsig = (f)=> JSON.stringify([f.name,f.avatar,f.points,f.streak&&f.streak.current,f.streak&&f.streak.best,(f.history||[]).map(h=>[h.date,h.title,h.photoUrl||""])]);
 
   function copyToClip(text, box){
     try{ navigator.clipboard && navigator.clipboard.writeText(text); }catch(e){}
@@ -2477,15 +2478,20 @@ const Friends = (() => {
       </div>`).join("");
     $$("[data-fid]",wrap).forEach(c=> c.onclick=()=>{ haptic(); const f=Store.get().friends.find(x=>x.id===c.getAttribute("data-fid")); if(f) openProfile(f); });
   }
-  // refresca todos los amigos desde la nube y vuelve a pintar si seguimos en el sheet
-  async function refreshAll(token){
-    if(!Cloud.configured()) return;
+  // descarga datos frescos de TODOS los amigos y los guarda en el store
+  async function syncFriends(){
+    if(!Cloud.configured()) return false;
     const list=Store.get().friends.filter(f=>f.cloudId);
     let changed=false;
     await Promise.all(list.map(async f=>{
       const d=await Cloud.pullFriend(f.cloudId);
       if(d){ Store.update(st=>{ const i=st.friends.findIndex(x=>x.id===f.id); if(i>=0) st.friends[i]={...st.friends[i],...d}; }); changed=true; }
     }));
+    return changed;
+  }
+  // igual, pero re-pinta la lista si seguimos en el mismo sheet
+  async function refreshAll(token){
+    const changed=await syncFriends();
     if(changed && token===gen) renderList();
   }
 
@@ -2540,6 +2546,7 @@ const Friends = (() => {
           ${avHtml(f,"big-av")}
           <div class="fpn">${esc(f.name)}</div>
           <div class="rank-badge">${trophySvg()} ${esc(rankFor(f.points).rank.name)}</div>
+          ${(!fetched && f.cloudId)?'<div id="fpSync" class="hint" style="margin-top:6px;">Actualizando…</div>':''}
         </div>
         <div class="friends-actions" style="justify-content:center;margin-top:14px;">
           <button class="mini-btn danger" id="fpDel">Eliminar amigo</button>
@@ -2586,13 +2593,15 @@ const Friends = (() => {
     $("#fpPrev").onclick=()=>{ cal.setMonth(cal.getMonth()-1); haptic(); draw(); };
     $("#fpNext").onclick=()=>{ cal.setMonth(cal.getMonth()+1); haptic(); draw(); };
     draw();
-    // Auto-actualización: al abrir, trae datos frescos y re-pinta solo si cambió algo
+    // Auto-actualización: al abrir, trae datos frescos. SIEMPRE guarda en el
+    // store (aunque navegues a otra vista), y re-pinta solo si sigues aquí.
     if(!fetched && f.cloudId){
       Cloud.pullFriend(f.cloudId).then(fr=>{
-        if(!fr || gen!==myGen) return;            // el usuario navegó a otra cosa
+        const sync=$("#fpSync"); if(sync) sync.remove();
+        if(!fr) return;
         const updated={ ...f, ...fr };
-        if(fsig(updated)===fsig(f)) return;        // nada cambió: no re-pintar
         Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
+        if(gen!==myGen || fsig(updated)===fsig(f)) return; // navegó o nada cambió
         openProfile(updated, true);
       });
     }
@@ -2601,6 +2610,7 @@ const Friends = (() => {
   // Galería del día de un amigo: fotos (URL) + títulos
   function openFriendDay(f, key){
     gen++; haptic();
+    f = Store.get().friends.find(x=>x.id===f.id) || f; // usar los datos más frescos del store
     const items=(f.history||[]).filter(h=>h.date===key).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
     const [y,mo,d]=key.split("-");
     const title=`${parseInt(d)} de ${MONTHS[parseInt(mo)-1]}`;
@@ -2621,14 +2631,15 @@ const Friends = (() => {
       </div>`).join("") : `<div class="card friends-empty">Sin tareas registradas este día.</div>`;
     items.forEach((h,idx)=>{
       const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
-      if(h.photoUrl){ const im=new Image(); im.src=h.photoUrl; thumb.appendChild(im);
+      if(h.photoUrl){
+        const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
         thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl,{title:h.title,time:h.time,category:h.category,points:h.points});
       } else thumb.innerHTML=noPhotoThumb();
     });
   }
 
   function init(){ const b=$("#friendsBtn"); if(b) b.onclick=()=>{ haptic(); openSheet(); }; }
-  return { init, openSheet, openProfile };
+  return { init, openSheet, openProfile, syncFriends };
 })();function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
 function noPhotoThumb(){return '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--label-3)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5"/></svg></div>';}
 // Resumen del título para listas: si es muy largo (>10 palabras) deja una frase
@@ -2776,7 +2787,7 @@ function boot(){
   Profile.render();
 
   // Nube (si está activada): inicia sesión y sube perfil + historial en segundo plano
-  if (Cloud.enabled()){ Cloud.init().then(id=>{ if(id){ Cloud.pushProfile(); Cloud.syncBacklog(); } }); }
+  if (Cloud.enabled()){ Cloud.init().then(id=>{ if(id){ Cloud.pushProfile(); Cloud.syncBacklog(); Friends.syncFriends(); } }); }
 
   // efecto pulsado en cualquier botón con clase .btn (feedback háptico simulado)
   document.addEventListener("touchstart",(e)=>{ const b=e.target.closest(".btn,.chip,.seg,.tab"); if(b) haptic(6); },{passive:true});
