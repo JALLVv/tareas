@@ -1803,6 +1803,7 @@ const Sheets = (() => {
    ===================================================================== */
 const Tasks = (() => {
   let filter = "pending";
+  let sharedBackfilled = false; // re-sube una vez por sesión las compartidas (para rellenar "con quién")
 
   const RECUR = [
     {k:"once",  l:"Solo hoy"},
@@ -1962,6 +1963,22 @@ const Tasks = (() => {
       Cloud.pushProfile();
     }
     render(); if(UI.renderProfile) UI.renderProfile();
+    backfillShared();
+  }
+  // Una sola vez por sesión: re-sube las completadas compartidas que ya tenías,
+  // para rellenar en la nube las columnas "con quién" (partner_id/partner_name)
+  // de registros antiguos creados antes de esta función.
+  function backfillShared(){
+    if(sharedBackfilled || !Cloud.enabled()) return;
+    sharedBackfilled = true;
+    const s=Store.get();
+    (s.history||[]).forEach(h=>{
+      if(!h.shared) return;
+      let pid=h.partnerId, pname=h.partnerName;
+      if(!pid || !pname){ const t=(s.tasks||[]).find(x=>x.id===h.taskId); if(t){ pid=pid||t.partnerId; pname=pname||t.partnerName; } }
+      if(h.photoUrl && !h.photoId) Cloud.pushSharedCompletion({ ...h, partnerId:pid, partnerName:pname }); // recibida: crea/actualiza la fila
+      else Cloud.updatePartner(h.id, pid, pname);                                                          // propia: solo parchea "con quién"
+    });
   }
 
   /* ---------- LISTA ---------- */
@@ -2585,6 +2602,13 @@ const Cloud = (() => {
       markSynced(entry.id);
     }catch(e){ console.warn("pushSharedCompletion:", e && e.message); }
   }
+  // Parchea solo las columnas "con quién" de una completada ya existente en la
+  // nube (sin tocar la foto). Para rellenar registros antiguos.
+  async function updatePartner(id, partnerId, partnerName){
+    if(!enabled() || !await init() || !client) return;
+    if(!partnerId && !partnerName) return;
+    try{ await client.from('completions').update({ partner_id:partnerId||null, partner_name:partnerName||null }).eq('id', id).eq('user_id', uid); }catch(e){}
+  }
   // sube al servidor las completadas que aún no se han sincronizado (máx 60 recientes)
   async function syncBacklog(){
     if(!enabled() || !await init() || !client) return;
@@ -2729,13 +2753,21 @@ const Cloud = (() => {
       if(!sub) return { ok:false, error:"no estás suscrito (pulsa Activar)" };
       const { data, error } = await client.functions.invoke('send-push',
         { body:{ recipientId:uid, title:"Tareas", body:"Notificación de prueba ✅" } });
-      if(error) return { ok:false, error:(error.message||"la función send-push falló") };
-      return { ok:true, sent:(data&&data.sent)||0 };
+      if(error){
+        // intentar leer el motivo real que devolvió la función (cuerpo JSON)
+        let detail="";
+        try{ if(error.context && error.context.json) { const b=await error.context.json(); detail=(b&&b.error)||""; } }catch(_){}
+        if(!detail){ try{ if(error.context && error.context.text) detail=await error.context.text(); }catch(_){} }
+        return { ok:false, error:(detail||error.message||"la función send-push falló") };
+      }
+      const sent=(data&&data.sent)||0;
+      if(!sent) return { ok:false, error:(data&&data.note)||"se envió a 0 dispositivos (activa el push en este teléfono)" };
+      return { ok:true, sent };
     }catch(e){ return { ok:false, error:(e&&e.message)||"error" }; }
   }
 
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
-    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, ensurePush, testPush };
+    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, ensurePush, testPush, updatePartner };
 })();
 
 /* =====================================================================
