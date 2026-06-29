@@ -3058,19 +3058,21 @@ const Notifs = (() => {
       <div class="sheet-body"><div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.</div>'}</div></div>`);
     $("#ntClose").onclick=Sheets.close;
     const pm=$("#ntPerm");
-    async function runTest(){
+    // Cada pulsación (re)suscribe este teléfono y luego envía una prueba. Así, si
+    // la suscripción se perdió (caducó o el servidor la limpió), se recupera sola.
+    if(pm) pm.onclick=async ()=>{
+      pm.textContent="Activando…";
+      const ok=await Cloud.ensurePush();   // pide permiso si falta y (re)suscribe; idempotente
+      if(!ok){
+        pm.textContent = (Notification.permission==='granted')?"Probar":"Activar";
+        UI.toast(Notification.permission==='denied' ? "Permiso bloqueado: actívalo en Ajustes del iPhone" : "No se pudo activar (abre la app desde el icono de inicio)","bell","var(--red)");
+        return;
+      }
       pm.textContent="Enviando…";
       const r=await Cloud.testPush();
       pm.textContent="Probar";
-      if(r.ok) UI.toast("Prueba enviada: debería llegarte ahora","check","var(--green)");
+      if(r.ok) UI.toast("Activado. Prueba enviada: debería llegarte ahora","check","var(--green)");
       else UI.toast("No llegó: "+(r.error||"revisa la función send-push"),"bell","var(--red)");
-    }
-    if(pm) pm.onclick=async ()=>{
-      if(Notification.permission==='granted'){ runTest(); return; }
-      pm.textContent="Activando…";
-      const ok=await Cloud.ensurePush();
-      if(ok){ UI.toast("Notificaciones activadas","check","var(--green)"); runTest(); }
-      else { pm.textContent="Activar"; UI.toast(Notification.permission==='denied' ? "Permiso bloqueado: actívalo en Ajustes del iPhone" : "No se pudo activar (abre la app desde el icono de inicio)","bell","var(--red)"); }
     };
     $$("#ntList [data-photo]").forEach(c=> c.onclick=()=> Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}) );
     // marcar como leídas
