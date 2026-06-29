@@ -515,6 +515,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .photo-btns{display:flex;gap:10px;margin-bottom:10px;}
 .photo-btns .btn{flex:1;}
 input[type=file]{display:none;}
+input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 
 /* Galería del día */
 .day-gallery{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
@@ -1763,11 +1764,20 @@ const Tasks = (() => {
 
   const RECUR = [
     {k:"once",  l:"Solo hoy"},
+    {k:"date",  l:"Fecha"},
     {k:"daily", l:"Cada día"},
     {k:"weekly",l:"Cada semana"},
     {k:"monthly",l:"Cada mes"},
     {k:"custom",l:"Personalizado"}
   ];
+  const MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  // "2026-08-14" -> "14 de agosto" (o "14 ago 2026" si es otro año)
+  function dateLabel(key){
+    if(!key) return "Fecha";
+    const [y,m,d]=key.split("-").map(Number);
+    const base=`${d} de ${MESES[m-1]}`;
+    return y===new Date().getFullYear() ? base : `${base} ${y}`;
+  }
   const DAYS = ["Lu","Ma","Mi","Ju","Vi","Sá","Do"]; // 0=Lunes (etiquetas del selector)
   const DAYNAMES = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"];
   // Convierte un conjunto de días (0=lunes) en un texto natural
@@ -1790,6 +1800,7 @@ const Tasks = (() => {
   function recurLabel(r){
     if(!r) return "Solo hoy";
     if(r.type==="once") return "Solo hoy";
+    if(r.type==="date") return dateLabel(r.date);
     if(r.type==="daily") return "Cada día";
     if(r.type==="weekly") return "Cada semana";
     if(r.type==="monthly") return "Cada mes";
@@ -1800,15 +1811,19 @@ const Tasks = (() => {
     return "Solo hoy";
   }
   const isDoneToday = (t)=>{
-    if (t.recurrence && t.recurrence.type!=="once") return t.lastDone===dateKey();
-    return !!t.done;
+    const ty = t.recurrence && t.recurrence.type;
+    if (ty && ty!=="once" && ty!=="date") return t.lastDone===dateKey(); // recurrentes: por día
+    return !!t.done; // "solo hoy" y "fecha" son de una vez
   };
-  // ¿la tarea está programada para hoy? Solo limita si "Mostrar solo esos días" está activo
+  // ¿la tarea está programada para hoy? Solo limita si "Mostrar solo ese día/días" está activo
   const scheduledToday = (t)=>{
     const r=t.recurrence;
     if(t.onlyOnDays && r && r.type==="custom" && r.days && r.days.length){
       const todayIdx=(new Date().getDay()+6)%7; // 0=lunes
       return r.days.includes(todayIdx);
+    }
+    if(t.onlyOnDays && r && r.type==="date" && r.date){
+      return r.date===dateKey(); // solo aparece el día de su fecha
     }
     return true;
   };
@@ -1827,6 +1842,9 @@ const Tasks = (() => {
     const created = dateKey(new Date(t.createdAt||Date.now()));
     if(!r || r.type==="once"){
       return !t.done && created < today;            // solo hoy sin completar y ya pasó el día
+    }
+    if(r.type==="date"){
+      return !t.done && r.date && r.date < today;   // su fecha ya pasó sin completar
     }
     if(r.type==="custom" && r.days && r.days.length){
       const todayIdx=(new Date().getDay()+6)%7;
@@ -1979,6 +1997,7 @@ const Tasks = (() => {
     let recur = editing && existing.recurrence ? existing.recurrence.type : "once";
     let days  = editing && existing.recurrence && existing.recurrence.days ? existing.recurrence.days.slice() : [];
     let onlyDays = editing ? !!existing.onlyOnDays : false;
+    let taskDate = editing && existing.recurrence && existing.recurrence.date ? existing.recurrence.date : "";
     if(!CATEGORIES.some(c=>c.name===cat)) cat = CATEGORIES[0].name;
 
     const body = `
@@ -2004,6 +2023,14 @@ const Tasks = (() => {
         </div>
         <div class="hint">Si está activado, la tarea solo aparecerá en tu lista los días seleccionados.</div>
       </div>
+      <div id="ctDateWrap" style="display:${recur==="date"?"block":"none"};">
+        <div class="lbl-sm">Fecha</div>
+        <div class="field-block" style="border:0.5px solid var(--hairline);border-radius:14px;"><input type="date" class="field" id="ctDate" value="${esc(taskDate)}" min="${dateKey()}"/></div>
+        <div class="form-group" style="margin-top:14px;">
+          <div class="row"><span class="lbl">Mostrar solo ese día</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyDate"><div class="knob"></div></div></div>
+        </div>
+        <div class="hint">Si está activado, la tarea solo aparecerá en tu lista el día de su fecha. Si pasa sin completarla, se elimina sola.</div>
+      </div>
       <button class="btn" id="ctSave" style="margin-top:24px;">${editing?"Guardar cambios":"Guardar tarea"}</button>
       ${editing?`<button class="btn danger ghost" id="ctDelete" style="margin-top:12px;">${trashSvg()} Eliminar tarea</button>`:""}
     `;
@@ -2023,7 +2050,8 @@ const Tasks = (() => {
       DURATIONS.forEach(m=>{ const seg=el("div","seg"+(m===dur?" sel":""),durShort(m)); seg.onclick=()=>{dur=m;haptic();renderDur();}; w.appendChild(seg); }); };
     const renderRecur = ()=>{ const w=$("#ctRecur",sheet); w.innerHTML="";
       RECUR.forEach(r=>{ const seg=el("div","seg"+(r.k===recur?" sel":""),r.l); seg.onclick=()=>{recur=r.k;haptic();renderRecur();
-        $("#ctDaysWrap",sheet).style.display = recur==="custom"?"block":"none"; validate(); }; w.appendChild(seg); }); };
+        $("#ctDaysWrap",sheet).style.display = recur==="custom"?"block":"none";
+        $("#ctDateWrap",sheet).style.display = recur==="date"?"block":"none"; validate(); }; w.appendChild(seg); }); };
     const renderDays = ()=>{ const w=$("#ctDays",sheet); w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
         cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
@@ -2034,11 +2062,15 @@ const Tasks = (() => {
     sw.onclick = ()=>{ urgent=!urgent; sw.classList.toggle("on",urgent); haptic(); };
     const swOnly = $("#ctOnlyDays",sheet);
     if(swOnly) swOnly.onclick = ()=>{ onlyDays=!onlyDays; swOnly.classList.toggle("on",onlyDays); haptic(); };
+    const swOnlyDate = $("#ctOnlyDate",sheet);
+    if(swOnlyDate) swOnlyDate.onclick = ()=>{ onlyDays=!onlyDays; swOnlyDate.classList.toggle("on",onlyDays); haptic(); };
+    const dateInput = $("#ctDate",sheet);
+    if(dateInput) dateInput.onchange = ()=>{ taskDate=dateInput.value; validate(); };
 
     const titleInput = $("#ctTitle",sheet);
     const saveBtn = $("#ctSave",sheet);
-    // En "Personalizado" hay que elegir al menos un día; si no, no se puede guardar
-    function validate(){ saveBtn.disabled = !titleInput.value.trim() || (recur==="custom" && days.length===0); }
+    // "Personalizado" exige ≥1 día; "Fecha" exige una fecha
+    function validate(){ saveBtn.disabled = !titleInput.value.trim() || (recur==="custom" && days.length===0) || (recur==="date" && !taskDate); }
     titleInput.addEventListener("input", validate);
     validate();
 
@@ -2048,6 +2080,7 @@ const Tasks = (() => {
       if(!title) return;
       const desc = $("#ctDesc",sheet).value.trim();
       const rec = {type:recur, days:days.slice()};
+      if(recur==="date") rec.date = taskDate; // fecha concreta (YYYY-MM-DD)
       Store.update(s=>{
         if(editing){
           const t = s.tasks.find(x=>x.id===existing.id);
