@@ -72,8 +72,59 @@ create policy "photos_update" on storage.objects for update to authenticated
 create policy "photos_delete" on storage.objects for delete to authenticated
   using (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- 4) TAREAS COMPARTIDAS ------------------------------------------------
+create table if not exists public.shared_tasks (
+  id           text primary key,
+  owner_id     uuid, owner_name text,
+  partner_id   uuid, partner_name text,
+  title        text, descr text, category text, minutes int, people int, urgent bool,
+  recurrence   jsonb, only_on_days bool,
+  status       text default 'pending',   -- pending | done
+  completed_by uuid, photo_url text, points int, done_date date, done_time text,
+  created_at   timestamptz default now()
+);
+alter table public.shared_tasks enable row level security;
+drop policy if exists "shared_read"   on public.shared_tasks;
+drop policy if exists "shared_insert" on public.shared_tasks;
+drop policy if exists "shared_update" on public.shared_tasks;
+drop policy if exists "shared_delete" on public.shared_tasks;
+-- Los dos implicados (dueño y compañero) pueden ver/editar/borrar.
+create policy "shared_read"   on public.shared_tasks for select to authenticated using (auth.uid() = owner_id or auth.uid() = partner_id);
+create policy "shared_insert" on public.shared_tasks for insert to authenticated with check (auth.uid() = owner_id);
+create policy "shared_update" on public.shared_tasks for update to authenticated using (auth.uid() = owner_id or auth.uid() = partner_id);
+create policy "shared_delete" on public.shared_tasks for delete to authenticated using (auth.uid() = owner_id or auth.uid() = partner_id);
+
+-- 5) NOTIFICACIONES ---------------------------------------------------
+create table if not exists public.notifications (
+  id          uuid default gen_random_uuid() primary key,
+  recipient_id uuid, actor_id uuid, actor_name text,
+  type        text,                      -- 'shared_added' | 'shared_done'
+  task_title  text, photo_url text,
+  created_at  timestamptz default now(), read boolean default false
+);
+alter table public.notifications enable row level security;
+drop policy if exists "notif_read"   on public.notifications;
+drop policy if exists "notif_insert" on public.notifications;
+drop policy if exists "notif_update" on public.notifications;
+drop policy if exists "notif_delete" on public.notifications;
+create policy "notif_read"   on public.notifications for select to authenticated using (auth.uid() = recipient_id);
+create policy "notif_insert" on public.notifications for insert to authenticated with check (auth.uid() = actor_id);   -- el actor crea la del destinatario
+create policy "notif_update" on public.notifications for update to authenticated using (auth.uid() = recipient_id);   -- marcar como leída
+create policy "notif_delete" on public.notifications for delete to authenticated using (auth.uid() = recipient_id);
+
+-- 6) SUSCRIPCIONES DE PUSH (para notificaciones en segundo plano) ------
+create table if not exists public.push_subscriptions (
+  user_id    uuid, endpoint text primary key, subscription jsonb,
+  updated_at timestamptz default now()
+);
+alter table public.push_subscriptions enable row level security;
+drop policy if exists "push_all" on public.push_subscriptions;
+-- Solo gestionas tus propias suscripciones (la Edge Function usa la service key).
+create policy "push_all" on public.push_subscriptions for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- =====================================================================
--- 4) ÚLTIMO PASO (en el panel, no en SQL):
+-- 7) ÚLTIMO PASO (en el panel, no en SQL):
 --    Authentication → Sign In / Providers → activa "Anonymous sign-ins".
 --    Sin esto, la app no podrá iniciar sesión anónima y la nube no funcionará.
 -- =====================================================================
