@@ -2652,7 +2652,7 @@ const Cloud = (() => {
       if(e1) throw e1;
       if(!prof) return null;
       const { data:comps } = await client.from('completions').select('*').eq('user_id',id).order('date',{ascending:false}).limit(500);
-      const history=(comps||[]).map(c=>({ date:c.date, title:c.title||"", category:c.category||"", points:c.points||0, time:c.time||"", photoUrl:c.photo_url||null, partnerId:c.partner_id||null, partnerName:c.partner_name||"" }));
+      const history=(comps||[]).map(c=>({ id:c.id, date:c.date, title:c.title||"", category:c.category||"", points:c.points||0, time:c.time||"", photoUrl:c.photo_url||null, partnerId:c.partner_id||null, partnerName:c.partner_name||"" }));
       const dates=[...new Set(history.map(h=>h.date).filter(Boolean))];
       return { cloudId:id, name:prof.name||"Amigo", avatar:prof.avatar_url||null,
         points:prof.points||0, streak:{current:prof.streak_current||0, best:prof.streak_best||0, lastDate:null}, dates, history };
@@ -2729,8 +2729,22 @@ const Cloud = (() => {
       if(Notification.permission==="denied") return false;
       if(Notification.permission!=="granted"){ const p=await Notification.requestPermission(); if(p!=="granted") return false; }
       const reg=await navigator.serviceWorker.ready;
+      const wantKey=urlB64ToUint8(VAPID_PUBLIC);
       let sub=await reg.pushManager.getSubscription();
-      if(!sub){ sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToUint8(VAPID_PUBLIC) }); }
+      // Si la suscripción existente se creó con OTRA clave pública (p. ej. la de
+      // ejemplo inicial), el envío fallará por desajuste VAPID. La rehacemos.
+      if(sub && sub.options && sub.options.applicationServerKey){
+        const cur=new Uint8Array(sub.options.applicationServerKey);
+        let same=cur.length===wantKey.length;
+        if(same){ for(let i=0;i<cur.length;i++){ if(cur[i]!==wantKey[i]){ same=false; break; } } }
+        if(!same){
+          const oldEp=sub.endpoint;
+          try{ await sub.unsubscribe(); }catch(_){}
+          try{ await client.from('push_subscriptions').delete().eq('endpoint', oldEp); }catch(_){}
+          sub=null;
+        }
+      }
+      if(!sub){ sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:wantKey }); }
       const json=sub.toJSON();
       await client.from('push_subscriptions').upsert({ user_id:uid, endpoint:sub.endpoint, subscription:json, updated_at:new Date().toISOString() });
       return true;
@@ -2761,7 +2775,11 @@ const Cloud = (() => {
         return { ok:false, error:(detail||error.message||"la función send-push falló") };
       }
       const sent=(data&&data.sent)||0;
-      if(!sent) return { ok:false, error:(data&&data.note)||"se envió a 0 dispositivos (activa el push en este teléfono)" };
+      if(!sent){
+        let why=(data&&data.note)||"";
+        if(!why && data && data.errors && data.errors.length) why="el servicio de push rechazó el envío ("+String(data.errors[0]).slice(0,80)+")";
+        return { ok:false, error:why||"se envió a 0 dispositivos (activa el push en este teléfono)" };
+      }
       return { ok:true, sent };
     }catch(e){ return { ok:false, error:(e&&e.message)||"error" }; }
   }
@@ -2784,8 +2802,21 @@ const Friends = (() => {
   const initial = (n)=> esc((n||"A").trim().charAt(0).toUpperCase()||"A");
   const avHtml = (f, cls)=> f.avatar ? `<div class="${cls}"><img src="${esc(f.avatar)}" alt=""></div>` : `<div class="${cls}">${initial(f.name)}</div>`;
   // ¿cambió algo relevante del amigo? (para no re-renderizar sin necesidad).
-  // Incluye las fotos del historial: si aparece/cambia una foto, se re-pinta.
-  const fsig = (f)=> JSON.stringify([f.name,f.avatar,f.points,f.streak&&f.streak.current,f.streak&&f.streak.best,(f.history||[]).map(h=>[h.date,h.title,h.photoUrl||""])]);
+  // Incluye las fotos del historial y el "con quién": si cambia, se re-pinta.
+  const fsig = (f)=> JSON.stringify([f.name,f.avatar,f.points,f.streak&&f.streak.current,f.streak&&f.streak.best,(f.history||[]).map(h=>[h.date,h.title,h.photoUrl||"",h.partnerName||"",h.partnerId||""])]);
+
+  // Cache de MIS tareas compartidas, para anotar "Contigo" en el calendario de
+  // un amigo SIN depender de que él haya sincronizado (se calcula desde aquí).
+  let myShared = [];
+  async function loadMyShared(){ if(!Cloud.enabled()) return; try{ myShared = await Cloud.fetchShared() || []; }catch(e){ } }
+  // Conjuntos para reconocer rápido las tareas que comparto con ESTE amigo.
+  function sharedWith(friendCloudId){
+    const my = Cloud.myId && Cloud.myId();
+    const rows=(myShared||[]).filter(r=> (r.owner_id===my&&r.partner_id===friendCloudId) || (r.partner_id===my&&r.owner_id===friendCloudId));
+    const ids=new Set(rows.map(r=>'sh_'+r.id));                                  // si el amigo la recibió de mí (id sh_)
+    const dt =new Set(rows.map(r=>(r.done_date||'')+'|'+shortTitle(r.title||''))); // si el amigo fue quien la completó
+    return { ids, dt };
+  }
 
   function copyToClip(text, box){
     try{ navigator.clipboard && navigator.clipboard.writeText(text); }catch(e){}
@@ -2796,6 +2827,7 @@ const Friends = (() => {
   /* ---------- Sheet principal (lista de amigos) ---------- */
   function openSheet(){
     stopPoll();
+    loadMyShared(); // precarga mis tareas compartidas (para anotar "Contigo")
     const myGen=++gen;
     const avail = Cloud.configured();
     Sheets.open(`
@@ -2892,6 +2924,7 @@ const Friends = (() => {
 
   function openProfile(f, fetched){
     const myGen = fetched ? gen : ++gen; // vista nueva salvo que sea el re-pintado tras refrescar
+    loadMyShared(); // refresca mis tareas compartidas para anotar "Contigo"
     let cal=new Date();
     const dateSet=new Set(f.dates||[]);
     Sheets.open(`
@@ -2986,7 +3019,15 @@ const Friends = (() => {
     $("#fdClose").onclick=Sheets.close;
     const listEl=$("#fdList");
     const myCloudId=Cloud.myId&&Cloud.myId();
-    const withWhom=(h)=>{ if(!h.partnerId&&!h.partnerName) return ""; const txt=(myCloudId&&h.partnerId===myCloudId)?"contigo":("con "+esc(h.partnerName||"un amigo")); return ` · <span class="pts" style="color:var(--indigo)">${txt}</span>`; };
+    const sw=sharedWith(f.cloudId); // tareas que comparto con este amigo (para "Contigo")
+    const withWhom=(h)=>{
+      const withMe = (myCloudId && h.partnerId===myCloudId) || (h.id && sw.ids.has(h.id)) || sw.dt.has((h.date||'')+'|'+shortTitle(h.title||''));
+      let txt="";
+      if(withMe) txt="Contigo";
+      else if(h.partnerName) txt="con "+esc(h.partnerName);
+      if(!txt) return "";
+      return ` · <span class="pts" style="color:var(--indigo)">${txt}</span>`;
+    };
     listEl.innerHTML = items.length ? items.map(h=>`
       <div class="card gal-item">
         <div class="gal-thumb"></div>
