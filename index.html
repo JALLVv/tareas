@@ -17,9 +17,9 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 
-<!-- Supabase (opcional): sincronización en la nube para amigos en vivo.
-     Si falla la carga, la app sigue funcionando 100% offline. -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="window.__noSupabase=true"></script>
+<!-- Supabase: cliente alojado localmente (sin depender de un CDN, que puede
+     fallar de forma intermitente). Si no carga, la app funciona offline. -->
+<script src="supabase.js" onerror="window.__noSupabase=true"></script>
 
 <style>
 /* =========================================================================
@@ -2382,12 +2382,18 @@ const Cloud = (() => {
   function markSynced(id){ Store.update(s=>{ s.cloud=s.cloud||{}; s.cloud.syncedCompletions=s.cloud.syncedCompletions||[]; if(!s.cloud.syncedCompletions.includes(id)) s.cloud.syncedCompletions.push(id); }); }
   async function pushCompletion(entry, photoDataUrl){
     if(!enabled() || !await init() || !client) return;
-    let photo_url=null;
-    if(photoDataUrl){ photo_url=await uploadDataUrl(`${uid}/${entry.id}.jpg`, photoDataUrl); } // foto original (máxima calidad)
+    let photo_url=null, photoOk=!photoDataUrl; // si no hay foto, no hay nada que subir
+    if(photoDataUrl){
+      photo_url=await uploadDataUrl(`${uid}/${entry.id}.jpg`, photoDataUrl); // foto original (máxima calidad)
+      if(!photo_url){ photo_url=await uploadDataUrl(`${uid}/${entry.id}.jpg`, photoDataUrl); } // un reintento
+      photoOk=!!photo_url;
+    }
     try{
       await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
         category:entry.category, points:entry.points, time:entry.time, photo_url });
-      markSynced(entry.id);
+      // solo se marca como sincronizada si la foto subió (o no había). Si la foto
+      // falló, se reintenta en el próximo arranque (syncBacklog).
+      if(photoOk) markSynced(entry.id);
     }catch(e){ console.warn("pushCompletion:", e && e.message); }
   }
   // sube al servidor las completadas que aún no se han sincronizado (máx 60 recientes)
@@ -2433,7 +2439,16 @@ const Cloud = (() => {
     }catch(e){ console.warn("pullFriend:", e && e.message); return null; }
   }
 
-  return { configured, enabled, init, myId, pushProfile, pushCompletion, syncBacklog, reconcile, pullFriend };
+  // Fuerza re-subir TODO (perfil + avatar + todas las completadas con foto) y
+  // limpia lo eliminado. Recupera fotos que no llegaron a subirse en el pasado.
+  async function forceResync(){
+    if(!enabled() || !await init() || !client) return false;
+    Store.update(s=>{ if(s.cloud){ s.cloud.syncedCompletions=[]; s.cloud.avatarSrc=null; } });
+    await pushProfile(); await syncBacklog(); await reconcile();
+    return true;
+  }
+
+  return { configured, enabled, init, myId, pushProfile, pushCompletion, syncBacklog, reconcile, forceResync, pullFriend };
 })();
 
 /* =====================================================================
@@ -2443,7 +2458,9 @@ const Cloud = (() => {
    ===================================================================== */
 const Friends = (() => {
   const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-  let gen=0; // token: invalida refrescos en segundo plano si el usuario navega
+  let gen=0;          // token: invalida refrescos en segundo plano si el usuario navega
+  let pollTimer=null; // sondeo en vivo del perfil de un amigo abierto
+  function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
 
   const initial = (n)=> esc((n||"A").trim().charAt(0).toUpperCase()||"A");
   const avHtml = (f, cls)=> f.avatar ? `<div class="${cls}"><img src="${esc(f.avatar)}" alt=""></div>` : `<div class="${cls}">${initial(f.name)}</div>`;
@@ -2459,6 +2476,7 @@ const Friends = (() => {
 
   /* ---------- Sheet principal (lista de amigos) ---------- */
   function openSheet(){
+    stopPoll();
     const myGen=++gen;
     const avail = Cloud.configured();
     Sheets.open(`
@@ -2471,10 +2489,12 @@ const Friends = (() => {
           <button class="mini-btn accent" id="friendAdd">Añadir amigo</button>
         </div>
         <div id="friendsList"></div>
+        ${avail?'<div class="hint" style="text-align:center;margin-top:18px;"><span id="frResync" style="color:var(--blue);cursor:pointer">Re-sincronizar mis datos</span></div>':''}
       </div>`);
     $("#frClose").onclick=Sheets.close;
     $("#friendShare").onclick=()=>{ haptic(); shareSheet(); };
     $("#friendAdd").onclick=()=>{ haptic(); addSheet(); };
+    const rs=$("#frResync"); if(rs) rs.onclick=async ()=>{ haptic(); UI.toast("Re-sincronizando…","check","var(--blue)"); const ok=await Cloud.forceResync(); UI.toast(ok?"Datos re-sincronizados":"No se pudo","check",ok?"var(--green)":"var(--red)"); };
     renderList();
     refreshAll(myGen); // actualiza la lista en segundo plano
   }
@@ -2589,8 +2609,8 @@ const Friends = (() => {
         </div>
       </div>`);
     $("#fpBack").onclick=openSheet;
-    $("#fpClose").onclick=Sheets.close;
-    $("#fpDel").onclick=()=>{ haptic(20); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); };
+    $("#fpClose").onclick=()=>{ stopPoll(); Sheets.close(); };
+    $("#fpDel").onclick=()=>{ haptic(20); stopPoll(); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); };
     function draw(){
       const y=cal.getFullYear(), m=cal.getMonth();
       $("#fpMonth").textContent = MONTHS[m].charAt(0).toUpperCase()+MONTHS[m].slice(1)+" "+y;
@@ -2610,23 +2630,31 @@ const Friends = (() => {
     $("#fpPrev").onclick=()=>{ cal.setMonth(cal.getMonth()-1); haptic(); draw(); };
     $("#fpNext").onclick=()=>{ cal.setMonth(cal.getMonth()+1); haptic(); draw(); };
     draw();
-    // Auto-actualización: al abrir, trae datos frescos. SIEMPRE guarda en el
-    // store (aunque navegues a otra vista), y re-pinta solo si sigues aquí.
-    if(!fetched && f.cloudId){
-      Cloud.pullFriend(f.cloudId).then(fr=>{
-        const sync=$("#fpSync"); if(sync) sync.remove();
-        if(!fr) return;
-        const updated={ ...f, ...fr };
-        Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
-        if(gen!==myGen || fsig(updated)===fsig(f)) return; // navegó o nada cambió
-        openProfile(updated, true);
-      });
+    // aplica datos frescos: guarda en el store y re-pinta si sigues en esta vista
+    const applyFresh = (fr, hideSync)=>{
+      if(hideSync){ const sync=$("#fpSync"); if(sync) sync.remove(); }
+      if(!fr) return;
+      const updated={ ...f, ...fr };
+      Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
+      const open = $("#scrim").classList.contains("show") && $("#fpDel"); // sheet aún abierto en este perfil
+      if(gen!==myGen || !open || fsig(updated)===fsig(f)) return; // navegó/cerró o nada cambió
+      stopPoll(); openProfile(updated, true);
+    };
+    // Auto-actualización inmediata al abrir
+    if(!fetched && f.cloudId){ Cloud.pullFriend(f.cloudId).then(fr=>applyFresh(fr, true)); }
+    // Sondeo EN VIVO mientras el perfil está abierto (sin reabrir)
+    stopPoll();
+    if(f.cloudId){
+      pollTimer=setInterval(()=>{
+        if(gen!==myGen || !$("#scrim").classList.contains("show") || !$("#fpDel")){ stopPoll(); return; }
+        Cloud.pullFriend(f.cloudId).then(fr=>{ if(gen===myGen) applyFresh(fr, false); });
+      }, 5000);
     }
   }
 
   // Galería del día de un amigo: fotos (URL) + títulos
   function openFriendDay(f, key){
-    gen++; haptic();
+    stopPoll(); gen++; haptic();
     f = Store.get().friends.find(x=>x.id===f.id) || f; // usar los datos más frescos del store
     const items=(f.history||[]).filter(h=>h.date===key).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
     const [y,mo,d]=key.split("-");
