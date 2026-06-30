@@ -265,6 +265,8 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
   background:var(--fill-2);color:var(--label-2);transition:transform .12s var(--ease-out), background .2s;}
 .day.sel{background:var(--blue);color:#fff;}
 .day:active{transform:scale(0.9);}
+.monthpicker{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding:6px 0 2px;}
+.monthpicker .day{flex:none;padding:9px 0;font-size:13px;}
 
 /* =========================================================================
    GENERADOR
@@ -303,6 +305,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .tag.dot::before{content:"·";margin-right:6px;color:var(--label-3);}
 .tag.rnd{color:var(--purple);}
 .tag.shared{color:var(--indigo);font-weight:700;}
+.tag.today{color:var(--blue);font-weight:800;}
 /* Tarea urgente: burbuja roja, bien marcada */
 .task-card.urgent{background:rgba(255,69,58,0.32);box-shadow:inset 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,69,58,0.30);}
 .task-card.urgent.done{background:rgba(255,69,58,0.14);box-shadow:inset 0 0 0 1px rgba(255,69,58,0.45);}
@@ -1594,6 +1597,10 @@ const Store = (() => {
     if(!Array.isArray(state.notifSeen)) state.notifSeen=[];
     if(!Array.isArray(state.deletedShared)) state.deletedShared=[];
     if(typeof state.penalties!=='number') state.penalties=0;
+    // Las recurrentes antiguas arrancan su contador de penalización desde ayer,
+    // para no descontar retroactivamente días pasados antes de esta función.
+    (state.tasks||[]).forEach(t=>{ const ty=t.recurrence&&t.recurrence.type;
+      if(ty && ty!=='once' && ty!=='date' && !t.penalizedUpTo) t.penalizedUpTo=yesterdayKey(); });
     // Auto-corrección: los puntos y la racha se derivan del historial menos las
     // penalizaciones. Repara cualquier desajuste (p. ej. puntos fantasma).
     const ptsSum=Math.max(0, (state.history||[]).reduce((a,h)=>a+(h.points||0),0) - (state.penalties||0));
@@ -1840,8 +1847,7 @@ const Tasks = (() => {
     {k:"date",  l:"Fecha"},
     {k:"daily", l:"Cada día"},
     {k:"weekly",l:"Cada semana"},
-    {k:"monthly",l:"Cada mes"},
-    {k:"custom",l:"Personalizado"}
+    {k:"monthly",l:"Cada mes"}
   ];
   const MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   // "2026-08-14" -> "14 de agosto" (o "14 ago 2026" si es otro año)
@@ -1870,16 +1876,49 @@ const Tasks = (() => {
     }
     return txt.charAt(0).toUpperCase()+txt.slice(1);
   }
-  function recurLabel(r){
-    if(!r) return "Solo hoy";
+  // "Día 14 de cada mes" / "Días 1, 14, 28"
+  function datesLabel(dates){
+    const ds=[...new Set(dates)].sort((a,b)=>a-b);
+    if(!ds.length) return "Cada mes";
+    if(ds.length===1) return `Día ${ds[0]} de cada mes`;
+    return `Días ${ds.join(", ")}`;
+  }
+  // utilidades de fecha (clave "YYYY-MM-DD")
+  const weekdayOf = (key)=>{ const [y,m,d]=key.split("-").map(Number); return (new Date(y,m-1,d).getDay()+6)%7; }; // 0=Lunes
+  const domOf = (key)=> parseInt(key.split("-")[2],10); // día del mes
+  function addDays(key,n){ const [y,m,d]=key.split("-").map(Number); const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()+n); return dateKey(dt); }
+  // ¿la tarea está PROGRAMADA (vence) en la fecha 'key'?
+  function dueOn(t, key){
+    const r=t.recurrence||{type:"once"};
+    const created=dateKey(new Date(t.createdAt||Date.now()));
+    if(key<created) return false;
+    switch(r.type){
+      case "once":  return key===created;
+      case "date":  return r.date===key;
+      case "daily": return true;
+      case "weekly": case "custom": return (r.days&&r.days.length) ? r.days.includes(weekdayOf(key)) : true;
+      case "monthly": return (r.dates&&r.dates.length) ? r.dates.includes(domOf(key)) : (domOf(key)===domOf(created));
+      default: return false;
+    }
+  }
+  const isScheduledToday = (t)=> dueOn(t, dateKey());
+  const completedOn = (t,key)=> Store.get().history.some(h=> h.taskId===t.id && h.date===key);
+
+  function recurLabel(t){
+    const r=(t&&t.recurrence)||t||{type:"once"};
+    const today=dateKey();
     if(r.type==="once") return "Solo hoy";
-    if(r.type==="date") return dateLabel(r.date);
+    if(r.type==="date") return r.date===today ? "Hoy" : dateLabel(r.date);
     if(r.type==="daily") return "Cada día";
-    if(r.type==="weekly") return "Cada semana";
-    if(r.type==="monthly") return "Cada mes";
-    if(r.type==="custom"){
-      if(!r.days||!r.days.length) return "Personalizado";
+    if(r.type==="weekly"||r.type==="custom"){
+      if(!r.days||!r.days.length) return "Cada semana";
+      if(r.days.includes(weekdayOf(today))) return "Hoy"; // hoy es uno de sus días
       return daysLabel(r.days);
+    }
+    if(r.type==="monthly"){
+      if(!r.dates||!r.dates.length) return "Cada mes";
+      if(r.dates.includes(domOf(today))) return "Hoy";
+      return datesLabel(r.dates);
     }
     return "Solo hoy";
   }
@@ -1888,61 +1927,57 @@ const Tasks = (() => {
     if (ty && ty!=="once" && ty!=="date") return t.lastDone===dateKey(); // recurrentes: por día
     return !!t.done; // "solo hoy" y "fecha" son de una vez
   };
-  // ¿la tarea está programada para hoy? Solo limita si "Mostrar solo ese día/días" está activo
+  // ¿la tarea aparece hoy en tu lista? Solo limita si "Mostrar solo esos días" está activo.
   const scheduledToday = (t)=>{
-    const r=t.recurrence;
-    if(t.onlyOnDays && r && r.type==="custom" && r.days && r.days.length){
-      const todayIdx=(new Date().getDay()+6)%7; // 0=lunes
-      return r.days.includes(todayIdx);
-    }
-    if(t.onlyOnDays && r && r.type==="date" && r.date){
-      return r.date===dateKey(); // solo aparece el día de su fecha
-    }
+    if(!t.onlyOnDays) return true;
+    const r=t.recurrence; if(!r) return true;
+    if(r.type==="date") return r.date===dateKey();
+    if(r.type==="weekly"||r.type==="custom") return (r.days&&r.days.length) ? r.days.includes(weekdayOf(dateKey())) : true;
+    if(r.type==="monthly") return (r.dates&&r.dates.length) ? r.dates.includes(domOf(dateKey())) : true;
     return true;
   };
 
-  /* ---------- AUTO-ELIMINACIÓN de tareas vencidas ----------
-     - "Solo hoy": si no se completó, se borra al día siguiente.
-     - "Personalizado": si pasa un día programado sin completarla, se borra. */
-  function mostRecentDueBefore(todayKey, days){
-    const [y,m,d]=todayKey.split("-").map(Number); const base=new Date(y,m-1,d);
-    for(let i=1;i<=7;i++){ const dd=new Date(base); dd.setDate(dd.getDate()-i);
-      if(days.includes((dd.getDay()+6)%7)) return dateKey(dd); }
-    return null;
-  }
+  /* ---------- AUTO-ELIMINACIÓN (solo de una vez) ----------
+     "Solo hoy" y "Fecha" se borran al pasar su día sin completar. Las
+     recurrentes NO se borran: solo penalizan los días programados sin hacer. */
   function isExpired(t, today){
     const r=t.recurrence;
     const created = dateKey(new Date(t.createdAt||Date.now()));
-    if(!r || r.type==="once"){
-      return !t.done && created < today;            // solo hoy sin completar y ya pasó el día
-    }
-    if(r.type==="date"){
-      return !t.done && r.date && r.date < today;   // su fecha ya pasó sin completar
-    }
-    if(r.type==="custom" && r.days && r.days.length){
-      const todayIdx=(new Date().getDay()+6)%7;
-      if(r.days.includes(todayIdx)) return false;     // hoy es día programado: dale la oportunidad
-      const due = mostRecentDueBefore(today, r.days);
-      if(!due || created > due) return false;         // aún no existía ese día programado
-      return t.lastDone !== due;                       // pasó un día programado sin completarla
-    }
-    return false; // daily / weekly / monthly no caducan
+    if(!r || r.type==="once") return !t.done && created < today;
+    if(r.type==="date")        return !t.done && r.date && r.date < today;
+    return false; // daily / weekly / monthly / custom no caducan
   }
+  /* ---------- PENALIZACIÓN por tareas no completadas ----------
+     Cada día/fecha programada que pasa sin completarse resta los MISMOS puntos
+     que habría dado la tarea. Aplica a TODOS los tipos. */
   function cleanupExpired(){
-    const s=Store.get(); const today=dateKey();
-    const expired = s.tasks.filter(t=>isExpired(t,today));
-    if(!expired.length) return;
-    // Penalización: cada tarea no completada en su día/fecha resta los MISMOS
-    // puntos que habría dado al completarse.
-    const penalty = expired.reduce((a,t)=> a + taskPoints(t.minutes, t.random), 0);
+    const s=Store.get(); const today=dateKey(); const yesterday=addDays(today,-1);
+    const expired = s.tasks.filter(t=>isExpired(t,today));            // una-vez vencidas (se borran)
+    let penalty = expired.reduce((a,t)=> a + taskPoints(t.minutes, t.random), 0);
+    const updates=[]; // {id, upTo} para recordar hasta qué día ya penalizamos
+    s.tasks.forEach(t=>{
+      const r=t.recurrence; if(!r || r.type==="once" || r.type==="date") return; // una-vez ya contadas
+      const created=dateKey(new Date(t.createdAt||Date.now()));
+      let start = t.penalizedUpTo ? addDays(t.penalizedUpTo,1) : created;
+      if(start<created) start=created;
+      const cap = addDays(today,-45); if(start<cap) start=cap;          // tope de seguridad
+      let missed=0;
+      for(let d=start; d<=yesterday; d=addDays(d,1)){
+        if(dueOn(t,d) && !completedOn(t,d)) missed++;
+      }
+      if(missed>0) penalty += missed * taskPoints(t.minutes, t.random);
+      if(start<=yesterday) updates.push({ id:t.id, upTo:yesterday });
+    });
+    if(!expired.length && !penalty && !updates.length) return;
     Store.update(st=>{
-      st.tasks = st.tasks.filter(t=>!isExpired(t,today));
+      if(expired.length) st.tasks = st.tasks.filter(t=>!isExpired(t,today));
+      updates.forEach(u=>{ const t=st.tasks.find(x=>x.id===u.id); if(t) t.penalizedUpTo=u.upTo; });
       if(penalty>0){ st.penalties=(st.penalties||0)+penalty; st.points=Math.max(0, st.points-penalty); }
     });
     if(penalty>0){
       if(Cloud.enabled()) Cloud.pushProfile();   // refleja el descuento en la nube (y para amigos)
       if(UI.renderProfile) UI.renderProfile();
-      UI.toast(`Tarea sin completar · −${penalty} pts`, "check", "var(--red)");
+      UI.toast(`Tareas sin completar · −${penalty} pts`, "check", "var(--red)");
     }
   }
 
@@ -2094,7 +2129,7 @@ const Tasks = (() => {
     const pts = taskPoints(t.minutes,t.random);
     const meta = [];
     // solo el día (recurrencia) y los puntos
-    meta.push(`<span class="tag">${esc(recurLabel(t.recurrence))}</span>`);
+    meta.push(`<span class="tag${recurLabel(t)==="Hoy"?" today":""}">${esc(recurLabel(t))}</span>`);
     if(t.shared && t.partnerName) meta.push(`<span class="tag dot shared">con ${esc(t.partnerName)}</span>`);
     meta.push(`<span class="tag dot pts">${pts} pts</span>`);
     return `
@@ -2200,7 +2235,9 @@ const Tasks = (() => {
     let ppl   = editing ? (existing.people||1) : 1;
     let urgent= editing ? !!existing.urgent : false;
     let recur = editing && existing.recurrence ? existing.recurrence.type : "once";
+    if(recur==="custom") recur="weekly"; // "personalizado" antiguo = semanal con días
     let days  = editing && existing.recurrence && existing.recurrence.days ? existing.recurrence.days.slice() : [];
+    let monthDays = editing && existing.recurrence && existing.recurrence.dates ? existing.recurrence.dates.slice() : [];
     let onlyDays = editing ? !!existing.onlyOnDays : false;
     let taskDate = editing && existing.recurrence && existing.recurrence.date ? existing.recurrence.date : "";
     let partner = null; // amigo con quien se comparte (solo al crear)
@@ -2222,12 +2259,19 @@ const Tasks = (() => {
       </div>
       <div class="lbl-sm">Repetición</div>
       <div class="segmented" id="ctRecur"></div>
-      <div id="ctDaysWrap" style="display:${recur==="custom"?"block":"none"};">
-        <div class="lbl-sm">Días</div><div class="daypicker" id="ctDays"></div>
+      <div id="ctDaysWrap" style="display:${recur==="weekly"?"block":"none"};">
+        <div class="lbl-sm">Días de la semana</div><div class="daypicker" id="ctDays"></div>
         <div class="form-group" style="margin-top:14px;">
           <div class="row"><span class="lbl">Mostrar solo esos días</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyDays"><div class="knob"></div></div></div>
         </div>
-        <div class="hint">Si está activado, la tarea solo aparecerá en tu lista los días seleccionados.</div>
+        <div class="hint">Se repite cada semana esos días. Si no la completas un día programado, pierdes sus puntos.</div>
+      </div>
+      <div id="ctDatesWrap" style="display:${recur==="monthly"?"block":"none"};">
+        <div class="lbl-sm">Días del mes</div><div class="monthpicker" id="ctMonthDays"></div>
+        <div class="form-group" style="margin-top:14px;">
+          <div class="row"><span class="lbl">Mostrar solo esas fechas</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyMonth"><div class="knob"></div></div></div>
+        </div>
+        <div class="hint">Se repite cada mes esas fechas. Si no la completas una fecha programada, pierdes sus puntos.</div>
       </div>
       <div id="ctDateWrap" style="display:${recur==="date"?"block":"none"};">
         <div class="lbl-sm">Fecha</div>
@@ -2257,12 +2301,17 @@ const Tasks = (() => {
       DURATIONS.forEach(m=>{ const seg=el("div","seg"+(m===dur?" sel":""),durShort(m)); seg.onclick=()=>{dur=m;haptic();renderDur();}; w.appendChild(seg); }); };
     const renderRecur = ()=>{ const w=$("#ctRecur",sheet); w.innerHTML="";
       RECUR.forEach(r=>{ const seg=el("div","seg"+(r.k===recur?" sel":""),r.l); seg.onclick=()=>{recur=r.k;haptic();renderRecur();
-        $("#ctDaysWrap",sheet).style.display = recur==="custom"?"block":"none";
+        $("#ctDaysWrap",sheet).style.display = recur==="weekly"?"block":"none";
+        $("#ctDatesWrap",sheet).style.display = recur==="monthly"?"block":"none";
         $("#ctDateWrap",sheet).style.display = recur==="date"?"block":"none"; validate(); }; w.appendChild(seg); }); };
-    const renderDays = ()=>{ const w=$("#ctDays",sheet); w.innerHTML="";
+    const renderDays = ()=>{ const w=$("#ctDays",sheet); if(!w) return; w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
         cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
         w.appendChild(cell); }); };
+    const renderMonthDays = ()=>{ const w=$("#ctMonthDays",sheet); if(!w) return; w.innerHTML="";
+      for(let i=1;i<=31;i++){ const cell=el("div","day"+(monthDays.includes(i)?" sel":""),String(i));
+        cell.onclick=()=>{ haptic(); if(monthDays.includes(i)) monthDays=monthDays.filter(x=>x!==i); else monthDays.push(i); renderMonthDays(); validate(); };
+        w.appendChild(cell); } };
     const renderShare = ()=>{ const w=$("#ctShare",sheet); if(!w) return; w.innerHTML="";
       const friends=Store.get().friends.filter(f=>f.cloudId);
       if(!friends.length){ w.innerHTML=`<span class="hint" style="margin:0">Añade amigos (Perfil → icono de amigos) para compartir tareas.</span>`; return; }
@@ -2271,21 +2320,24 @@ const Tasks = (() => {
         chip.innerHTML=`<span class="friend-av" style="width:22px;height:22px;font-size:11px">${f.avatar?`<img src="${esc(f.avatar)}">`:esc((f.name||"A").charAt(0).toUpperCase())}</span>${esc(f.name)}`;
         chip.onclick=()=>{ partner = (partner&&partner.cloudId===f.cloudId)?null:{cloudId:f.cloudId,name:f.name}; haptic(); renderShare(); const h=$("#ctShareHint",sheet); if(h) h.style.display=partner?"block":"none"; };
         w.appendChild(chip); }); };
-    renderCats(); renderPeople(); renderDur(); renderRecur(); renderDays(); renderShare();
+    renderCats(); renderPeople(); renderDur(); renderRecur(); renderDays(); renderMonthDays(); renderShare();
 
     const sw = $("#ctUrgent",sheet);
     sw.onclick = ()=>{ urgent=!urgent; sw.classList.toggle("on",urgent); haptic(); };
+    const syncToggles = ()=>{ ["#ctOnlyDays","#ctOnlyMonth","#ctOnlyDate"].forEach(sel=>{ const e=$(sel,sheet); if(e) e.classList.toggle("on",onlyDays); }); };
     const swOnly = $("#ctOnlyDays",sheet);
-    if(swOnly) swOnly.onclick = ()=>{ onlyDays=!onlyDays; swOnly.classList.toggle("on",onlyDays); haptic(); };
+    if(swOnly) swOnly.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
+    const swOnlyMonth = $("#ctOnlyMonth",sheet);
+    if(swOnlyMonth) swOnlyMonth.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
     const swOnlyDate = $("#ctOnlyDate",sheet);
-    if(swOnlyDate) swOnlyDate.onclick = ()=>{ onlyDays=!onlyDays; swOnlyDate.classList.toggle("on",onlyDays); haptic(); };
+    if(swOnlyDate) swOnlyDate.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
     const dateInput = $("#ctDate",sheet);
     if(dateInput) dateInput.onchange = ()=>{ taskDate=dateInput.value; validate(); };
 
     const titleInput = $("#ctTitle",sheet);
     const saveBtn = $("#ctSave",sheet);
-    // "Personalizado" exige ≥1 día; "Fecha" exige una fecha
-    function validate(){ saveBtn.disabled = !titleInput.value.trim() || (recur==="custom" && days.length===0) || (recur==="date" && !taskDate); }
+    // "Cada semana" exige ≥1 día; "Cada mes" exige ≥1 fecha; "Fecha" exige una fecha
+    function validate(){ saveBtn.disabled = !titleInput.value.trim() || (recur==="weekly" && days.length===0) || (recur==="monthly" && monthDays.length===0) || (recur==="date" && !taskDate); }
     titleInput.addEventListener("input", validate);
     validate();
 
@@ -2294,7 +2346,7 @@ const Tasks = (() => {
       const title = titleInput.value.trim();
       if(!title) return;
       const desc = $("#ctDesc",sheet).value.trim();
-      const rec = {type:recur, days:days.slice()};
+      const rec = {type:recur, days:days.slice(), dates:monthDays.slice()};
       if(recur==="date") rec.date = taskDate; // fecha concreta (YYYY-MM-DD)
       const newId = uid();
       Store.update(s=>{
