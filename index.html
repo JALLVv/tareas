@@ -2060,11 +2060,10 @@ const Tasks = (() => {
     // aparezcan en MI calendario (el que ven mis amigos) y se reflejen mis puntos,
     // y crear MI notificación in-app de que un amigo completó la tarea
     if(newHist.length && Cloud.enabled()){
-      newHist.forEach(h=>{
-        Cloud.pushSharedCompletion(h);
-        Cloud.notifySelf(h.partnerName, 'shared_done', h.title, h.photoUrl);
-      });
-      if(Notifs && Notifs.refresh) setTimeout(()=>Notifs.refresh(), 600);
+      newHist.forEach(h=> Cloud.pushSharedCompletion(h));
+      // la notificación in-app la crea el trigger del servidor (fiable). Solo
+      // refrescamos para que aparezca enseguida.
+      if(Notifs && Notifs.refresh) setTimeout(()=>Notifs.refresh(), 800);
     }
     // si quité tareas borradas, refleja en la nube (borra filas/puntos) para que
     // tus amigos dejen de verlas, y quita sus notificaciones (ya no tienen sentido)

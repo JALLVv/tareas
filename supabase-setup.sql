@@ -206,6 +206,16 @@ begin
           time=excluded.time, photo_url=excluded.photo_url, partner_id=excluded.partner_id,
           partner_name=excluded.partner_name, shared_id=excluded.shared_id;
         perform public.recompute_profile(u);
+        -- aviso in-app "tu amigo completó una tarea" (fiable: lo crea el servidor,
+        -- sin depender de que la app del destinatario lo detecte). Evita duplicar.
+        if not exists (
+          select 1 from public.notifications
+          where recipient_id = u and type = 'shared_done' and task_title = new.title
+            and created_at > now() - interval '1 day'
+        ) then
+          insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url)
+          values(u, new.completed_by, cname, 'shared_done', new.title, new.photo_url);
+        end if;
       exception when others then null;  -- nunca bloquear la compleción
       end;
     end loop;
