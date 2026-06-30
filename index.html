@@ -2913,6 +2913,34 @@ const Friends = (() => {
     const dt =new Set(rows.map(r=>(r.done_date||'')+'|'+shortTitle(r.title||''))); // si el amigo fue quien la completó
     return { ids, dt };
   }
+  // Predicado: ¿esta completada del amigo es una compartida CONMIGO que YO ya
+  // borré (su fila ya no existe)? Para ocultarla y ajustar sus stats al instante.
+  function deletedByMe(friend){
+    const myCloudId=Cloud.myId&&Cloud.myId();
+    const sw=sharedWith(friend.cloudId);
+    const del=new Set(Store.get().deletedShared||[]); // ids que borré (instantáneo, local)
+    return (h)=>{
+      if(!myCloudId) return false;
+      // recibida (id "sh_") cuyo sharedId ya borré: oculta al instante, sin red
+      if(typeof h.id==='string' && h.id.slice(0,3)==='sh_' && del.has(h.id.slice(3))) return true;
+      // por el estado actual de mis compartidas (cubre las que completó él)
+      return mySharedLoaded && h.partnerId===myCloudId
+        && !(sw.ids.has(h.id) || sw.dt.has((h.date||'')+'|'+shortTitle(h.title||'')));
+    };
+  }
+  // Devuelve una copia del amigo con MIS borrados ya descontados (puntos, racha,
+  // días, fechas), para que mi vista refleje al instante lo que eliminé.
+  function adjustedFriend(f){
+    const isDel=deletedByMe(f);
+    const hist=f.history||[];
+    const hidden=hist.filter(isDel);
+    if(!hidden.length) return f;
+    const visible=hist.filter(h=>!isDel(h));
+    const lostPts=hidden.reduce((a,h)=>a+(h.points||0),0);
+    const dates=[...new Set(visible.map(h=>h.date).filter(Boolean))];
+    const stk=streakFromHistory(visible);
+    return { ...f, points:Math.max(0,(f.points||0)-lostPts), dates, streak:stk, history:visible };
+  }
 
   function copyToClip(text, box){
     try{ navigator.clipboard && navigator.clipboard.writeText(text); }catch(e){}
@@ -3021,8 +3049,9 @@ const Friends = (() => {
   function openProfile(f, fetched){
     const myGen = fetched ? gen : ++gen; // vista nueva salvo que sea el re-pintado tras refrescar
     loadMyShared(); // refresca mis tareas compartidas para anotar "Contigo"
+    const fv = adjustedFriend(f); // vista con MIS borrados ya descontados (instantáneo)
     let cal=new Date();
-    const dateSet=new Set(f.dates||[]);
+    const dateSet=new Set(fv.dates||[]);
     Sheets.open(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" id="fpBack">‹ Atrás</span><span class="title">Amigo</span><span class="act" id="fpClose">Cerrar</span></div>
@@ -3030,7 +3059,7 @@ const Friends = (() => {
         <div class="friend-profile-head">
           ${avHtml(f,"big-av")}
           <div class="fpn">${esc(f.name)}</div>
-          <div class="rank-badge">${trophySvg()} ${esc(rankFor(f.points).rank.name)}</div>
+          <div class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</div>
           ${(!fetched && f.cloudId)?'<div id="fpSync" class="hint" style="margin-top:6px;">Actualizando…</div>':''}
         </div>
         <div class="friends-actions" style="justify-content:center;margin-top:14px;">
@@ -3038,12 +3067,12 @@ const Friends = (() => {
         </div>
         <div class="card streak-card" style="margin-top:16px;">
           <div class="streak-flame">🔥</div>
-          <div class="streak-info"><div class="big">${f.streak.current}${f.streak.current===1?" día":" días"}</div><div class="small">Racha actual</div></div>
-          <div class="streak-best"><div class="v">${f.streak.best}</div><div class="l">Mejor racha</div></div>
+          <div class="streak-info"><div class="big">${fv.streak.current}${fv.streak.current===1?" día":" días"}</div><div class="small">Racha actual</div></div>
+          <div class="streak-best"><div class="v">${fv.streak.best}</div><div class="l">Mejor racha</div></div>
         </div>
         <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
-          <div class="card stat"><div class="v gold">${f.points}</div><div class="l">Puntos totales</div></div>
-          <div class="card stat"><div class="v">${(f.dates||[]).length}</div><div class="l">Días activos</div></div>
+          <div class="card stat"><div class="v gold">${fv.points}</div><div class="l">Puntos totales</div></div>
+          <div class="card stat"><div class="v">${(fv.dates||[]).length}</div><div class="l">Días activos</div></div>
         </div>
         <div class="card cal-card" style="margin-top:14px;">
           <div class="cal-head"><span class="m" id="fpMonth">—</span>
@@ -3109,8 +3138,7 @@ const Friends = (() => {
     const sw=sharedWith(f.cloudId); // tareas que comparto con este amigo (activas)
     // Ocultar al instante las compartidas conmigo que YO ya borré (su fila ya no
     // existe): no esperar a que el teléfono del amigo limpie su nube.
-    const iDeleted=(h)=> mySharedLoaded && myCloudId && h.partnerId===myCloudId
-      && !(sw.ids.has(h.id) || sw.dt.has((h.date||'')+'|'+shortTitle(h.title||'')));
+    const iDeleted=deletedByMe(f);
     const items=(f.history||[]).filter(h=>h.date===key && !iDeleted(h)).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
     const [y,mo,d]=key.split("-");
     const title=`${parseInt(d)} de ${MONTHS[parseInt(mo)-1]}`;
