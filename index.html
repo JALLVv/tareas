@@ -3196,39 +3196,18 @@ const Notifs = (() => {
   function listNow(){ const cutoff=Date.now()-86400000; return (Store.get().notifs||[]).filter(n=> new Date(n.created_at).getTime()>=cutoff); }
   function openSheet(){
     haptic();
-    const granted=("Notification" in window && Notification.permission==='granted');
+    // El permiso se pide solo al abrir la app; aquí solo avisamos si está bloqueado.
+    const blocked=("Notification" in window && Notification.permission==='denied');
     const list=listNow();
     Sheets.open(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
       <div class="sheet-body">
-        <div class="card notif-activate">
-          <div class="na-ic ${granted?'on':'off'}">${granted?checkSvg():bellSvg()}</div>
-          <div class="na-txt">
-            <div class="t">${granted?"Notificaciones activadas":"Activar notificaciones"}</div>
-            <div class="s">${granted?"Te avisaremos aunque la app esté cerrada.":"Recibe un aviso cuando un amigo te añada o complete una tarea."}</div>
-          </div>
-          <button class="mini-btn ${granted?'':'accent'}" id="ntPerm">${granted?"Activadas ✓":"Activar"}</button>
-        </div>
+        ${blocked?'<div class="card friends-empty" style="margin-bottom:12px">Las notificaciones están bloqueadas. Actívalas en Ajustes del iPhone → esta app → Notificaciones.</div>':''}
         ${list.length?'<button class="notif-clear-all" id="ntClearAll">Borrar todas</button>':''}
         <div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.<br>Las notificaciones se borran solas a las 24 horas.</div>'}</div>
       </div>`);
     $("#ntClose").onclick=Sheets.close;
-    const pm=$("#ntPerm");
-    // Activación permanente: pide permiso y (re)suscribe este teléfono. La app se
-    // re-suscribe sola en cada apertura, así que una vez activada queda para siempre.
-    if(pm) pm.onclick=async ()=>{
-      pm.textContent="Activando…";
-      const ok=await Cloud.ensurePush();   // idempotente: pide permiso si falta y (re)suscribe
-      if(ok){
-        pm.textContent="Activadas ✓"; pm.classList.remove("accent");
-        const ic=$(".na-ic"); if(ic){ ic.classList.remove("off"); ic.classList.add("on"); ic.innerHTML=checkSvg(); }
-        UI.toast("Notificaciones activadas","check","var(--green)");
-      } else {
-        pm.textContent="Activar";
-        UI.toast(Notification.permission==='denied' ? "Permiso bloqueado: actívalo en Ajustes del iPhone" : "No se pudo activar (abre la app desde el icono de inicio)","bell","var(--red)");
-      }
-    };
     // borrar una notificación
     $$("#ntList .notif-del").forEach(b=> b.onclick=(e)=>{ e.stopPropagation(); haptic(); const id=b.getAttribute("data-del");
       Cloud.clearNotif(id); Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==id); }); updateBadge(); openSheet(); });
@@ -3379,6 +3358,24 @@ const UI = (() => {
 /* =====================================================================
    INIT
    ===================================================================== */
+// Activa las notificaciones automáticamente al abrir la app. Si ya hay permiso,
+// solo (re)registra la suscripción. Si aún no se decidió, iOS exige un gesto del
+// usuario para mostrar el aviso, así que se pide en el PRIMER toque (instantáneo
+// al empezar a usar la app). Si está bloqueado, no se insiste.
+function autoEnablePush(){
+  if(!("Notification" in window)) return;
+  if(Notification.permission==="granted"){ Cloud.ensurePush(); return; }
+  if(Notification.permission!=="default") return; // "denied": no molestar
+  const ask=()=>{
+    document.removeEventListener("pointerdown",ask);
+    document.removeEventListener("touchstart",ask);
+    document.removeEventListener("click",ask);
+    Cloud.ensurePush();
+  };
+  document.addEventListener("pointerdown",ask,{once:true,passive:true});
+  document.addEventListener("touchstart",ask,{once:true,passive:true});
+  document.addEventListener("click",ask,{once:true});
+}
 function boot(){
   Store.load();
   Generator.init();
@@ -3399,7 +3396,7 @@ function boot(){
       Friends.syncFriends();
       Tasks.syncShared();   // reconcilia tareas compartidas
       Notifs.refresh();     // trae notificaciones + avisa en primer plano
-      Cloud.ensurePush();   // registra push en segundo plano (si hay permiso)
+      autoEnablePush();     // activa el push automáticamente (pide permiso al abrir)
       // Sondeo periódico: tareas compartidas + notificaciones nuevas; y cada
       // ~minuto, reconcilia la nube (borra del servidor lo que ya eliminaste)
       let tick=0;
