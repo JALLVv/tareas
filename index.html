@@ -1999,9 +1999,14 @@ const Tasks = (() => {
       }
     });
     // subir a la nube las completadas compartidas que acabo de recibir, para que
-    // aparezcan en MI calendario (el que ven mis amigos) y se reflejen mis puntos
+    // aparezcan en MI calendario (el que ven mis amigos) y se reflejen mis puntos,
+    // y crear MI notificación in-app de que un amigo completó la tarea
     if(newHist.length && Cloud.enabled()){
-      newHist.forEach(h=> Cloud.pushSharedCompletion(h));
+      newHist.forEach(h=>{
+        Cloud.pushSharedCompletion(h);
+        Cloud.notifySelf(h.partnerName, 'shared_done', h.title, h.photoUrl);
+      });
+      if(Notifs && Notifs.refresh) setTimeout(()=>Notifs.refresh(), 600);
     }
     // si quité tareas borradas, refleja en la nube (borra filas/puntos) para que
     // tus amigos dejen de verlas, y quita sus notificaciones (ya no tienen sentido)
@@ -2356,9 +2361,10 @@ const Tasks = (() => {
           let url=null;
           try{ url = await uploadSharedPhoto(task.sharedId, photoData); }catch(e){}
           try{ await Cloud.completeShared(task.sharedId, { status:'done', completed_by:Cloud.myId(), photo_url:url, points:pts, done_date:entry.date, done_time:entry.time }); }catch(e){}
-          // avisar al compañero SIEMPRE (aunque falle la subida de la foto)
+          // avisar al compañero SIEMPRE (solo push; la fila in-app la crea su
+          // propio teléfono al detectar la completada, ver syncShared)
           const other = (task.ownerId===Cloud.myId()) ? task.partnerId : task.ownerId;
-          if(other) Cloud.notify(other, 'shared_done', task.title, url);
+          if(other) Cloud.notify(other, 'shared_done', task.title, url, true);
         })();
       }
     };
@@ -2753,14 +2759,25 @@ const Cloud = (() => {
   }
 
   /* ---------- Notificaciones ---------- */
-  async function notify(recipientId, type, taskTitle, photoUrl){
+  async function notify(recipientId, type, taskTitle, photoUrl, pushOnly){
     if(!enabled() || !await init() || !client || recipientId===uid) return;
     const actorName=(Store.get().profile.name||"Atleta");
-    try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null }); }
-    catch(e){ console.warn("notify:", e && e.message); }
+    // pushOnly: solo manda el push (la fila in-app la crea el destinatario al
+    // detectar el cambio, así no depende de la versión del que la completó).
+    if(!pushOnly){
+      try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null }); }
+      catch(e){ console.warn("notify:", e && e.message); }
+    }
     // push en segundo plano (vía Edge Function)
     const body = type==='shared_added' ? `${actorName} te añadió a una tarea` : `${actorName} completó una tarea`;
     sendPush(recipientId, "Tareas", body, photoUrl);
+  }
+  // Crea una notificación PARA MÍ MISMO (cuando detecto que un amigo completó una
+  // tarea compartida). Así el aviso in-app es fiable aunque su app sea vieja.
+  async function notifySelf(actorName, type, taskTitle, photoUrl){
+    if(!enabled() || !await init() || !client) return;
+    try{ await client.from('notifications').insert({ recipient_id:uid, actor_id:uid, actor_name:actorName||"Un amigo", type, task_title:taskTitle||"", photo_url:photoUrl||null }); }
+    catch(e){ console.warn("notifySelf:", e && e.message); }
   }
   async function fetchNotifs(){
     if(!enabled() || !await init() || !client) return [];
@@ -2857,7 +2874,7 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
-    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner };
+    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, notifySelf, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner };
 })();
 
 /* =====================================================================
@@ -3374,10 +3391,12 @@ function boot(){
       Tasks.syncShared();   // reconcilia tareas compartidas
       Notifs.refresh();     // trae notificaciones + avisa en primer plano
       Cloud.ensurePush();   // registra push en segundo plano (si hay permiso)
-      // Sondeo periódico: tareas compartidas + notificaciones nuevas
-      setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); }, 12000);
+      // Sondeo periódico: tareas compartidas + notificaciones nuevas; y cada
+      // ~minuto, reconcilia la nube (borra del servidor lo que ya eliminaste)
+      let tick=0;
+      setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); if((++tick%5)===0) Cloud.reconcile(); }, 12000);
       // Al volver a primer plano, refresca de inmediato
-      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); } });
+      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); Cloud.reconcile(); } });
     });
   }
 
