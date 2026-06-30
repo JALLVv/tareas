@@ -2903,7 +2903,8 @@ const Friends = (() => {
   // Cache de MIS tareas compartidas, para anotar "Contigo" en el calendario de
   // un amigo SIN depender de que él haya sincronizado (se calcula desde aquí).
   let myShared = [];
-  async function loadMyShared(){ if(!Cloud.enabled()) return; try{ myShared = await Cloud.fetchShared() || []; }catch(e){ } }
+  let mySharedLoaded = false; // true solo tras una carga EXITOSA (para ocultar con seguridad)
+  async function loadMyShared(){ if(!Cloud.enabled()) return; const r=await Cloud.fetchShared(); if(r!==null){ myShared=r; mySharedLoaded=true; } }
   // Conjuntos para reconocer rápido las tareas que comparto con ESTE amigo.
   function sharedWith(friendCloudId){
     const my = Cloud.myId && Cloud.myId();
@@ -3104,7 +3105,13 @@ const Friends = (() => {
     stopPoll(); gen++; haptic();
     await loadMyShared(); // asegura mis compartidas cargadas antes de pintar (evita parpadeo)
     f = Store.get().friends.find(x=>x.id===f.id) || f; // usar los datos más frescos del store
-    const items=(f.history||[]).filter(h=>h.date===key).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
+    const myCloudId=Cloud.myId&&Cloud.myId();
+    const sw=sharedWith(f.cloudId); // tareas que comparto con este amigo (activas)
+    // Ocultar al instante las compartidas conmigo que YO ya borré (su fila ya no
+    // existe): no esperar a que el teléfono del amigo limpie su nube.
+    const iDeleted=(h)=> mySharedLoaded && myCloudId && h.partnerId===myCloudId
+      && !(sw.ids.has(h.id) || sw.dt.has((h.date||'')+'|'+shortTitle(h.title||'')));
+    const items=(f.history||[]).filter(h=>h.date===key && !iDeleted(h)).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
     const [y,mo,d]=key.split("-");
     const title=`${parseInt(d)} de ${MONTHS[parseInt(mo)-1]}`;
     Sheets.open(`
@@ -3114,9 +3121,7 @@ const Friends = (() => {
     $("#fdBack").onclick=()=>openProfile(f);
     $("#fdClose").onclick=Sheets.close;
     const listEl=$("#fdList");
-    const myCloudId=Cloud.myId&&Cloud.myId();
     const myName=((Store.get().profile.name||"").trim().toLowerCase());
-    const sw=sharedWith(f.cloudId); // tareas que comparto con este amigo (para "Contigo")
     const withWhom=(h)=>{
       // ¿la hicimos entre los dos? Varias señales para que sea estable:
       const withMe = (myCloudId && h.partnerId===myCloudId)
