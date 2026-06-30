@@ -2653,7 +2653,7 @@ const Cloud = (() => {
     try{
       await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
         category:entry.category, points:entry.points, time:entry.time, photo_url,
-        partner_id:entry.partnerId||null, partner_name:entry.partnerName||null });
+        partner_id:entry.partnerId||null, partner_name:entry.partnerName||null, shared_id:entry.sharedId||null });
       // solo se marca como sincronizada si la foto subió (o no había). Si la foto
       // falló, se reintenta en el próximo arranque (syncBacklog).
       if(photoOk) markSynced(entry.id);
@@ -2665,9 +2665,10 @@ const Cloud = (() => {
   async function pushSharedCompletion(entry){
     if(!enabled() || !await init() || !client) return;
     try{
+      const sid = entry.sharedId || (typeof entry.id==='string' && entry.id.slice(0,3)==='sh_' ? entry.id.slice(3) : null);
       await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
         category:entry.category, points:entry.points, time:entry.time, photo_url:entry.photoUrl||null,
-        partner_id:entry.partnerId||null, partner_name:entry.partnerName||null });
+        partner_id:entry.partnerId||null, partner_name:entry.partnerName||null, shared_id:sid });
       markSynced(entry.id);
     }catch(e){ console.warn("pushSharedCompletion:", e && e.message); }
   }
@@ -2913,34 +2914,6 @@ const Friends = (() => {
     const dt =new Set(rows.map(r=>(r.done_date||'')+'|'+shortTitle(r.title||''))); // si el amigo fue quien la completó
     return { ids, dt };
   }
-  // Predicado: ¿esta completada del amigo es una compartida CONMIGO que YO ya
-  // borré (su fila ya no existe)? Para ocultarla y ajustar sus stats al instante.
-  function deletedByMe(friend){
-    const myCloudId=Cloud.myId&&Cloud.myId();
-    const sw=sharedWith(friend.cloudId);
-    const del=new Set(Store.get().deletedShared||[]); // ids que borré (instantáneo, local)
-    return (h)=>{
-      if(!myCloudId) return false;
-      // recibida (id "sh_") cuyo sharedId ya borré: oculta al instante, sin red
-      if(typeof h.id==='string' && h.id.slice(0,3)==='sh_' && del.has(h.id.slice(3))) return true;
-      // por el estado actual de mis compartidas (cubre las que completó él)
-      return mySharedLoaded && h.partnerId===myCloudId
-        && !(sw.ids.has(h.id) || sw.dt.has((h.date||'')+'|'+shortTitle(h.title||'')));
-    };
-  }
-  // Devuelve una copia del amigo con MIS borrados ya descontados (puntos, racha,
-  // días, fechas), para que mi vista refleje al instante lo que eliminé.
-  function adjustedFriend(f){
-    const isDel=deletedByMe(f);
-    const hist=f.history||[];
-    const hidden=hist.filter(isDel);
-    if(!hidden.length) return f;
-    const visible=hist.filter(h=>!isDel(h));
-    const lostPts=hidden.reduce((a,h)=>a+(h.points||0),0);
-    const dates=[...new Set(visible.map(h=>h.date).filter(Boolean))];
-    const stk=streakFromHistory(visible);
-    return { ...f, points:Math.max(0,(f.points||0)-lostPts), dates, streak:stk, history:visible };
-  }
 
   function copyToClip(text, box){
     try{ navigator.clipboard && navigator.clipboard.writeText(text); }catch(e){}
@@ -3049,7 +3022,7 @@ const Friends = (() => {
   function openProfile(f, fetched){
     const myGen = fetched ? gen : ++gen; // vista nueva salvo que sea el re-pintado tras refrescar
     loadMyShared(); // refresca mis tareas compartidas para anotar "Contigo"
-    const fv = adjustedFriend(f); // vista con MIS borrados ya descontados (instantáneo)
+    const fv = f; // los datos de la nube ya son correctos (el trigger limpia al borrar)
     let cal=new Date();
     const dateSet=new Set(fv.dates||[]);
     Sheets.open(`
@@ -3135,11 +3108,8 @@ const Friends = (() => {
     await loadMyShared(); // asegura mis compartidas cargadas antes de pintar (evita parpadeo)
     f = Store.get().friends.find(x=>x.id===f.id) || f; // usar los datos más frescos del store
     const myCloudId=Cloud.myId&&Cloud.myId();
-    const sw=sharedWith(f.cloudId); // tareas que comparto con este amigo (activas)
-    // Ocultar al instante las compartidas conmigo que YO ya borré (su fila ya no
-    // existe): no esperar a que el teléfono del amigo limpie su nube.
-    const iDeleted=deletedByMe(f);
-    const items=(f.history||[]).filter(h=>h.date===key && !iDeleted(h)).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
+    const sw=sharedWith(f.cloudId); // tareas que comparto con este amigo (para "Contigo")
+    const items=(f.history||[]).filter(h=>h.date===key).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
     const [y,mo,d]=key.split("-");
     const title=`${parseInt(d)} de ${MONTHS[parseInt(mo)-1]}`;
     Sheets.open(`
