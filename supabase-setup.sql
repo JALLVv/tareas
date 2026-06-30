@@ -100,13 +100,11 @@ create policy "shared_insert" on public.shared_tasks for insert to authenticated
 create policy "shared_update" on public.shared_tasks for update to authenticated using (auth.uid() = owner_id or auth.uid() = partner_id);
 create policy "shared_delete" on public.shared_tasks for delete to authenticated using (auth.uid() = owner_id or auth.uid() = partner_id);
 
--- 4b) LIMPIEZA AUTOMÁTICA AL BORRAR UNA TAREA COMPARTIDA ----------------
--- Cuando se borra una tarea compartida, este trigger (SECURITY DEFINER: corre
--- con permisos elevados, salta RLS) elimina la completada del OTRO implicado y
--- recalcula sus puntos y racha en la nube, SIN que su app tenga que abrirse.
--- Así, si tú borras una compartida que tu amigo completó, su perfil se
--- actualiza solo y todos lo ven al instante. Al que la borra (auth.uid()) no se
--- le toca aquí: su propia app ya ajusta sus datos.
+-- 4b) SINCRONIZACIÓN AUTOMÁTICA DE TAREAS COMPARTIDAS (en la nube) -------
+-- Estos triggers (SECURITY DEFINER: corren con permisos elevados, saltan RLS)
+-- mantienen al día el perfil del OTRO implicado SIN que su app tenga que
+-- abrirse. Así, cuando uno completa o borra una compartida, el calendario,
+-- los puntos y la racha del otro se actualizan solos y todos lo ven al instante.
 
 -- Racha (actual y mejor) calculada desde las completadas de un usuario.
 create or replace function public.calc_streak(p_uid uuid)
@@ -133,35 +131,42 @@ as $$
     coalesce((select max(len) from runs), 0) as best;
 $$;
 
+-- Recalcula puntos y racha de un usuario desde sus completadas (idempotente).
+create or replace function public.recompute_profile(p_uid uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare s record;
+begin
+  select * into s from public.calc_streak(p_uid);
+  update public.profiles set
+    points         = coalesce((select sum(points) from public.completions where user_id = p_uid), 0),
+    streak_current = coalesce(s.cur, 0),
+    streak_best    = coalesce(s.best, 0),
+    updated_at     = now()
+    where id = p_uid;
+end;
+$$;
+
+-- (i) Al BORRAR una compartida: quita la completada del otro y recalcula.
 create or replace function public.cleanup_shared_completions()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  u uuid;
-  lost int;
-  s record;
+declare u uuid;
 begin
   foreach u in array array[old.owner_id, old.partner_id]
   loop
     if u is null or u = auth.uid() then continue; end if;  -- al que borra no se le toca
     begin
-      select coalesce(sum(points),0) into lost
-        from public.completions
-        where user_id = u and (id = 'sh_' || old.id or shared_id = old.id);
       delete from public.completions
         where user_id = u and (id = 'sh_' || old.id or shared_id = old.id);
-      select * into s from public.calc_streak(u);
-      update public.profiles set
-        points         = greatest(0, coalesce(points,0) - coalesce(lost,0)),
-        streak_current = coalesce(s.cur,0),
-        streak_best    = coalesce(s.best,0),
-        updated_at     = now()
-        where id = u;
-    exception when others then
-      null;  -- si la limpieza de un usuario falla, no bloquear el borrado
+      perform public.recompute_profile(u);
+    exception when others then null;  -- nunca bloquear el borrado
     end;
   end loop;
   return old;
@@ -172,6 +177,45 @@ drop trigger if exists trg_cleanup_shared on public.shared_tasks;
 create trigger trg_cleanup_shared
   after delete on public.shared_tasks
   for each row execute function public.cleanup_shared_completions();
+
+-- (ii) Al COMPLETAR una compartida (status pasa a 'done'): da al OTRO implicado
+-- su registro de completada (foto, puntos, calendario) y recalcula su perfil.
+create or replace function public.propagate_shared_completion()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  u uuid;
+  cname text;
+begin
+  if new.status = 'done' and (old.status is distinct from 'done') then
+    select name into cname from public.profiles where id = new.completed_by;
+    foreach u in array array[new.owner_id, new.partner_id]
+    loop
+      if u is null or u = new.completed_by then continue; end if;  -- el que completó ya tiene la suya
+      begin
+        insert into public.completions(id, user_id, date, title, category, points, time, photo_url, partner_id, partner_name, shared_id)
+        values('sh_' || new.id, u, new.done_date, new.title, new.category, new.points, new.done_time, new.photo_url,
+               new.completed_by, cname, new.id)
+        on conflict (id) do update set
+          date=excluded.date, title=excluded.title, category=excluded.category, points=excluded.points,
+          time=excluded.time, photo_url=excluded.photo_url, partner_id=excluded.partner_id,
+          partner_name=excluded.partner_name, shared_id=excluded.shared_id;
+        perform public.recompute_profile(u);
+      exception when others then null;  -- nunca bloquear la compleción
+      end;
+    end loop;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_propagate_shared on public.shared_tasks;
+create trigger trg_propagate_shared
+  after update on public.shared_tasks
+  for each row execute function public.propagate_shared_completion();
 
 -- 5) NOTIFICACIONES ---------------------------------------------------
 create table if not exists public.notifications (
