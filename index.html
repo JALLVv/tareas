@@ -1555,7 +1555,8 @@ const Store = (() => {
     friends:[],        // {id,cloudId,name,avatar,points,streak,dates:[],history:[],addedAt}
     cloud:{ syncedCompletions:[], avatarUrl:null, avatarSrc:null },
     notifs:[],         // notificaciones descargadas de la nube
-    notifSeen:[]       // ids ya mostrados como aviso del sistema
+    notifSeen:[],      // ids ya mostrados como aviso del sistema
+    deletedShared:[]   // ids de tareas compartidas que borraste (no re-sincronizar)
   });
   let state;
   function load(){
@@ -1573,6 +1574,16 @@ const Store = (() => {
     if(!state.cloud) state.cloud={ syncedCompletions:[], avatarUrl:null, avatarSrc:null };
     if(!Array.isArray(state.notifs)) state.notifs=[];
     if(!Array.isArray(state.notifSeen)) state.notifSeen=[];
+    if(!Array.isArray(state.deletedShared)) state.deletedShared=[];
+    // Auto-corrección: los puntos y la racha se derivan del historial. Repara
+    // cualquier desajuste (p. ej. puntos/racha fantasma tras borrar tareas).
+    const ptsSum=(state.history||[]).reduce((a,h)=>a+(h.points||0),0);
+    const stk=streakFromHistory(state.history||[]);
+    if(state.points!==ptsSum || state.streak.current!==stk.current || state.streak.best!==stk.best){
+      state.points=ptsSum;
+      state.streak.current=stk.current; state.streak.best=stk.best; state.streak.lastDate=stk.lastDate;
+      save();
+    }
     return state;
   }
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
@@ -1910,7 +1921,9 @@ const Tasks = (() => {
   async function syncShared(){
     if(!Cloud.enabled()) return;
     const myId=Cloud.myId(); if(!myId) return;
-    const rows=await Cloud.fetchShared();
+    const s0=Store.get(); const del=s0.deletedShared||[];
+    let rows=await Cloud.fetchShared();
+    rows=rows.filter(r=> !del.includes(r.id)); // ignorar las que ya borraste
     const rowById={}; rows.forEach(r=>rowById[r.id]=r);
     const s=Store.get();
     let tasks=s.tasks.slice(), changed=false;
@@ -2087,6 +2100,9 @@ const Tasks = (() => {
         s.tasks   = s.tasks.filter(x=>x.id!==task.id);
         s.history = s.history.filter(h=>h.taskId!==task.id);
         s.points  = Math.max(0, s.points - removedPts);
+        // si es compartida, recordar que la borraste para que el sondeo no la
+        // vuelva a añadir ni re-otorgue puntos (la fila se borra para ambos)
+        if(task.shared && task.sharedId && !s.deletedShared.includes(task.sharedId)) s.deletedShared.push(task.sharedId);
         // recalcular la racha: si un día se queda sin completadas, deja de contar
         const st = streakFromHistory(s.history);
         s.streak.current  = st.current;
@@ -3005,8 +3021,9 @@ const Friends = (() => {
   }
 
   // Galería del día de un amigo: fotos (URL) + títulos
-  function openFriendDay(f, key){
+  async function openFriendDay(f, key){
     stopPoll(); gen++; haptic();
+    await loadMyShared(); // asegura mis compartidas cargadas antes de pintar (evita parpadeo)
     f = Store.get().friends.find(x=>x.id===f.id) || f; // usar los datos más frescos del store
     const items=(f.history||[]).filter(h=>h.date===key).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
     const [y,mo,d]=key.split("-");
@@ -3019,9 +3036,14 @@ const Friends = (() => {
     $("#fdClose").onclick=Sheets.close;
     const listEl=$("#fdList");
     const myCloudId=Cloud.myId&&Cloud.myId();
+    const myName=((Store.get().profile.name||"").trim().toLowerCase());
     const sw=sharedWith(f.cloudId); // tareas que comparto con este amigo (para "Contigo")
     const withWhom=(h)=>{
-      const withMe = (myCloudId && h.partnerId===myCloudId) || (h.id && sw.ids.has(h.id)) || sw.dt.has((h.date||'')+'|'+shortTitle(h.title||''));
+      // ¿la hicimos entre los dos? Varias señales para que sea estable:
+      const withMe = (myCloudId && h.partnerId===myCloudId)
+        || (h.id && sw.ids.has(h.id))
+        || sw.dt.has((h.date||'')+'|'+shortTitle(h.title||''))
+        || (myName && (h.partnerName||"").trim().toLowerCase()===myName);
       let txt="";
       if(withMe) txt="Contigo";
       else if(h.partnerName) txt="con "+esc(h.partnerName);
@@ -3095,25 +3117,32 @@ const Notifs = (() => {
     const granted=("Notification" in window && Notification.permission==='granted');
     Sheets.open(`
       <div class="grabber"></div>
-      <div class="sheet-head"><span class="act" id="ntPerm">${granted?"Probar":"Activar"}</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
-      <div class="sheet-body"><div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.</div>'}</div></div>`);
+      <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
+      <div class="sheet-body">
+        <div class="card notif-activate" id="ntActivate" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <div class="notif-ic ${granted?'done':'add'}" style="width:44px;height:44px">${granted?checkSvg():bellSvg()}</div>
+          <div style="flex:1">
+            <div style="font-weight:700">${granted?"Notificaciones activadas":"Activar notificaciones"}</div>
+            <div class="hint" style="margin:2px 0 0">${granted?"Te avisaremos aunque la app esté cerrada.":"Recibe un aviso cuando un amigo te añada o complete una tarea."}</div>
+          </div>
+          <button class="mini-btn ${granted?'':'accent'}" id="ntPerm">${granted?"Activadas ✓":"Activar"}</button>
+        </div>
+        <div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.</div>'}</div>
+      </div>`);
     $("#ntClose").onclick=Sheets.close;
     const pm=$("#ntPerm");
-    // Cada pulsación (re)suscribe este teléfono y luego envía una prueba. Así, si
-    // la suscripción se perdió (caducó o el servidor la limpió), se recupera sola.
+    // Activación permanente: pide permiso y (re)suscribe este teléfono. La app se
+    // re-suscribe sola en cada apertura, así que una vez activada queda para siempre.
     if(pm) pm.onclick=async ()=>{
       pm.textContent="Activando…";
-      const ok=await Cloud.ensurePush();   // pide permiso si falta y (re)suscribe; idempotente
-      if(!ok){
-        pm.textContent = (Notification.permission==='granted')?"Probar":"Activar";
+      const ok=await Cloud.ensurePush();   // idempotente: pide permiso si falta y (re)suscribe
+      if(ok){
+        pm.textContent="Activadas ✓"; pm.classList.remove("accent");
+        UI.toast("Notificaciones activadas","check","var(--green)");
+      } else {
+        pm.textContent="Activar";
         UI.toast(Notification.permission==='denied' ? "Permiso bloqueado: actívalo en Ajustes del iPhone" : "No se pudo activar (abre la app desde el icono de inicio)","bell","var(--red)");
-        return;
       }
-      pm.textContent="Enviando…";
-      const r=await Cloud.testPush();
-      pm.textContent="Probar";
-      if(r.ok) UI.toast("Activado. Prueba enviada: debería llegarte ahora","check","var(--green)");
-      else UI.toast("No llegó: "+(r.error||"revisa la función send-push"),"bell","var(--red)");
     };
     $$("#ntList [data-photo]").forEach(c=> c.onclick=()=> Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}) );
     // marcar como leídas
@@ -3123,6 +3152,7 @@ const Notifs = (() => {
   return { init, refresh, openSheet, updateBadge };
 })();
 function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
+function bellSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 004 0"/></svg>';}
 function noPhotoThumb(){return '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--label-3)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5"/></svg></div>';}
 // Resumen del título para listas: si es muy largo (>10 palabras) deja una frase
 // corta identificativa con puntos suspensivos. El título completo se conserva aparte.
