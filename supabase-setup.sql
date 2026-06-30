@@ -14,6 +14,8 @@ create table if not exists public.profiles (
   streak_best    int  default 0,
   updated_at     timestamptz default now()
 );
+-- Puntos descontados por tareas no completadas en su día (penalizaciones).
+alter table public.profiles add column if not exists penalties int default 0;
 
 alter table public.profiles enable row level security;
 
@@ -141,12 +143,12 @@ as $$
 declare s record;
 begin
   select * into s from public.calc_streak(p_uid);
-  update public.profiles set
-    points         = coalesce((select sum(points) from public.completions where user_id = p_uid), 0),
+  update public.profiles p set
+    points         = greatest(0, coalesce((select sum(points) from public.completions where user_id = p_uid), 0) - coalesce(p.penalties, 0)),
     streak_current = coalesce(s.cur, 0),
     streak_best    = coalesce(s.best, 0),
     updated_at     = now()
-    where id = p_uid;
+    where p.id = p_uid;
 end;
 $$;
 

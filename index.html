@@ -1573,7 +1573,8 @@ const Store = (() => {
     cloud:{ syncedCompletions:[], avatarUrl:null, avatarSrc:null },
     notifs:[],         // notificaciones descargadas de la nube
     notifSeen:[],      // ids ya mostrados como aviso del sistema
-    deletedShared:[]   // ids de tareas compartidas que borraste (no re-sincronizar)
+    deletedShared:[],  // ids de tareas compartidas que borraste (no re-sincronizar)
+    penalties:0        // puntos descontados por tareas no completadas en su día
   });
   let state;
   function load(){
@@ -1592,9 +1593,10 @@ const Store = (() => {
     if(!Array.isArray(state.notifs)) state.notifs=[];
     if(!Array.isArray(state.notifSeen)) state.notifSeen=[];
     if(!Array.isArray(state.deletedShared)) state.deletedShared=[];
-    // Auto-corrección: los puntos y la racha se derivan del historial. Repara
-    // cualquier desajuste (p. ej. puntos/racha fantasma tras borrar tareas).
-    const ptsSum=(state.history||[]).reduce((a,h)=>a+(h.points||0),0);
+    if(typeof state.penalties!=='number') state.penalties=0;
+    // Auto-corrección: los puntos y la racha se derivan del historial menos las
+    // penalizaciones. Repara cualquier desajuste (p. ej. puntos fantasma).
+    const ptsSum=Math.max(0, (state.history||[]).reduce((a,h)=>a+(h.points||0),0) - (state.penalties||0));
     const stk=streakFromHistory(state.history||[]);
     if(state.points!==ptsSum || state.streak.current!==stk.current || state.streak.best!==stk.best){
       state.points=ptsSum;
@@ -1928,8 +1930,20 @@ const Tasks = (() => {
   }
   function cleanupExpired(){
     const s=Store.get(); const today=dateKey();
-    const keep = s.tasks.filter(t=>!isExpired(t,today));
-    if(keep.length!==s.tasks.length) Store.update(st=>{ st.tasks=keep; });
+    const expired = s.tasks.filter(t=>isExpired(t,today));
+    if(!expired.length) return;
+    // Penalización: cada tarea no completada en su día/fecha resta los MISMOS
+    // puntos que habría dado al completarse.
+    const penalty = expired.reduce((a,t)=> a + taskPoints(t.minutes, t.random), 0);
+    Store.update(st=>{
+      st.tasks = st.tasks.filter(t=>!isExpired(t,today));
+      if(penalty>0){ st.penalties=(st.penalties||0)+penalty; st.points=Math.max(0, st.points-penalty); }
+    });
+    if(penalty>0){
+      if(Cloud.enabled()) Cloud.pushProfile();   // refleja el descuento en la nube (y para amigos)
+      if(UI.renderProfile) UI.renderProfile();
+      UI.toast(`Tarea sin completar · −${penalty} pts`, "check", "var(--red)");
+    }
   }
 
   /* ---------- TAREAS COMPARTIDAS: sincroniza con la nube ----------
@@ -2641,7 +2655,7 @@ const Cloud = (() => {
     }
     try{
       await client.from('profiles').upsert({ id:uid, name:s.profile.name||"Atleta", avatar_url:avatarUrl,
-        points:s.points, streak_current:s.streak.current, streak_best:s.streak.best, updated_at:new Date().toISOString() });
+        points:s.points, streak_current:s.streak.current, streak_best:s.streak.best, penalties:(s.penalties||0), updated_at:new Date().toISOString() });
     }catch(e){ console.warn("pushProfile:", e && e.message); }
   }
 
