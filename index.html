@@ -445,6 +445,19 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .notif-ic.add{background:rgba(94,92,230,0.18);color:var(--indigo);}
 .notif-ic svg{width:26px;height:26px;}
 .notif-item .gal-info .t b{color:var(--label);}
+.notif-item{position:relative;}
+.notif-del{flex:0 0 auto;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;align-self:center;
+  color:var(--label-2);background:rgba(120,120,128,0.18);font-size:13px;line-height:1;border:none;}
+.notif-del:active{transform:scale(0.88);}
+.notif-clear-all{display:block;width:100%;text-align:center;margin:0 0 12px;color:var(--red);font-weight:600;font-size:14px;background:none;border:none;padding:6px;}
+.notif-activate{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:14px 16px;}
+.notif-activate .na-ic{width:42px;height:42px;border-radius:12px;flex:0 0 auto;display:grid;place-items:center;}
+.notif-activate .na-ic svg{width:22px;height:22px;}
+.notif-activate .na-ic.on{background:rgba(48,209,88,0.16);color:var(--green);}
+.notif-activate .na-ic.off{background:rgba(94,92,230,0.18);color:var(--indigo);}
+.notif-activate .na-txt{flex:1;min-width:0;}
+.notif-activate .na-txt .t{font-weight:700;font-size:15px;}
+.notif-activate .na-txt .s{font-size:12.5px;color:var(--label-2);margin-top:2px;line-height:1.35;}
 .friends-sheet-head{display:flex;align-items:center;gap:8px;margin:2px 0 16px;}
 .friends-sheet-head .mini-btn{flex:1;text-align:center;}
 .friends-actions{display:flex;gap:8px;}
@@ -1923,13 +1936,29 @@ const Tasks = (() => {
     const myId=Cloud.myId(); if(!myId) return;
     const s0=Store.get(); const del=s0.deletedShared||[];
     let rows=await Cloud.fetchShared();
+    if(rows===null) return; // la consulta falló (sin red): no tocar nada
     rows=rows.filter(r=> !del.includes(r.id)); // ignorar las que ya borraste
     const rowById={}; rows.forEach(r=>rowById[r.id]=r);
     const s=Store.get();
     let tasks=s.tasks.slice(), changed=false;
-    // A) quitar las compartidas locales cuya fila ya no existe (borradas por el otro)
-    const keep=tasks.filter(t=> !(t.shared && t.sharedId && !rowById[t.sharedId]));
-    if(keep.length!==tasks.length){ tasks=keep; changed=true; }
+    // A) quitar las compartidas locales cuya fila ya no existe (borradas por el
+    //    otro) Y limpiar su registro del historial (foto + puntos), para que la
+    //    tarea borrada deje de verse en TU calendario y en el de tus amigos.
+    const vanished=tasks.filter(t=> t.shared && t.sharedId && !rowById[t.sharedId]);
+    const removeHistIds=new Set(); let removedPts=0;
+    if(vanished.length){
+      tasks=tasks.filter(t=> !(t.shared && t.sharedId && !rowById[t.sharedId]));
+      changed=true;
+    }
+    // A2) limpiar también registros del historial de compartidas cuya fila ya no
+    //     existe, aunque ya no tengas la tarea local (residuos de borrados viejos).
+    (s.history||[]).forEach(h=>{
+      if(h.shared && typeof h.id==='string' && h.id.slice(0,3)==='sh_'){
+        const sid=h.id.slice(3);
+        if(!rowById[sid]){ removeHistIds.add(h.id); removedPts+=(h.points||0); }
+      }
+    });
+    if(removeHistIds.size) changed=true;
     // B) añadir las que me han compartido y aún no tengo (pendientes)
     rows.forEach(r=>{
       if(r.status==='done') return;
@@ -1962,18 +1991,26 @@ const Tasks = (() => {
     if(!changed) return;
     Store.update(st=>{
       st.tasks=tasks;
-      if(newHist.length){
-        st.history=newHist.concat(st.history);
-        st.points+=addPts;
+      if(removeHistIds.size){ st.history=st.history.filter(h=>!removeHistIds.has(h.id)); st.points=Math.max(0, st.points-removedPts); }
+      if(newHist.length){ st.history=newHist.concat(st.history); st.points+=addPts; }
+      if(removeHistIds.size || newHist.length){
         const stk=streakFromHistory(st.history);
-        st.streak.current=stk.current; st.streak.best=Math.max(st.streak.best||0,stk.best); st.streak.lastDate=stk.lastDate;
+        st.streak.current=stk.current; st.streak.best=stk.best; st.streak.lastDate=stk.lastDate;
       }
     });
     // subir a la nube las completadas compartidas que acabo de recibir, para que
     // aparezcan en MI calendario (el que ven mis amigos) y se reflejen mis puntos
     if(newHist.length && Cloud.enabled()){
       newHist.forEach(h=> Cloud.pushSharedCompletion(h));
-      Cloud.pushProfile();
+    }
+    // si quité tareas borradas, refleja en la nube (borra filas/puntos) para que
+    // tus amigos dejen de verlas, y quita sus notificaciones (ya no tienen sentido)
+    if((removeHistIds.size || newHist.length) && Cloud.enabled()){ Cloud.pushProfile(); Cloud.reconcile(); }
+    if(vanished.length && Cloud.enabled()){
+      const titles=new Set(vanished.map(t=>t.title));
+      titles.forEach(t=> Cloud.clearNotifsByTitle(t));
+      Store.update(st=>{ st.notifs=(st.notifs||[]).filter(n=>!titles.has(n.task_title)); });
+      if(Notifs && Notifs.updateBadge) Notifs.updateBadge();
     }
     render(); if(UI.renderProfile) UI.renderProfile();
     backfillShared();
@@ -2115,6 +2152,8 @@ const Tasks = (() => {
       if (UI.renderProfile) UI.renderProfile();
       if (Cloud.enabled()){ Cloud.pushProfile(); Cloud.reconcile(); } // refleja la eliminación en la nube
       if (task.shared && task.sharedId && Cloud.enabled()) Cloud.deleteShared(task.sharedId); // se borra para ambos
+      // quitar mis notificaciones sobre esta tarea (ya no tiene sentido verlas)
+      if (Cloud.enabled()){ Cloud.clearNotifsByTitle(task.title); Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.task_title!==task.title); }); if(Notifs&&Notifs.updateBadge) Notifs.updateBadge(); }
       UI.toast(removedPts>0 ? `Tarea eliminada · −${removedPts} pts` : "Tarea eliminada", "check", "var(--red)");
     };
   }
@@ -2314,8 +2353,10 @@ const Tasks = (() => {
       // tarea compartida: subir la foto, marcar la fila como hecha y avisar al compañero
       if (task.shared && task.sharedId && Cloud.enabled() && photoData){
         (async ()=>{
-          const url = await uploadSharedPhoto(task.sharedId, photoData);
-          await Cloud.completeShared(task.sharedId, { status:'done', completed_by:Cloud.myId(), photo_url:url, points:pts, done_date:entry.date, done_time:entry.time });
+          let url=null;
+          try{ url = await uploadSharedPhoto(task.sharedId, photoData); }catch(e){}
+          try{ await Cloud.completeShared(task.sharedId, { status:'done', completed_by:Cloud.myId(), photo_url:url, points:pts, done_date:entry.date, done_time:entry.time }); }catch(e){}
+          // avisar al compañero SIEMPRE (aunque falle la subida de la foto)
           const other = (task.ownerId===Cloud.myId()) ? task.partnerId : task.ownerId;
           if(other) Cloud.notify(other, 'shared_done', task.title, url);
         })();
@@ -2691,9 +2732,11 @@ const Cloud = (() => {
     catch(e){ console.warn("createShared:", e && e.message); return false; }
   }
   async function fetchShared(){
-    if(!enabled() || !await init() || !client) return [];
-    try{ const { data }=await client.from('shared_tasks').select('*').or(`owner_id.eq.${uid},partner_id.eq.${uid}`); return data||[]; }
-    catch(e){ console.warn("fetchShared:", e && e.message); return []; }
+    // Devuelve null si la consulta FALLÓ (para no confundir "sin red" con "sin
+    // tareas" y borrar datos por error); [] si de verdad no hay compartidas.
+    if(!enabled() || !await init() || !client) return null;
+    try{ const { data, error }=await client.from('shared_tasks').select('*').or(`owner_id.eq.${uid},partner_id.eq.${uid}`); if(error) throw error; return data||[]; }
+    catch(e){ console.warn("fetchShared:", e && e.message); return null; }
   }
   async function completeShared(id, fields){
     if(!enabled() || !await init() || !client) return false;
@@ -2731,6 +2774,19 @@ const Cloud = (() => {
   async function clearNotif(id){
     if(!enabled() || !await init() || !client) return;
     try{ await client.from('notifications').delete().eq('id', id); }catch(e){}
+  }
+  async function clearNotifs(ids){
+    if(!enabled() || !await init() || !client || !ids || !ids.length) return;
+    try{ await client.from('notifications').delete().in('id', ids).eq('recipient_id', uid); }catch(e){}
+  }
+  async function clearAllNotifs(){
+    if(!enabled() || !await init() || !client) return;
+    try{ await client.from('notifications').delete().eq('recipient_id', uid); }catch(e){}
+  }
+  // borra mis notificaciones sobre una tarea concreta (al eliminar esa tarea)
+  async function clearNotifsByTitle(title){
+    if(!enabled() || !await init() || !client || !title) return;
+    try{ await client.from('notifications').delete().eq('recipient_id', uid).eq('task_title', title); }catch(e){}
   }
 
   /* ---------- Push en segundo plano ---------- */
@@ -2801,7 +2857,7 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
-    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, ensurePush, testPush, updatePartner };
+    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner };
 })();
 
 /* =====================================================================
@@ -3083,51 +3139,53 @@ const Notifs = (() => {
     }catch(e){ return ""; }
   }
   function updateBadge(){
-    const list=Store.get().notifs||[]; const n=list.filter(x=>!x.read).length;
+    const cutoff=Date.now()-86400000;
+    const list=(Store.get().notifs||[]).filter(x=> new Date(x.created_at).getTime()>=cutoff);
+    const n=list.filter(x=>!x.read).length;
     const b=$("#notifBadge"); if(b){ b.style.display=n?"grid":"none"; b.textContent=n>9?"9+":String(n); }
   }
   async function refresh(){
     if(!Cloud.enabled()) return;
-    const list=await Cloud.fetchNotifs();
-    const seen=Store.get().notifSeen||[];
-    const fresh=list.filter(n=>!seen.includes(n.id));
-    Store.update(s=>{ s.notifs=list; });
+    let list=await Cloud.fetchNotifs();
+    // Vencen a las 24 h: las viejas se borran de la nube y no se muestran.
+    const cutoff=Date.now()-86400000;
+    const old=list.filter(n=> new Date(n.created_at).getTime() < cutoff);
+    list=list.filter(n=> new Date(n.created_at).getTime() >= cutoff);
+    if(old.length) Cloud.clearNotifs(old.map(n=>n.id));
+    Store.update(s=>{ s.notifs=list; s.notifSeen=list.map(n=>n.id); });
     updateBadge();
-    // aviso del sistema en primer plano (con la app abierta)
-    if(fresh.length && "Notification" in window && Notification.permission==="granted"){
-      fresh.slice(0,3).forEach(n=>{
-        const body = n.type==='shared_done' ? `${n.actor_name} completó una tarea` : `${n.actor_name} te añadió a una tarea`;
-        try{ const opt={ body, icon:"icons/icon-192.png", tag:n.id }; if(n.photo_url) opt.image=n.photo_url; new Notification("Tareas", opt); }catch(e){}
-      });
-    }
-    Store.update(s=>{ s.notifSeen=list.map(n=>n.id); });
+    // Nota: el aviso del SISTEMA lo muestra el push (service worker), así que aquí
+    // NO creamos otro con new Notification() para no duplicar la notificación.
   }
   function notifHtml(n){
     const done=n.type==='shared_done';
     const text = done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea` : `<b>${esc(n.actor_name||"Un amigo")}</b> te añadió a una tarea`;
     const thumb = (done && n.photo_url) ? `<div class="gal-thumb"><img src="${esc(n.photo_url)}"></div>` : `<div class="notif-ic ${done?'done':'add'}">${done?checkSvg():plusSvg()}</div>`;
-    return `<div class="card gal-item notif-item" ${done&&n.photo_url?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}" data-when="${esc(n.actor_name||'')}"`:''}>
+    return `<div class="card gal-item notif-item" ${done&&n.photo_url?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}"`:''}>
       ${thumb}
       <div class="gal-info"><div class="t">${text}</div><div class="m">${esc(n.task_title||'')}${n.task_title?' · ':''}${timeAgo(n.created_at)}</div></div>
+      <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
     </div>`;
   }
+  function listNow(){ const cutoff=Date.now()-86400000; return (Store.get().notifs||[]).filter(n=> new Date(n.created_at).getTime()>=cutoff); }
   function openSheet(){
     haptic();
-    const list=Store.get().notifs||[];
     const granted=("Notification" in window && Notification.permission==='granted');
+    const list=listNow();
     Sheets.open(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
       <div class="sheet-body">
-        <div class="card notif-activate" id="ntActivate" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <div class="notif-ic ${granted?'done':'add'}" style="width:44px;height:44px">${granted?checkSvg():bellSvg()}</div>
-          <div style="flex:1">
-            <div style="font-weight:700">${granted?"Notificaciones activadas":"Activar notificaciones"}</div>
-            <div class="hint" style="margin:2px 0 0">${granted?"Te avisaremos aunque la app esté cerrada.":"Recibe un aviso cuando un amigo te añada o complete una tarea."}</div>
+        <div class="card notif-activate">
+          <div class="na-ic ${granted?'on':'off'}">${granted?checkSvg():bellSvg()}</div>
+          <div class="na-txt">
+            <div class="t">${granted?"Notificaciones activadas":"Activar notificaciones"}</div>
+            <div class="s">${granted?"Te avisaremos aunque la app esté cerrada.":"Recibe un aviso cuando un amigo te añada o complete una tarea."}</div>
           </div>
           <button class="mini-btn ${granted?'':'accent'}" id="ntPerm">${granted?"Activadas ✓":"Activar"}</button>
         </div>
-        <div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.</div>'}</div>
+        ${list.length?'<button class="notif-clear-all" id="ntClearAll">Borrar todas</button>':''}
+        <div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.<br>Las notificaciones se borran solas a las 24 horas.</div>'}</div>
       </div>`);
     $("#ntClose").onclick=Sheets.close;
     const pm=$("#ntPerm");
@@ -3138,13 +3196,20 @@ const Notifs = (() => {
       const ok=await Cloud.ensurePush();   // idempotente: pide permiso si falta y (re)suscribe
       if(ok){
         pm.textContent="Activadas ✓"; pm.classList.remove("accent");
+        const ic=$(".na-ic"); if(ic){ ic.classList.remove("off"); ic.classList.add("on"); ic.innerHTML=checkSvg(); }
         UI.toast("Notificaciones activadas","check","var(--green)");
       } else {
         pm.textContent="Activar";
         UI.toast(Notification.permission==='denied' ? "Permiso bloqueado: actívalo en Ajustes del iPhone" : "No se pudo activar (abre la app desde el icono de inicio)","bell","var(--red)");
       }
     };
-    $$("#ntList [data-photo]").forEach(c=> c.onclick=()=> Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}) );
+    // borrar una notificación
+    $$("#ntList .notif-del").forEach(b=> b.onclick=(e)=>{ e.stopPropagation(); haptic(); const id=b.getAttribute("data-del");
+      Cloud.clearNotif(id); Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==id); }); updateBadge(); openSheet(); });
+    // borrar todas
+    const ca=$("#ntClearAll"); if(ca) ca.onclick=()=>{ haptic(); Cloud.clearAllNotifs(); Store.update(s=>{ s.notifs=[]; }); updateBadge(); openSheet(); };
+    // abrir foto (sin disparar al pulsar la ✕)
+    $$("#ntList [data-photo]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return; Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}); });
     // marcar como leídas
     Cloud.markNotifsRead(); Store.update(s=>{ (s.notifs||[]).forEach(n=>n.read=true); }); updateBadge();
   }
