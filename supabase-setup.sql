@@ -206,16 +206,8 @@ begin
           time=excluded.time, photo_url=excluded.photo_url, partner_id=excluded.partner_id,
           partner_name=excluded.partner_name, shared_id=excluded.shared_id;
         perform public.recompute_profile(u);
-        -- aviso in-app "tu amigo completó una tarea" (fiable: lo crea el servidor,
-        -- sin depender de que la app del destinatario lo detecte). Evita duplicar.
-        if not exists (
-          select 1 from public.notifications
-          where recipient_id = u and type = 'shared_done' and task_title = new.title
-            and created_at > now() - interval '1 day'
-        ) then
-          insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url)
-          values(u, new.completed_by, cname, 'shared_done', new.title, new.photo_url);
-        end if;
+        -- (la notificación "completó una tarea" la crea trg_notify_friends al
+        --  insertarse la completada del que la hizo; aquí no, para no duplicar.)
       exception when others then null;  -- nunca bloquear la compleción
       end;
     end loop;
@@ -228,6 +220,64 @@ drop trigger if exists trg_propagate_shared on public.shared_tasks;
 create trigger trg_propagate_shared
   after update on public.shared_tasks
   for each row execute function public.propagate_shared_completion();
+
+-- (iii) Al COMPLETAR CUALQUIER tarea (compartida o no): avisa a TODOS tus
+-- amigos. Se dispara al insertarse tu completada; ignora las recibidas (sh_).
+create or replace function public.notify_friends_on_completion()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare f uuid; cname text;
+begin
+  if new.id like 'sh\_%' escape '\' then return new; end if; -- completada recibida (no la hiciste tú)
+  select name into cname from public.profiles where id = new.user_id;
+  for f in
+    select case when requester = new.user_id then addressee else requester end
+    from public.friendships
+    where status = 'accepted' and (requester = new.user_id or addressee = new.user_id)
+  loop
+    begin
+      if not exists (
+        select 1 from public.notifications
+        where recipient_id = f and actor_id = new.user_id and type = 'shared_done'
+          and task_title = new.title and created_at > now() - interval '6 hours'
+      ) then
+        insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url)
+        values(f, new.user_id, cname, 'shared_done', new.title, new.photo_url);
+      end if;
+    exception when others then null;
+    end;
+  end loop;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notify_friends on public.completions;
+create trigger trg_notify_friends
+  after insert on public.completions
+  for each row execute function public.notify_friends_on_completion();
+
+-- 4c) COMENTARIOS en tareas completadas --------------------------------
+-- Se identifican por la "clave" de la completada: shared_id si es compartida,
+-- o el id de la completada si no. Así el mismo comentario se ve desde cualquier
+-- vista (tu perfil, el calendario del amigo, etc.).
+create table if not exists public.comments (
+  id             uuid default gen_random_uuid() primary key,
+  completion_key text not null,
+  author_id      uuid,
+  author_name    text,
+  text           text,
+  created_at     timestamptz default now()
+);
+alter table public.comments enable row level security;
+drop policy if exists "comments_read"   on public.comments;
+drop policy if exists "comments_insert" on public.comments;
+drop policy if exists "comments_delete" on public.comments;
+create policy "comments_read"   on public.comments for select to authenticated using (true);
+create policy "comments_insert" on public.comments for insert to authenticated with check (auth.uid() = author_id);
+create policy "comments_delete" on public.comments for delete to authenticated using (auth.uid() = author_id);
 
 -- 5) NOTIFICACIONES ---------------------------------------------------
 create table if not exists public.notifications (
