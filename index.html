@@ -446,6 +446,11 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .notif-ic svg{width:26px;height:26px;}
 .notif-item .gal-info .t b{color:var(--label);}
 .notif-item{position:relative;}
+.notif-req{display:flex;align-items:flex-start;gap:12px;}
+.notif-req .notif-ic{width:48px;height:48px;}
+.notif-req .gal-info{flex:1;min-width:0;}
+.req-actions{display:flex;gap:8px;margin-top:10px;}
+.req-actions .mini-btn{padding:7px 18px;}
 .notif-del{flex:0 0 auto;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;align-self:center;
   color:var(--label-2);background:rgba(120,120,128,0.18);font-size:13px;line-height:1;border:none;}
 .notif-del:active{transform:scale(0.88);}
@@ -2776,7 +2781,9 @@ const Cloud = (() => {
       catch(e){ console.warn("notify:", e && e.message); }
     }
     // push en segundo plano (vía Edge Function)
-    const body = type==='shared_added' ? `${actorName} te añadió a una tarea` : `${actorName} completó una tarea`;
+    const body = type==='shared_added' ? `${actorName} te añadió a una tarea`
+      : type==='friend_request' ? `${actorName} te ha enviado una solicitud de amistad`
+      : `${actorName} completó una tarea`;
     sendPush(recipientId, "Tareas", body, photoUrl);
   }
   // Crea una notificación PARA MÍ MISMO (cuando detecto que un amigo completó una
@@ -2785,6 +2792,60 @@ const Cloud = (() => {
     if(!enabled() || !await init() || !client) return;
     try{ await client.from('notifications').insert({ recipient_id:uid, actor_id:uid, actor_name:actorName||"Un amigo", type, task_title:taskTitle||"", photo_url:photoUrl||null }); }
     catch(e){ console.warn("notifySelf:", e && e.message); }
+  }
+
+  /* ---------- Amistades (solicitudes + amigos) ---------- */
+  // Envía una solicitud de amistad: crea la relación 'pending' + notificación + push.
+  async function sendFriendRequest(targetId){
+    if(!enabled() || !await init() || !client) return { ok:false, error:"sin conexión" };
+    if(targetId===uid) return { ok:false, error:"Ese es tu propio ID" };
+    // ¿existe el usuario?
+    const prof=await pullFriend(targetId);
+    if(!prof) return { ok:false, error:"No se encontró ese ID" };
+    // ¿ya hay relación?
+    try{
+      const { data:exist }=await client.from('friendships').select('requester,addressee,status')
+        .or(`and(requester.eq.${uid},addressee.eq.${targetId}),and(requester.eq.${targetId},addressee.eq.${uid})`);
+      if(exist && exist.length){
+        const r=exist[0];
+        if(r.status==='accepted') return { ok:false, error:"Ya son amigos" };
+        if(r.requester===uid) return { ok:false, error:"Ya enviaste la solicitud" };
+        // me la enviaron a mí: aceptarla en vez de duplicar
+        await acceptFriend(targetId); return { ok:true, accepted:true, name:prof.name };
+      }
+      const { error }=await client.from('friendships').insert({ requester:uid, addressee:targetId, status:'pending' });
+      if(error) throw error;
+    }catch(e){ console.warn("sendFriendRequest:", e && e.message); return { ok:false, error:"No se pudo enviar" }; }
+    // notificación + push para el destinatario
+    await notify(targetId, 'friend_request', "");
+    return { ok:true, name:prof.name };
+  }
+  async function fetchFriendships(){
+    if(!enabled() || !await init() || !client) return null; // null = fallo (no tocar nada)
+    try{ const { data, error }=await client.from('friendships').select('*').or(`requester.eq.${uid},addressee.eq.${uid}`); if(error) throw error; return data||[]; }
+    catch(e){ console.warn("fetchFriendships:", e && e.message); return null; }
+  }
+  async function acceptFriend(requesterId){
+    if(!enabled() || !await init() || !client) return false;
+    try{ const { error }=await client.from('friendships').update({ status:'accepted' }).eq('requester', requesterId).eq('addressee', uid); if(error) throw error; return true; }
+    catch(e){ console.warn("acceptFriend:", e && e.message); return false; }
+  }
+  async function rejectFriend(requesterId){
+    if(!enabled() || !await init() || !client) return;
+    try{ await client.from('friendships').delete().eq('requester', requesterId).eq('addressee', uid); }catch(e){ console.warn("rejectFriend:", e && e.message); }
+  }
+  // Elimina la amistad en ambos sentidos (la usa el que elimina al amigo).
+  async function removeFriendCloud(otherId){
+    if(!enabled() || !await init() || !client) return;
+    try{ await client.from('friendships').delete().or(`and(requester.eq.${uid},addressee.eq.${otherId}),and(requester.eq.${otherId},addressee.eq.${uid})`); }
+    catch(e){ console.warn("removeFriendCloud:", e && e.message); }
+  }
+  // Migración: convierte un amigo antiguo (solo local) en amistad aceptada.
+  // Insert simple: si ya existe la fila, el error de duplicado se ignora.
+  async function linkFriend(otherId){
+    if(!enabled() || !await init() || !client) return false;
+    try{ await client.from('friendships').insert({ requester:uid, addressee:otherId, status:'accepted' }); return true; }
+    catch(e){ return false; }
   }
   async function fetchNotifs(){
     if(!enabled() || !await init() || !client) return [];
@@ -2881,7 +2942,8 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
-    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, notifySelf, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner };
+    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, notifySelf, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
+    sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend };
 })();
 
 /* =====================================================================
@@ -2963,11 +3025,40 @@ const Friends = (() => {
       </div>`).join("");
     $$("[data-fid]",wrap).forEach(c=> c.onclick=()=>{ haptic(); const f=Store.get().friends.find(x=>x.id===c.getAttribute("data-fid")); if(f) openProfile(f); });
   }
-  // descarga datos frescos de TODOS los amigos y los guarda en el store
+  // Reconcilia la lista de amigos con la tabla de amistades de la nube y refresca
+  // sus perfiles. La eliminación mutua y las solicitudes aceptadas se reflejan aquí.
   async function syncFriends(){
     if(!Cloud.configured()) return false;
-    const list=Store.get().friends.filter(f=>f.cloudId);
+    const myId=Cloud.myId(); if(!myId) return false;
+    const rows=await Cloud.fetchFriendships();
     let changed=false;
+    if(rows!==null){ // null = fallo de red: no tocar la lista
+      const accepted=new Set();
+      rows.forEach(r=>{ if(r.status==='accepted') accepted.add(r.requester===myId? r.addressee : r.requester); });
+      const toMigrate=[];
+      // 1) reconciliar: mantener aceptados; quitar los ya confirmados que el otro
+      //    eliminó (linked y sin amistad); migrar amigos antiguos (solo locales).
+      Store.update(st=>{
+        const keep=[];
+        (st.friends||[]).forEach(f=>{
+          if(!f.cloudId){ keep.push(f); return; }
+          if(accepted.has(f.cloudId)){ f.linked=true; keep.push(f); }
+          else if(f.linked){ changed=true; /* eliminado por el otro → fuera de la lista */ }
+          else { keep.push(f); toMigrate.push(f.cloudId); }
+        });
+        st.friends=keep;
+      });
+      toMigrate.forEach(oid=> Cloud.linkFriend(oid)); // antiguos → amistad aceptada (se confirma luego)
+      // 2) añadir los amigos aceptados que aún no tengo en la lista
+      for(const oid of accepted){
+        if(!Store.get().friends.some(f=>f.cloudId===oid)){
+          const fr=await Cloud.pullFriend(oid);
+          if(fr){ Store.update(st=>{ if(!st.friends.some(f=>f.cloudId===oid)) st.friends.unshift({ id:uid(), ...fr, linked:true, addedAt:Date.now() }); }); changed=true; }
+        }
+      }
+    }
+    // 3) refrescar el perfil de cada amigo
+    const list=Store.get().friends.filter(f=>f.cloudId);
     await Promise.all(list.map(async f=>{
       const d=await Cloud.pullFriend(f.cloudId);
       if(d){ Store.update(st=>{ const i=st.friends.findIndex(x=>x.id===f.id); if(i>=0) st.friends[i]={...st.friends[i],...d}; }); changed=true; }
@@ -3009,13 +3100,13 @@ const Friends = (() => {
     pasteSheet("Añadir amigo", async (raw)=>{
       const id=(raw||"").trim(); if(!id) return;
       if(Store.get().friends.some(x=>x.cloudId===id)){ UI.toast("Ya es tu amigo","check","var(--blue)"); openSheet(); return; }
-      UI.toast("Buscando…","check","var(--blue)");
-      const fr=await Cloud.pullFriend(id);
-      if(!fr){ UI.toast("No se encontró ese ID","check","var(--red)"); return; }
-      Store.update(s=>{ s.friends.unshift({ id:uid(), ...fr, addedAt:Date.now() }); });
-      haptic(15); UI.toast("Amigo añadido","check","var(--green)"); openSheet();
+      UI.toast("Enviando solicitud…","check","var(--blue)");
+      const r=await Cloud.sendFriendRequest(id);
+      if(!r.ok){ UI.toast(r.error||"No se pudo enviar","check","var(--red)"); return; }
+      if(r.accepted){ haptic(15); UI.toast(`Ahora eres amigo de ${esc(r.name||"")}`,"check","var(--green)"); syncFriends().then(()=>renderList()); openSheet(); return; }
+      haptic(15); UI.toast(`Solicitud enviada a ${esc(r.name||"")}`,"check","var(--green)"); openSheet();
     },
-    "Pega el <b>ID</b> que te compartió tu amigo (de su 'Mi ID'). Verás su perfil en vivo.",
+    "Pega el <b>ID</b> que te compartió tu amigo (de su 'Mi ID'). Le llegará una solicitud para que te acepte.",
     "ID del amigo");
   }
 
@@ -3060,7 +3151,7 @@ const Friends = (() => {
       </div>`);
     $("#fpBack").onclick=openSheet;
     $("#fpClose").onclick=()=>{ stopPoll(); Sheets.close(); };
-    $("#fpDel").onclick=()=>{ haptic(20); stopPoll(); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); };
+    $("#fpDel").onclick=()=>{ haptic(20); stopPoll(); if(f.cloudId) Cloud.removeFriendCloud(f.cloudId); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); };
     function draw(){
       const y=cal.getFullYear(), m=cal.getMonth();
       $("#fpMonth").textContent = MONTHS[m].charAt(0).toUpperCase()+MONTHS[m].slice(1)+" "+y;
@@ -3164,19 +3255,20 @@ const Notifs = (() => {
       if(d<86400) return `hace ${Math.floor(d/3600)} h`; return `hace ${Math.floor(d/86400)} d`;
     }catch(e){ return ""; }
   }
+  // Una notificación se conserva si es una solicitud de amistad (no vence) o si
+  // tiene menos de 24 h. El resto se considera vencido.
+  const fresh = (n)=> n.type==='friend_request' || (Date.now()-new Date(n.created_at).getTime()) < 86400000;
   function updateBadge(){
-    const cutoff=Date.now()-86400000;
-    const list=(Store.get().notifs||[]).filter(x=> new Date(x.created_at).getTime()>=cutoff);
+    const list=(Store.get().notifs||[]).filter(fresh);
     const n=list.filter(x=>!x.read).length;
     const b=$("#notifBadge"); if(b){ b.style.display=n?"grid":"none"; b.textContent=n>9?"9+":String(n); }
   }
   async function refresh(){
     if(!Cloud.enabled()) return;
     let list=await Cloud.fetchNotifs();
-    // Vencen a las 24 h: las viejas se borran de la nube y no se muestran.
-    const cutoff=Date.now()-86400000;
-    const old=list.filter(n=> new Date(n.created_at).getTime() < cutoff);
-    list=list.filter(n=> new Date(n.created_at).getTime() >= cutoff);
+    // Vencen a las 24 h (excepto las solicitudes de amistad): se borran y no se muestran.
+    const old=list.filter(n=> !fresh(n));
+    list=list.filter(fresh);
     if(old.length) Cloud.clearNotifs(old.map(n=>n.id));
     Store.update(s=>{ s.notifs=list; s.notifSeen=list.map(n=>n.id); });
     updateBadge();
@@ -3184,6 +3276,19 @@ const Notifs = (() => {
     // NO creamos otro con new Notification() para no duplicar la notificación.
   }
   function notifHtml(n){
+    if(n.type==='friend_request'){
+      return `<div class="card notif-item notif-req">
+        <div class="notif-ic add">${peopleSvg()}</div>
+        <div class="gal-info">
+          <div class="t"><b>${esc(n.actor_name||"Alguien")}</b> te ha enviado una solicitud de amistad</div>
+          <div class="m">${timeAgo(n.created_at)}</div>
+          <div class="req-actions">
+            <button class="mini-btn accent" data-accept="${esc(n.id)}" data-actor="${esc(n.actor_id||'')}">Aceptar</button>
+            <button class="mini-btn" data-reject="${esc(n.id)}" data-actor="${esc(n.actor_id||'')}">Rechazar</button>
+          </div>
+        </div>
+      </div>`;
+    }
     const done=n.type==='shared_done';
     const text = done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea` : `<b>${esc(n.actor_name||"Un amigo")}</b> te añadió a una tarea`;
     const thumb = (done && n.photo_url) ? `<div class="gal-thumb"><img src="${esc(n.photo_url)}"></div>` : `<div class="notif-ic ${done?'done':'add'}">${done?checkSvg():plusSvg()}</div>`;
@@ -3193,7 +3298,7 @@ const Notifs = (() => {
       <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
     </div>`;
   }
-  function listNow(){ const cutoff=Date.now()-86400000; return (Store.get().notifs||[]).filter(n=> new Date(n.created_at).getTime()>=cutoff); }
+  function listNow(){ return (Store.get().notifs||[]).filter(fresh); }
   function openSheet(){
     haptic();
     // El permiso se pide solo al abrir la app; aquí solo avisamos si está bloqueado.
@@ -3213,6 +3318,22 @@ const Notifs = (() => {
       Cloud.clearNotif(id); Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==id); }); updateBadge(); openSheet(); });
     // borrar todas
     const ca=$("#ntClearAll"); if(ca) ca.onclick=()=>{ haptic(); Cloud.clearAllNotifs(); Store.update(s=>{ s.notifs=[]; }); updateBadge(); openSheet(); };
+    // aceptar solicitud de amistad
+    $$("#ntList [data-accept]").forEach(b=> b.onclick=async (e)=>{ e.stopPropagation(); haptic(15);
+      const nid=b.getAttribute("data-accept"), actor=b.getAttribute("data-actor");
+      b.textContent="Aceptando…"; b.disabled=true;
+      const ok=await Cloud.acceptFriend(actor);
+      if(ok){ Cloud.clearNotif(nid); Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==nid); }); updateBadge();
+        Friends.syncFriends(); UI.toast("Solicitud aceptada","check","var(--green)"); openSheet(); }
+      else { b.textContent="Aceptar"; b.disabled=false; UI.toast("No se pudo aceptar","bell","var(--red)"); }
+    });
+    // rechazar solicitud de amistad
+    $$("#ntList [data-reject]").forEach(b=> b.onclick=async (e)=>{ e.stopPropagation(); haptic();
+      const nid=b.getAttribute("data-reject"), actor=b.getAttribute("data-actor");
+      await Cloud.rejectFriend(actor); Cloud.clearNotif(nid);
+      Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==nid); }); updateBadge();
+      UI.toast("Solicitud rechazada","check","var(--label-2)"); openSheet();
+    });
     // abrir foto (sin disparar al pulsar la ✕)
     $$("#ntList [data-photo]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return; Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}); });
     // marcar como leídas
@@ -3400,9 +3521,9 @@ function boot(){
       // Sondeo periódico: tareas compartidas + notificaciones nuevas; y cada
       // ~minuto, reconcilia la nube (borra del servidor lo que ya eliminaste)
       let tick=0;
-      setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); if((++tick%5)===0) Cloud.reconcile(); }, 12000);
+      setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); if((++tick%5)===0) Cloud.reconcile(); }, 12000);
       // Al volver a primer plano, refresca de inmediato
-      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); Cloud.reconcile(); } });
+      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); } });
     });
   }
 

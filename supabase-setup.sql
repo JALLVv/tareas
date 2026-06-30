@@ -221,7 +221,7 @@ create trigger trg_propagate_shared
 create table if not exists public.notifications (
   id          uuid default gen_random_uuid() primary key,
   recipient_id uuid, actor_id uuid, actor_name text,
-  type        text,                      -- 'shared_added' | 'shared_done'
+  type        text,                      -- 'shared_added' | 'shared_done' | 'friend_request'
   task_title  text, photo_url text,
   created_at  timestamptz default now(), read boolean default false
 );
@@ -234,6 +234,30 @@ create policy "notif_read"   on public.notifications for select to authenticated
 create policy "notif_insert" on public.notifications for insert to authenticated with check (auth.uid() = actor_id);   -- el actor crea la del destinatario
 create policy "notif_update" on public.notifications for update to authenticated using (auth.uid() = recipient_id);   -- marcar como leída
 create policy "notif_delete" on public.notifications for delete to authenticated using (auth.uid() = recipient_id);
+
+-- 5b) AMISTADES (solicitudes + amigos aceptados) ----------------------
+-- Una fila por relación. status 'pending' = solicitud enviada; 'accepted' = amigos.
+-- Borrar la fila = rechazar la solicitud o eliminar al amigo (afecta a ambos).
+create table if not exists public.friendships (
+  requester  uuid not null,
+  addressee  uuid not null,
+  status     text default 'pending',   -- 'pending' | 'accepted'
+  created_at timestamptz default now(),
+  primary key (requester, addressee)
+);
+alter table public.friendships enable row level security;
+drop policy if exists "fr_read"   on public.friendships;
+drop policy if exists "fr_insert" on public.friendships;
+drop policy if exists "fr_update" on public.friendships;
+drop policy if exists "fr_delete" on public.friendships;
+-- Los dos implicados pueden ver la relación.
+create policy "fr_read"   on public.friendships for select to authenticated using (auth.uid() = requester or auth.uid() = addressee);
+-- Solo tú envías solicitudes (como requester).
+create policy "fr_insert" on public.friendships for insert to authenticated with check (auth.uid() = requester);
+-- Solo el destinatario puede aceptar (cambiar a 'accepted').
+create policy "fr_update" on public.friendships for update to authenticated using (auth.uid() = addressee);
+-- Cualquiera de los dos puede borrar (rechazar o eliminar amigo) → desaparece para ambos.
+create policy "fr_delete" on public.friendships for delete to authenticated using (auth.uid() = requester or auth.uid() = addressee);
 
 -- 6) SUSCRIPCIONES DE PUSH (para notificaciones en segundo plano) ------
 create table if not exists public.push_subscriptions (
