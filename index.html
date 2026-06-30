@@ -446,9 +446,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .notif-ic svg{width:26px;height:26px;}
 .notif-item .gal-info .t b{color:var(--label);}
 .notif-item{position:relative;}
-.notif-req{display:flex;align-items:flex-start;gap:12px;}
-.notif-req .notif-ic{width:48px;height:48px;}
-.notif-req .gal-info{flex:1;min-width:0;}
+.notif-req{align-items:flex-start;}
 .notif-req .gal-info .t{white-space:normal;overflow:visible;line-height:1.35;}
 .req-actions{display:flex;gap:8px;margin-top:10px;}
 .req-actions .mini-btn{flex:0 0 auto;padding:7px 18px;}
@@ -3292,7 +3290,7 @@ const Notifs = (() => {
   }
   function notifHtml(n){
     if(n.type==='friend_request'){
-      return `<div class="card notif-item notif-req">
+      return `<div class="card gal-item notif-item notif-req">
         <div class="notif-ic add">${peopleSvg()}</div>
         <div class="gal-info">
           <div class="t"><b>${esc(n.actor_name||"Alguien")}</b> te ha enviado una solicitud de amistad</div>
