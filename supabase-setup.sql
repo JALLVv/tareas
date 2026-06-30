@@ -43,6 +43,8 @@ create table if not exists public.completions (
 -- Para tareas compartidas: con quién se completó (se muestra «con X» / «contigo»).
 alter table public.completions add column if not exists partner_id   uuid;
 alter table public.completions add column if not exists partner_name text;
+-- Id de la tarea compartida (para limpiar la completada cuando se borra la tarea).
+alter table public.completions add column if not exists shared_id    text;
 
 alter table public.completions enable row level security;
 
@@ -97,6 +99,79 @@ create policy "shared_read"   on public.shared_tasks for select to authenticated
 create policy "shared_insert" on public.shared_tasks for insert to authenticated with check (auth.uid() = owner_id);
 create policy "shared_update" on public.shared_tasks for update to authenticated using (auth.uid() = owner_id or auth.uid() = partner_id);
 create policy "shared_delete" on public.shared_tasks for delete to authenticated using (auth.uid() = owner_id or auth.uid() = partner_id);
+
+-- 4b) LIMPIEZA AUTOMÁTICA AL BORRAR UNA TAREA COMPARTIDA ----------------
+-- Cuando se borra una tarea compartida, este trigger (SECURITY DEFINER: corre
+-- con permisos elevados, salta RLS) elimina la completada del OTRO implicado y
+-- recalcula sus puntos y racha en la nube, SIN que su app tenga que abrirse.
+-- Así, si tú borras una compartida que tu amigo completó, su perfil se
+-- actualiza solo y todos lo ven al instante. Al que la borra (auth.uid()) no se
+-- le toca aquí: su propia app ya ajusta sus datos.
+
+-- Racha (actual y mejor) calculada desde las completadas de un usuario.
+create or replace function public.calc_streak(p_uid uuid)
+returns table(cur int, best int)
+language sql
+security definer
+set search_path = public
+as $$
+  with dates as (
+    select distinct date as d
+    from public.completions
+    where user_id = p_uid and date is not null
+  ),
+  grp as (
+    select d, (d - (row_number() over (order by d))::int) as g from dates
+  ),
+  runs as (
+    select count(*)::int as len, max(d) as end_d from grp group by g
+  )
+  select
+    coalesce((select len from runs
+              where end_d = current_date or end_d = current_date - 1
+              order by len desc limit 1), 0) as cur,
+    coalesce((select max(len) from runs), 0) as best;
+$$;
+
+create or replace function public.cleanup_shared_completions()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  u uuid;
+  lost int;
+  s record;
+begin
+  foreach u in array array[old.owner_id, old.partner_id]
+  loop
+    if u is null or u = auth.uid() then continue; end if;  -- al que borra no se le toca
+    begin
+      select coalesce(sum(points),0) into lost
+        from public.completions
+        where user_id = u and (id = 'sh_' || old.id or shared_id = old.id);
+      delete from public.completions
+        where user_id = u and (id = 'sh_' || old.id or shared_id = old.id);
+      select * into s from public.calc_streak(u);
+      update public.profiles set
+        points         = greatest(0, coalesce(points,0) - coalesce(lost,0)),
+        streak_current = coalesce(s.cur,0),
+        streak_best    = coalesce(s.best,0),
+        updated_at     = now()
+        where id = u;
+    exception when others then
+      null;  -- si la limpieza de un usuario falla, no bloquear el borrado
+    end;
+  end loop;
+  return old;
+end;
+$$;
+
+drop trigger if exists trg_cleanup_shared on public.shared_tasks;
+create trigger trg_cleanup_shared
+  after delete on public.shared_tasks
+  for each row execute function public.cleanup_shared_completions();
 
 -- 5) NOTIFICACIONES ---------------------------------------------------
 create table if not exists public.notifications (
