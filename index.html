@@ -1950,13 +1950,18 @@ const Tasks = (() => {
       tasks=tasks.filter(t=> !(t.shared && t.sharedId && !rowById[t.sharedId]));
       changed=true;
     }
-    // A2) limpiar también registros del historial de compartidas cuya fila ya no
-    //     existe, aunque ya no tengas la tarea local (residuos de borrados viejos).
+    // A2) limpiar registros del historial de tareas COMPARTIDAS cuya fila ya no
+    //     existe (la tarea se borró), aunque ya no tengas la tarea local. Cubre
+    //     tanto las que recibiste (id "sh_") como las que TÚ completaste (id
+    //     normal): a estas se les localiza la fila por su sharedId o, si es un
+    //     registro antiguo sin sharedId, por el título.
+    const norm = x => (x||"").trim();
     (s.history||[]).forEach(h=>{
-      if(h.shared && typeof h.id==='string' && h.id.slice(0,3)==='sh_'){
-        const sid=h.id.slice(3);
-        if(!rowById[sid]){ removeHistIds.add(h.id); removedPts+=(h.points||0); }
-      }
+      const isSh = typeof h.id==='string' && h.id.slice(0,3)==='sh_';
+      if(!h.shared && !isSh) return;
+      let sid = h.sharedId || (isSh ? h.id.slice(3) : null);
+      if(!sid){ const r=rows.find(r=> norm(r.title)===norm(h.title)); sid = r ? r.id : '__gone__'; }
+      if(sid==='__gone__' || !rowById[sid]){ removeHistIds.add(h.id); removedPts+=(h.points||0); }
     });
     if(removeHistIds.size) changed=true;
     // B) añadir las que me han compartido y aún no tengo (pendientes)
@@ -2343,7 +2348,8 @@ const Tasks = (() => {
         minutes:task.minutes, points:pts, random:task.random,
         date:dateKey(now), time:timeLabel(now), photoId: photoData?photoId:null,
         shared: !!task.shared, partnerName: task.shared?(task.partnerName||""):undefined,
-        partnerId: task.shared?(task.partnerId||null):undefined
+        partnerId: task.shared?(task.partnerId||null):undefined,
+        sharedId: task.shared?(task.sharedId||null):undefined
       };
       // marcar la tarea
       Store.update(s=>{
