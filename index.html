@@ -558,20 +558,35 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 
 /* Lightbox */
 .lightbox{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.94);
-  display:flex;align-items:center;justify-content:center;flex-direction:column;
-  opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);padding:env(safe-area-inset-top) 16px;}
+  display:flex;align-items:flex-start;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);}
 .lightbox.show{opacity:1;pointer-events:auto;}
-/* La imagen se ajusta a su tamaño (sin caja fija) para que no quede hueco
-   entre la foto y el título y las esquinas redondeadas se vean en la foto. */
-.lightbox img{max-width:100%;max-height:72vh;width:auto;height:auto;border-radius:20px;
+.lb-scroll{width:100%;max-width:560px;max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  display:flex;flex-direction:column;align-items:center;
+  padding:calc(env(safe-area-inset-top) + 56px) 16px calc(env(safe-area-inset-bottom) + 20px);}
+/* La imagen se ajusta a su tamaño (sin caja fija) para que no quede hueco. */
+.lightbox img{max-width:100%;max-height:62vh;width:auto;height:auto;border-radius:20px;flex:0 0 auto;
   transform:scale(0.92);transition:transform .35s var(--ease-out);}
 .lightbox.show img{transform:none;}
 .lightbox .lb-info{margin-top:12px;text-align:center;}
-.lightbox .lb-info .t{font-size:18px;font-weight:700;}
-.lightbox .lb-info .m{font-size:13px;color:var(--label-2);margin-top:5px;}
-.lightbox .lb-close{position:absolute;top:calc(env(safe-area-inset-top) + 14px);right:18px;
+.lightbox .lb-info .t{font-size:18px;font-weight:700;color:#fff;}
+.lightbox .lb-info .m{font-size:13px;color:rgba(255,255,255,0.6);margin-top:5px;}
+.lightbox .lb-close{position:absolute;top:calc(env(safe-area-inset-top) + 14px);right:18px;z-index:2;
   width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.16);display:grid;place-items:center;}
 .lightbox .lb-close svg{width:18px;height:18px;color:#fff;stroke-width:2.6;}
+.lb-comments{width:100%;margin-top:22px;text-align:left;}
+.lb-c-title{font-size:13px;font-weight:700;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px;}
+.lb-c-list{display:flex;flex-direction:column;gap:9px;}
+.lb-c-item{background:rgba(255,255,255,0.09);border-radius:14px;padding:10px 13px;}
+.lb-c-item .a{font-size:12.5px;font-weight:700;color:#fff;}
+.lb-c-item .x{font-size:14.5px;color:rgba(255,255,255,0.92);margin-top:3px;white-space:pre-wrap;word-break:break-word;line-height:1.35;}
+.lb-c-item .when{font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;}
+.lb-c-empty{font-size:13.5px;color:rgba(255,255,255,0.45);padding:2px 0 4px;}
+.lb-c-input{display:flex;gap:8px;margin-top:14px;}
+.lb-c-input input{flex:1;min-width:0;background:rgba(255,255,255,0.1);border:none;border-radius:13px;padding:12px 14px;color:#fff;font-size:16px;outline:none;}
+.lb-c-input input::placeholder{color:rgba(255,255,255,0.4);}
+.lb-c-input button{flex:0 0 auto;background:var(--blue);color:#fff;border:none;border-radius:13px;padding:0 18px;font-weight:700;font-size:14px;}
+.lb-c-input button:disabled{opacity:0.4;}
 
 /* =========================================================================
    OVERLAYS DE GAMIFICACIÓN · puntos, rango, racha
@@ -781,8 +796,15 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox">
   <button class="lb-close" id="lbClose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg></button>
-  <img id="lbImg" alt="evidencia" />
-  <div class="lb-info"><div class="t" id="lbTitle"></div><div class="m" id="lbMeta"></div></div>
+  <div class="lb-scroll" id="lbScroll">
+    <img id="lbImg" alt="evidencia" />
+    <div class="lb-info"><div class="t" id="lbTitle"></div><div class="m" id="lbMeta"></div></div>
+    <div class="lb-comments" id="lbComments" style="display:none">
+      <div class="lb-c-title">Comentarios</div>
+      <div class="lb-c-list" id="lbCList"></div>
+      <div class="lb-c-input"><input id="lbCInput" type="text" placeholder="Escribe un comentario…" maxlength="300"/><button id="lbCSend">Enviar</button></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -2429,17 +2451,18 @@ const Tasks = (() => {
       Gamify.awardCompletion(entry);
       render(); UI.renderProfile();
       // sincronizar con la nube (si está activada)
-      if (Cloud.enabled()){ Cloud.pushCompletion(entry, photoData); Cloud.pushProfile(); }
-      // tarea compartida: subir la foto, marcar la fila como hecha y avisar al compañero
+      if (Cloud.enabled()){
+        Cloud.pushCompletion(entry, photoData); Cloud.pushProfile();
+        // avisar a TODOS mis amigos por push (el aviso in-app lo crea el trigger
+        // al insertarse la completada). Aplica a cualquier tarea, compartida o no.
+        Cloud.pushFriendsCompletion(task.title);
+      }
+      // tarea compartida: subir la foto y marcar la fila como hecha (para ambos)
       if (task.shared && task.sharedId && Cloud.enabled() && photoData){
         (async ()=>{
           let url=null;
           try{ url = await uploadSharedPhoto(task.sharedId, photoData); }catch(e){}
           try{ await Cloud.completeShared(task.sharedId, { status:'done', completed_by:Cloud.myId(), photo_url:url, points:pts, done_date:entry.date, done_time:entry.time }); }catch(e){}
-          // avisar al compañero SIEMPRE (solo push; la fila in-app la crea su
-          // propio teléfono al detectar la completada, ver syncShared)
-          const other = (task.ownerId===Cloud.myId()) ? task.partnerId : task.ownerId;
-          if(other) Cloud.notify(other, 'shared_done', task.title, url, true);
         })();
       }
     };
@@ -2791,7 +2814,7 @@ const Cloud = (() => {
       if(e1) throw e1;
       if(!prof) return null;
       const { data:comps } = await client.from('completions').select('*').eq('user_id',id).order('date',{ascending:false}).limit(500);
-      const history=(comps||[]).map(c=>({ id:c.id, date:c.date, title:c.title||"", category:c.category||"", points:c.points||0, time:c.time||"", photoUrl:c.photo_url||null, partnerId:c.partner_id||null, partnerName:c.partner_name||"" }));
+      const history=(comps||[]).map(c=>({ id:c.id, sharedId:c.shared_id||null, date:c.date, title:c.title||"", category:c.category||"", points:c.points||0, time:c.time||"", photoUrl:c.photo_url||null, partnerId:c.partner_id||null, partnerName:c.partner_name||"" }));
       const dates=[...new Set(history.map(h=>h.date).filter(Boolean))];
       return { cloudId:id, name:prof.name||"Amigo", avatar:prof.avatar_url||null,
         points:prof.points||0, streak:{current:prof.streak_current||0, best:prof.streak_best||0, lastDate:null}, dates, history };
@@ -2911,6 +2934,26 @@ const Cloud = (() => {
     try{ await client.from('friendships').insert({ requester:uid, addressee:otherId, status:'accepted' }); return true; }
     catch(e){ return false; }
   }
+  // Envía un push a TODOS mis amigos cuando completo una tarea (el aviso in-app
+  // lo crea el trigger del servidor; esto es solo el aviso del sistema).
+  async function pushFriendsCompletion(title, photoUrl){
+    if(!enabled() || !await init() || !client) return;
+    const name=(Store.get().profile.name||"Atleta");
+    const friends=(Store.get().friends||[]).filter(f=>f.cloudId);
+    friends.forEach(f=> sendPush(f.cloudId, "Tareas", `${name} completó una tarea`, photoUrl||null));
+  }
+  /* ---------- Comentarios en tareas completadas ---------- */
+  async function fetchComments(key){
+    if(!enabled() || !await init() || !client || !key) return [];
+    try{ const { data }=await client.from('comments').select('*').eq('completion_key', key).order('created_at',{ascending:true}); return data||[]; }
+    catch(e){ console.warn("fetchComments:", e && e.message); return []; }
+  }
+  async function addComment(key, text){
+    if(!enabled() || !await init() || !client || !key || !text) return false;
+    const name=(Store.get().profile.name||"Atleta");
+    try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text }); if(error) throw error; return true; }
+    catch(e){ console.warn("addComment:", e && e.message); return false; }
+  }
   async function fetchNotifs(){
     if(!enabled() || !await init() || !client) return [];
     try{ const { data }=await client.from('notifications').select('*').eq('recipient_id',uid).order('created_at',{ascending:false}).limit(100); return data||[]; }
@@ -3007,7 +3050,8 @@ const Cloud = (() => {
 
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
     createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, notifySelf, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
-    sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend };
+    sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
+    pushFriendsCompletion, fetchComments, addComment };
 })();
 
 /* =====================================================================
@@ -3272,9 +3316,9 @@ const Friends = (() => {
   }
 
   // Galería del día de un amigo: fotos (URL) + títulos
-  async function openFriendDay(f, key){
+  function openFriendDay(f, key){
     stopPoll(); gen++; haptic();
-    await loadMyShared(); // asegura mis compartidas cargadas antes de pintar (evita parpadeo)
+    loadMyShared(); // refresca mis compartidas en segundo plano (ya suele estar cargado)
     f = Store.get().friends.find(x=>x.id===f.id) || f; // usar los datos más frescos del store
     const myCloudId=Cloud.myId&&Cloud.myId();
     const sw=sharedWith(f.cloudId); // tareas que comparto con este amigo (para "Contigo")
@@ -3313,7 +3357,7 @@ const Friends = (() => {
       const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
       if(h.photoUrl){
         const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
-        thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl,{title:h.title,time:h.time,category:h.category,points:h.points});
+        thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl,h);
       } else thumb.innerHTML=noPhotoThumb();
     });
   }
@@ -3434,12 +3478,44 @@ function shortTitle(s, maxWords=10, keep=7){
 /* Lightbox */
 const Lightbox = (() => {
   const box=$("#lightbox"), img=$("#lbImg"), t=$("#lbTitle"), m=$("#lbMeta");
-  function show(data,h){ img.src=data; t.textContent=h.title;
-    m.textContent=`${h.time} · ${h.category} · ${h.points} pts`;
-    box.classList.add("show"); haptic(); }
-  function hide(){ box.classList.remove("show"); }
+  const scroll=$("#lbScroll"), cWrap=$("#lbComments"), cList=$("#lbCList"), cInput=$("#lbCInput"), cSend=$("#lbCSend");
+  let curKey=null, curGen=0;
+  function ago(iso){ try{ const d=(Date.now()-new Date(iso).getTime())/1000;
+    if(d<60) return "ahora"; if(d<3600) return `hace ${Math.floor(d/60)} min`;
+    if(d<86400) return `hace ${Math.floor(d/3600)} h`; return `hace ${Math.floor(d/86400)} d`; }catch(e){ return ""; } }
+  function renderComments(list){
+    if(!list || !list.length){ cList.innerHTML=`<div class="lb-c-empty">Sé el primero en comentar.</div>`; return; }
+    cList.innerHTML=list.map(c=>`<div class="lb-c-item"><div class="a">${esc(c.author_name||"Alguien")}</div><div class="x">${esc(c.text||"")}</div><div class="when">${ago(c.created_at)}</div></div>`).join("");
+  }
+  async function load(key, gen){
+    cList.innerHTML=`<div class="lb-c-empty">Cargando…</div>`;
+    const list=await Cloud.fetchComments(key);
+    if(gen===curGen) renderComments(list);
+  }
+  function show(data,h){
+    h=h||{};
+    img.src=data; t.textContent=h.title||"";
+    m.textContent=[h.time,h.category,(h.points!=null?h.points+" pts":"")].filter(Boolean).join(" · ");
+    box.classList.add("show"); haptic();
+    if(scroll) scroll.scrollTop=0;
+    curKey = (h.sharedId || h.id || h.key) || null; // clave de la completada
+    curGen++;
+    if(curKey && Cloud.enabled()){ cWrap.style.display="block"; load(curKey, curGen); }
+    else { cWrap.style.display="none"; }
+  }
+  function hide(){ box.classList.remove("show"); curKey=null; curGen++; if(cInput) cInput.value=""; }
   $("#lbClose").onclick=hide;
   box.onclick=(e)=>{ if(e.target===box) hide(); };
+  async function send(){
+    const txt=(cInput.value||"").trim(); if(!txt || !curKey) return;
+    cInput.value=""; cInput.blur();
+    const key=curKey, gen=curGen;
+    const ok=await Cloud.addComment(key, txt);
+    if(!ok){ UI.toast("No se pudo comentar","bell","var(--red)"); }
+    if(gen===curGen) load(key, gen);
+  }
+  if(cSend) cSend.onclick=send;
+  if(cInput) cInput.addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefault(); send(); } });
   return { show, hide };
 })();
 
