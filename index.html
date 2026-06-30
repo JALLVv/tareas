@@ -449,8 +449,9 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .notif-req{display:flex;align-items:flex-start;gap:12px;}
 .notif-req .notif-ic{width:48px;height:48px;}
 .notif-req .gal-info{flex:1;min-width:0;}
+.notif-req .gal-info .t{white-space:normal;overflow:visible;line-height:1.35;}
 .req-actions{display:flex;gap:8px;margin-top:10px;}
-.req-actions .mini-btn{padding:7px 18px;}
+.req-actions .mini-btn{flex:0 0 auto;padding:7px 18px;}
 .notif-del{flex:0 0 auto;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;align-self:center;
   color:var(--label-2);background:rgba(120,120,128,0.18);font-size:13px;line-height:1;border:none;}
 .notif-del:active{transform:scale(0.88);}
@@ -2967,6 +2968,7 @@ const Friends = (() => {
   // un amigo SIN depender de que él haya sincronizado (se calcula desde aquí).
   let myShared = [];
   let mySharedLoaded = false; // true solo tras una carga EXITOSA (para ocultar con seguridad)
+  const removedFriends = new Set(); // ids recién eliminados: que el sondeo no los re-añada
   async function loadMyShared(){ if(!Cloud.enabled()) return; const r=await Cloud.fetchShared(); if(r!==null){ myShared=r; mySharedLoaded=true; } }
   // Conjuntos para reconocer rápido las tareas que comparto con ESTE amigo.
   function sharedWith(friendCloudId){
@@ -2999,14 +3001,18 @@ const Friends = (() => {
           <button class="mini-btn accent" id="friendAdd">Añadir amigo</button>
         </div>
         <div id="friendsList"></div>
-        ${avail?'<div class="hint" style="text-align:center;margin-top:18px;"><span id="frResync" style="color:var(--blue);cursor:pointer">Re-sincronizar mis datos</span></div>':''}
       </div>`);
     $("#frClose").onclick=Sheets.close;
     $("#friendShare").onclick=()=>{ haptic(); shareSheet(); };
     $("#friendAdd").onclick=()=>{ haptic(); addSheet(); };
-    const rs=$("#frResync"); if(rs) rs.onclick=async ()=>{ haptic(); UI.toast("Re-sincronizando…","check","var(--blue)"); const ok=await Cloud.forceResync(); UI.toast(ok?"Datos re-sincronizados":"No se pudo","check",ok?"var(--green)":"var(--red)"); };
     renderList();
     refreshAll(myGen); // actualiza la lista en segundo plano
+    // sondeo EN VIVO de la lista mientras está abierta (puntos/racha/altas/bajas)
+    stopPoll();
+    pollTimer=setInterval(()=>{
+      if(myGen!==gen || !$("#friendsList")){ stopPoll(); return; }
+      refreshAll(myGen);
+    }, 8000);
   }
   function renderList(){
     const wrap=$("#friendsList"); if(!wrap) return;
@@ -3033,8 +3039,10 @@ const Friends = (() => {
     const rows=await Cloud.fetchFriendships();
     let changed=false;
     if(rows!==null){ // null = fallo de red: no tocar la lista
-      const accepted=new Set();
-      rows.forEach(r=>{ if(r.status==='accepted') accepted.add(r.requester===myId? r.addressee : r.requester); });
+      const accepted=new Set(), known=new Set();
+      rows.forEach(r=>{ const o=r.requester===myId? r.addressee : r.requester; known.add(o); if(r.status==='accepted') accepted.add(o); });
+      // si la eliminación ya se confirmó en la nube (sin fila), libera el bloqueo
+      removedFriends.forEach(id=>{ if(!known.has(id)) removedFriends.delete(id); });
       const toMigrate=[];
       // 1) reconciliar: mantener aceptados; quitar los ya confirmados que el otro
       //    eliminó (linked y sin amistad); migrar amigos antiguos (solo locales).
@@ -3042,6 +3050,7 @@ const Friends = (() => {
         const keep=[];
         (st.friends||[]).forEach(f=>{
           if(!f.cloudId){ keep.push(f); return; }
+          if(removedFriends.has(f.cloudId)){ changed=true; return; }   // recién eliminado: fuera
           if(accepted.has(f.cloudId)){ f.linked=true; keep.push(f); }
           else if(f.linked){ changed=true; /* eliminado por el otro → fuera de la lista */ }
           else { keep.push(f); toMigrate.push(f.cloudId); }
@@ -3051,6 +3060,7 @@ const Friends = (() => {
       toMigrate.forEach(oid=> Cloud.linkFriend(oid)); // antiguos → amistad aceptada (se confirma luego)
       // 2) añadir los amigos aceptados que aún no tengo en la lista
       for(const oid of accepted){
+        if(removedFriends.has(oid)) continue; // no re-añadir lo que acabo de eliminar
         if(!Store.get().friends.some(f=>f.cloudId===oid)){
           const fr=await Cloud.pullFriend(oid);
           if(fr){ Store.update(st=>{ if(!st.friends.some(f=>f.cloudId===oid)) st.friends.unshift({ id:uid(), ...fr, linked:true, addedAt:Date.now() }); }); changed=true; }
@@ -3151,7 +3161,12 @@ const Friends = (() => {
       </div>`);
     $("#fpBack").onclick=openSheet;
     $("#fpClose").onclick=()=>{ stopPoll(); Sheets.close(); };
-    $("#fpDel").onclick=()=>{ haptic(20); stopPoll(); if(f.cloudId) Cloud.removeFriendCloud(f.cloudId); Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); }); UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); };
+    $("#fpDel").onclick=async ()=>{ haptic(20); stopPoll();
+      if(f.cloudId) removedFriends.add(f.cloudId);                 // bloquea re-añadir hasta confirmar
+      Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); });
+      UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); // instantáneo, sin el amigo
+      if(f.cloudId) await Cloud.removeFriendCloud(f.cloudId);       // borra la amistad para ambos
+    };
     function draw(){
       const y=cal.getFullYear(), m=cal.getMonth();
       $("#fpMonth").textContent = MONTHS[m].charAt(0).toUpperCase()+MONTHS[m].slice(1)+" "+y;
