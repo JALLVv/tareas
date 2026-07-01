@@ -1949,13 +1949,25 @@ const Sheets = (() => {
     scrim.onclick = close;
     return host;
   }
+  // Cambia el contenido de un sheet YA ABIERTO (p.ej. navegar de un perfil a
+  // uno de sus días y volver) sin reiniciar la animación de entrada: si se
+  // usara open() ahí, quitaría y volvería a poner "show" y la hoja completa
+  // se vería "temblar" (baja y vuelve a subir) en cada navegación.
+  function swap(html, cls){
+    host.className = "sheet show" + (cls?(" "+cls):"");
+    host.innerHTML = html;
+    scrim.classList.add("show");
+    haptic();
+    scrim.onclick = close;
+    return host;
+  }
   function close(){
     host.classList.remove("show");
     scrim.classList.remove("show");
     if (onClose){ const f=onClose; onClose=null; setTimeout(f,300); }
   }
   function setOnClose(f){ onClose=f; }
-  return { open, close, setOnClose, host };
+  return { open, swap, close, setOnClose, host };
 })();
 
 /* =====================================================================
@@ -3419,7 +3431,11 @@ const Friends = (() => {
     const fv = f; // los datos de la nube ya son correctos (el trigger limpia al borrar)
     let cal = initialMonth ? new Date(initialMonth.y, initialMonth.m, 1) : new Date();
     const dateSet=new Set(fv.dates||[]);
-    Sheets.open(`
+    // Si el sheet YA estaba abierto (volviendo de ver un día, o el re-pintado
+    // del sondeo en vivo) se usa swap(): mismo contenido, sin re-animar toda la
+    // hoja (evita el "temblor"). Solo al abrir de cero (desde la lista) se anima.
+    const alreadyOpen = !!fetched || restoreScrollTop!=null;
+    (alreadyOpen ? Sheets.swap : Sheets.open)(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" id="fpBack">‹ Atrás</span><span class="title">Amigo</span><span class="act" id="fpClose">Cerrar</span></div>
       <div class="sheet-body">
@@ -3524,7 +3540,9 @@ const Friends = (() => {
     const items=(f.history||[]).filter(h=>h.date===key).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
     const [y,mo,d]=key.split("-");
     const title=`${parseInt(d)} de ${MONTHS[parseInt(mo)-1]}`;
-    Sheets.open(`
+    // siempre se entra aquí desde el perfil ya abierto: swap() evita el "temblor"
+    // de reanimar toda la hoja al navegar.
+    Sheets.swap(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" id="fdBack">‹ Atrás</span><span class="title">${title}</span><span class="act" id="fdClose">Listo</span></div>
       <div class="sheet-body"><div class="day-gallery" id="fdList"></div></div>`);
