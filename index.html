@@ -3766,6 +3766,10 @@ function boot(){
   Tasks.render();
   Profile.render();
 
+  // Al volver a primer plano, re-pinta la lista siempre (para que las tareas
+  // "solo hoy"/fecha vencidas desaparezcan solas), sin depender de la nube.
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden) Tasks.render(); });
+
   // Nube (si está activada): inicia sesión y sube perfil + historial en segundo plano
   if (Cloud.enabled()){
     Cloud.init().then(id=>{
@@ -3781,7 +3785,7 @@ function boot(){
       let tick=0;
       setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); if((++tick%5)===0) Cloud.reconcile(); }, 12000);
       // Al volver a primer plano, refresca de inmediato
-      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.render(); Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); } });
+      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); } });
     });
   }
 
@@ -3793,7 +3797,22 @@ function boot(){
     window.addEventListener("load",()=> navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
   }
 }
-document.addEventListener("DOMContentLoaded", boot);
+document.addEventListener("DOMContentLoaded", ()=>{
+  try{ boot(); }
+  catch(e){
+    // Si algo falla al arrancar (pantalla en negro), en vez de quedarse
+    // atascado se recarga una sola vez sola (evita bucles si el fallo persiste).
+    console.error("boot():", e);
+    if(!sessionStorage.getItem("rachas_boot_retry")){
+      sessionStorage.setItem("rachas_boot_retry","1");
+      location.reload();
+    }
+  }
+});
+// iOS a veces "congela" la app en segundo plano y, al reabrirla, Safari la
+// restaura desde su caché interna (bfcache) con la pantalla en negro en vez
+// de reanudarla. Forzar una recarga en ese caso la deja siempre funcional.
+window.addEventListener("pageshow",(e)=>{ if(e.persisted) location.reload(); });
 
 // exponer para depuración
 window.RachasApp = { Store, Router };
