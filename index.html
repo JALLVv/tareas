@@ -4090,6 +4090,18 @@ document.addEventListener("DOMContentLoaded", ()=>{
 // restaura desde su caché interna (bfcache) con la pantalla en negro en vez
 // de reanudarla. Forzar una recarga en ese caso la deja siempre funcional.
 window.addEventListener("pageshow",(e)=>{ if(e.persisted) location.reload(); });
+// Además (caso más común: cambiar a otra app y volver, sin pasar por
+// bfcache): el WebView de iOS a veces deja su render "congelado" en negro al
+// volver a primer plano. Forzar un repintado lo despierta al instante, sin
+// perder nada de lo que estabas haciendo (no hace falta recargar la página).
+document.addEventListener("visibilitychange", ()=>{
+  if(!document.hidden){
+    const b=document.body;
+    b.style.display="none";
+    void b.offsetHeight; // fuerza el reflow
+    b.style.display="";
+  }
+});
 
 // exponer para depuración
 window.RachasApp = { Store, Router };
