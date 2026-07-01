@@ -2875,7 +2875,7 @@ const Cloud = (() => {
     }
     try{
       await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
-        category:entry.category, points:entry.points, time:entry.time, photo_url,
+        category:entry.category, points:entry.points, time:entry.time, photo_url, random:!!entry.random,
         partner_id:entry.partnerId||null, partner_name:entry.partnerName||null, shared_id:entry.sharedId||null });
       // solo se marca como sincronizada si la foto subió (o no había). Si la foto
       // falló, se reintenta en el próximo arranque (syncBacklog).
@@ -2890,7 +2890,7 @@ const Cloud = (() => {
     try{
       const sid = entry.sharedId || (typeof entry.id==='string' && entry.id.slice(0,3)==='sh_' ? entry.id.slice(3) : null);
       await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
-        category:entry.category, points:entry.points, time:entry.time, photo_url:entry.photoUrl||null,
+        category:entry.category, points:entry.points, time:entry.time, photo_url:entry.photoUrl||null, random:false,
         partner_id:entry.partnerId||null, partner_name:entry.partnerName||null, shared_id:sid });
       markSynced(entry.id);
     }catch(e){ console.warn("pushSharedCompletion:", e && e.message); }
@@ -2914,7 +2914,7 @@ const Cloud = (() => {
           photoUrl:h.photoUrl, partnerId:h.partnerId, partnerName:h.partnerName });
       } else {
         let photo=null; if(h.photoId){ try{ photo=await DB.get(h.photoId); }catch(e){} }
-        await pushCompletion({ id:h.id, date:h.date, title:h.title, category:h.category, points:h.points, time:h.time,
+        await pushCompletion({ id:h.id, date:h.date, title:h.title, category:h.category, points:h.points, time:h.time, random:h.random,
           partnerId:h.partnerId, partnerName:h.partnerName }, photo);
       }
     }
@@ -2945,7 +2945,7 @@ const Cloud = (() => {
       if(e1) throw e1;
       if(!prof) return null;
       const { data:comps } = await client.from('completions').select('*').eq('user_id',id).order('date',{ascending:false}).limit(500);
-      const history=(comps||[]).map(c=>({ id:c.id, sharedId:c.shared_id||null, date:c.date, title:c.title||"", category:c.category||"", points:c.points||0, time:c.time||"", photoUrl:c.photo_url||null, partnerId:c.partner_id||null, partnerName:c.partner_name||"" }));
+      const history=(comps||[]).map(c=>({ id:c.id, sharedId:c.shared_id||null, date:c.date, title:c.title||"", category:c.category||"", points:c.points||0, time:c.time||"", photoUrl:c.photo_url||null, partnerId:c.partner_id||null, partnerName:c.partner_name||"", random:!!c.random }));
       const dates=[...new Set(history.map(h=>h.date).filter(Boolean))];
       return { cloudId:id, name:prof.name||"Amigo", avatar:prof.avatar_url||null,
         points:prof.points||0, streak:{current:prof.streak_current||0, best:prof.streak_best||0, lastDate:null}, dates, history };
@@ -3437,9 +3437,11 @@ const Friends = (() => {
           <div class="streak-info"><div class="big">${fv.streak.current}${fv.streak.current===1?" día":" días"}</div><div class="small">Racha actual</div></div>
           <div class="streak-best"><div class="v">${fv.streak.best}</div><div class="l">Mejor racha</div></div>
         </div>
-        <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat-grid">
           <div class="card stat"><div class="v gold">${fv.points}</div><div class="l">Puntos totales</div></div>
-          <div class="card stat"><div class="v">${(fv.dates||[]).length}</div><div class="l">Días activos</div></div>
+          <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Tareas completadas</div></div>
+          <div class="card stat"><div class="v pur">${(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Tareas aleatorias</div></div>
+          <div class="card stat"><div class="v grn">${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Tareas normales</div></div>
         </div>
         ${weekSummaryHtml(weeklySummaryFor(fv.history), {mine:false})}
         <div class="card cal-card" style="margin-top:14px;">
