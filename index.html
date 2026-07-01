@@ -526,6 +526,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
   box-shadow:0 -20px 60px rgba(0,0,0,0.6);
   padding-bottom:calc(var(--safe-bottom) + 16px);
   transform:translateY(100%);transition:transform .42s var(--ease);
+  will-change:transform;
 }
 .sheet.show{transform:none;}
 .grabber{width:38px;height:5px;border-radius:3px;background:var(--label-4);margin:9px auto 4px;flex:0 0 auto;}
@@ -1615,8 +1616,14 @@ function weeklySummaryFor(history){
     : diffPoints>0 ? { emoji:"📈", label:"Semana en subida" }
     : diffPoints<0 ? { emoji:"📉", label:"Semana más floja" }
     : { emoji:"⚖️", label:"Ritmo constante" };
+  // El resumen de una semana está disponible solo 48 horas después de crearse
+  // (se "crea" justo cuando esa semana termina, es decir, al empezar la
+  // semana en curso): los primeros dos días de la semana en curso.
+  const thisMonday = mondayOf(dateKey());
+  const availableUntil = shiftDate(thisMonday, 2);
+  const available = hasData && dateKey() < availableUntil;
   return { weekStart, weekEnd, points:cur.points, tasks:cur.tasks, topCategory:cur.topCategory, topCount:cur.topCount,
-    diffPoints, diffTasks, hasData, hadEarlierActivity, vibe };
+    diffPoints, diffTasks, hasData, hadEarlierActivity, vibe, available };
 }
 function weekRangeLabel(weekStart, weekEnd){
   const mo=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -1629,12 +1636,13 @@ function weekDiffLine(verb, diff, singular, plural){
   return `${verb} ${abs} ${noun} ${diff>0?"más":"menos"} que la semana anterior`;
 }
 // Tarjeta HTML del resumen (misma para tu perfil y el de un amigo; "mine"
-// decide primera/tercera persona: Obtuviste/Obtuvo, Hiciste/Hizo).
+// decide primera/tercera persona: Obtuviste/Obtuvo, Hiciste/Hizo). Los
+// números llevan data-count para el contador animado (ver animateCounters).
 function weekSummaryHtml(ws, opts){
-  opts=opts||{}; const mine=!!opts.mine;
+  opts=opts||{}; const mine=!!opts.mine, hideTitle=!!opts.hideTitle;
   if(!ws.hasData){
     return `<div class="card week-card">
-      <div class="week-head"><span class="t">Resumen de la semana</span></div>
+      ${hideTitle?"":'<div class="week-head"><span class="t">Resumen de la semana</span></div>'}
       <div class="week-empty">${mine?"Tu resumen aparecerá aquí en cuanto termine tu primera semana completa.":"Su resumen aparecerá aquí en cuanto termine su primera semana completa."}</div>
     </div>`;
   }
@@ -1644,17 +1652,44 @@ function weekSummaryHtml(ws, opts){
       <div class="week-cmp">${esc(weekDiffLine(ptsVerb, ws.diffPoints, "punto","puntos"))}</div>
       <div class="week-cmp">${esc(weekDiffLine(taskVerb, ws.diffTasks, "tarea","tareas"))}</div>`
     : `<div class="week-cmp muted">${mine?"Aún no tienes":"Aún no tiene"} una semana anterior con la que comparar.</div>`;
-  const top = ws.topCategory ? `<div class="week-top">${mine?"Tu categoría estrella":"Su categoría estrella"}: <b>${esc(ws.topCategory)}</b> (${ws.topCount})</div>` : "";
+  const top = ws.topCategory ? `<div class="week-top">${mine?"Tu categoría estrella":"Su categoría estrella"}: <b>${esc(ws.topCategory)}</b> (<span data-count="${ws.topCount}">0</span>)</div>` : "";
   return `<div class="card week-card">
-    <div class="week-head"><span class="t">Resumen de la semana</span><span class="range">${esc(range)}</span></div>
+    <div class="week-head">${hideTitle?"":'<span class="t">Resumen de la semana</span>'}<span class="range">${esc(range)}</span></div>
     <div class="week-vibe">${ws.vibe.emoji} ${esc(ws.vibe.label)}</div>
     <div class="week-grid">
-      <div class="wk-stat"><div class="v gold">${ws.points}</div><div class="l">Puntos</div></div>
-      <div class="wk-stat"><div class="v">${ws.tasks}</div><div class="l">Tareas</div></div>
+      <div class="wk-stat"><div class="v gold" data-count="${ws.points}">0</div><div class="l">Puntos</div></div>
+      <div class="wk-stat"><div class="v" data-count="${ws.tasks}">0</div><div class="l">Tareas</div></div>
     </div>
     ${cmp}
     ${top}
   </div>`;
+}
+// Anima de 0 al valor final todos los números marcados con data-count dentro
+// de un contenedor (usado al abrir el resumen de la semana).
+function animateCounters(root, duration){
+  duration = duration || 900;
+  const els=(root||document).querySelectorAll("[data-count]");
+  els.forEach(el=>{
+    const target=parseInt(el.getAttribute("data-count"),10)||0;
+    const t0=performance.now();
+    function tick(now){
+      const p=Math.min(1,(now-t0)/duration);
+      const eased=1-Math.pow(1-p,3);
+      el.textContent=Math.round(target*eased);
+      if(p<1) requestAnimationFrame(tick); else el.textContent=target;
+    }
+    requestAnimationFrame(tick);
+  });
+}
+// Abre el resumen de la semana como su propia hoja (botón "Ver resumen
+// semanal" en un perfil, o al tocar el aviso "Ya está disponible…").
+function openWeekSummarySheet(ws, opts){
+  Sheets.open(`
+    <div class="grabber"></div>
+    <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Resumen de la semana</span><span class="act" id="wsClose">Cerrar</span></div>
+    <div class="sheet-body">${weekSummaryHtml(ws, {...(opts||{}), hideTitle:true})}</div>`);
+  $("#wsClose").onclick=Sheets.close;
+  animateCounters($("#sheet"));
 }
 
 /* ---------------------------------------------------------------------
@@ -2710,8 +2745,12 @@ const Profile = (() => {
     $("#stRandom").textContent = rnd;
     $("#stNormal").textContent = total-rnd;
 
-    // resumen de la semana (lunes-domingo, última ya terminada)
-    $("#weekCardWrap").innerHTML = weekSummaryHtml(weeklySummaryFor(s.history), {mine:true});
+    // resumen de la semana (lunes-domingo, última ya terminada): un botón que
+    // solo aparece durante las 48 h de disponibilidad; se abre en su propia hoja.
+    const ws = weeklySummaryFor(s.history);
+    const wrap = $("#weekCardWrap");
+    wrap.innerHTML = ws.available ? `<button class="btn secondary" id="weekSummaryBtn" style="margin-top:14px;">Ver resumen semanal</button>` : "";
+    if(ws.available){ $("#weekSummaryBtn").onclick=()=>{ haptic(); openWeekSummarySheet(ws, {mine:true}); }; }
 
     renderCalendar();
   }
@@ -3431,6 +3470,7 @@ const Friends = (() => {
     const fv = f; // los datos de la nube ya son correctos (el trigger limpia al borrar)
     let cal = initialMonth ? new Date(initialMonth.y, initialMonth.m, 1) : new Date();
     const dateSet=new Set(fv.dates||[]);
+    const fpWs = weeklySummaryFor(fv.history); // resumen de la semana (botón, si está disponible)
     // Si el sheet YA estaba abierto (volviendo de ver un día, o el re-pintado
     // del sondeo en vivo) se usa swap(): mismo contenido, sin re-animar toda la
     // hoja (evita el "temblor"). Solo al abrir de cero (desde la lista) se anima.
@@ -3459,7 +3499,7 @@ const Friends = (() => {
           <div class="card stat"><div class="v pur">${(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Tareas aleatorias</div></div>
           <div class="card stat"><div class="v grn">${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Tareas normales</div></div>
         </div>
-        ${weekSummaryHtml(weeklySummaryFor(fv.history), {mine:false})}
+        ${fpWs.available?'<button class="btn secondary" id="fpWeekBtn" style="margin-top:14px;">Ver resumen semanal</button>':''}
         <div class="card cal-card" style="margin-top:14px;">
           <div class="cal-head"><span class="m" id="fpMonth">—</span>
             <div class="cal-nav">
@@ -3479,6 +3519,7 @@ const Friends = (() => {
       UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); // instantáneo, sin el amigo
       if(f.cloudId) await Cloud.removeFriendCloud(f.cloudId);       // borra la amistad para ambos
     };
+    if(fpWs.available){ const wb=$("#fpWeekBtn"); if(wb) wb.onclick=()=>{ haptic(); openWeekSummarySheet(fpWs, {mine:false}); }; }
     function draw(){
       const y=cal.getFullYear(), m=cal.getMonth();
       $("#fpMonth").textContent = MONTHS[m].charAt(0).toUpperCase()+MONTHS[m].slice(1)+" "+y;
@@ -3498,9 +3539,16 @@ const Friends = (() => {
     $("#fpPrev").onclick=()=>{ cal.setMonth(cal.getMonth()-1); haptic(); draw(); };
     $("#fpNext").onclick=()=>{ cal.setMonth(cal.getMonth()+1); haptic(); draw(); };
     draw();
-    // al volver de ver un día con "Atrás", queda donde estabas (no salta al inicio)
+    // al volver de ver un día con "Atrás", queda donde estabas (no salta al inicio).
+    // En iOS, fijar el scroll mientras el desplazamiento con inercia del gesto
+    // anterior aún "corre" produce un pequeño rebote visual (sube y vuelve a
+    // bajar): se corta esa inercia apagando el scroll táctil un instante antes.
     const sheetBodyEl = $(".sheet-body");
-    if(restoreScrollTop!=null && sheetBodyEl) sheetBodyEl.scrollTop=restoreScrollTop;
+    if(restoreScrollTop!=null && sheetBodyEl){
+      sheetBodyEl.style.webkitOverflowScrolling="auto";
+      sheetBodyEl.scrollTop=restoreScrollTop;
+      requestAnimationFrame(()=>{ sheetBodyEl.style.webkitOverflowScrolling="touch"; });
+    }
     // sigue el scroll y el mes en vivo, para que un re-pintado (sondeo en vivo)
     // conserve dónde estabas en vez de reiniciar la vista por defecto: la
     // estructura solo se reinicia al VOLVER A ABRIR el perfil desde la lista.
@@ -3652,7 +3700,7 @@ const Notifs = (() => {
       </div>`;
     }
     if(n.type==='weekly_summary'){
-      return `<div class="card gal-item notif-item" data-goto-profile="1">
+      return `<div class="card gal-item notif-item" data-open-week-summary="1">
         <div class="notif-ic done" style="font-size:19px;">📊</div>
         <div class="gal-info"><div class="t">Ya está disponible tu resumen de la semana</div><div class="m">${timeAgo(n.created_at)}</div></div>
         <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
@@ -3756,9 +3804,9 @@ const Notifs = (() => {
         if(h){ meta={ time:h.time, category:h.category, points:h.points }; title=h.title||title; }
       }
       Lightbox.show(c.getAttribute("data-photo"), { title, key, ownerId:c.getAttribute("data-owner")||null, ...meta }); });
-    // abrir el resumen de la semana desde el aviso: cierra el menú y va a tu perfil
-    $$("#ntList [data-goto-profile]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return;
-      Sheets.close(); Router.go("profile"); });
+    // abrir el resumen de la semana directamente desde el aviso
+    $$("#ntList [data-open-week-summary]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return;
+      openWeekSummarySheet(weeklySummaryFor(Store.get().history), {mine:true}); });
     // marcar como leídas
     Cloud.markNotifsRead(); Store.update(s=>{ (s.notifs||[]).forEach(n=>n.read=true); }); updateBadge();
   }
