@@ -3483,7 +3483,6 @@ const Friends = (() => {
           ${avHtml(f,"big-av")}
           <div class="fpn">${esc(f.name)}</div>
           <div class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</div>
-          ${(!alreadyOpen && f.cloudId)?'<div id="fpSync" class="hint" style="margin-top:6px;">Actualizando…</div>':''}
         </div>
         <div class="friends-actions" style="justify-content:center;margin-top:14px;">
           <button class="mini-btn danger" id="fpDel">Eliminar amigo</button>
@@ -3555,8 +3554,7 @@ const Friends = (() => {
     let liveScroll = restoreScrollTop||0;
     if(sheetBodyEl) sheetBodyEl.addEventListener("scroll", ()=>{ liveScroll=sheetBodyEl.scrollTop; }, {passive:true});
     // aplica datos frescos: guarda en el store y re-pinta si sigues en esta vista
-    const applyFresh = (fr, hideSync)=>{
-      if(hideSync){ const sync=$("#fpSync"); if(sync) sync.remove(); }
+    const applyFresh = (fr)=>{
       if(!fr) return;
       const updated={ ...f, ...fr };
       Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
@@ -3565,13 +3563,13 @@ const Friends = (() => {
       stopPoll(); openProfile(updated, true, liveScroll, {y:cal.getFullYear(), m:cal.getMonth()});
     };
     // Auto-actualización inmediata al abrir
-    if(!fetched && f.cloudId){ Cloud.pullFriend(f.cloudId).then(fr=>applyFresh(fr, true)); }
+    if(!fetched && f.cloudId){ Cloud.pullFriend(f.cloudId).then(applyFresh); }
     // Sondeo EN VIVO mientras el perfil está abierto (sin reabrir)
     stopPoll();
     if(f.cloudId){
       pollTimer=setInterval(()=>{
         if(gen!==myGen || !$("#scrim").classList.contains("show") || !$("#fpDel")){ stopPoll(); return; }
-        Cloud.pullFriend(f.cloudId).then(fr=>{ if(gen===myGen) applyFresh(fr, false); });
+        Cloud.pullFriend(f.cloudId).then(fr=>{ if(gen===myGen) applyFresh(fr); });
       }, 5000);
     }
   }
