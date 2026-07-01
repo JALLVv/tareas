@@ -47,6 +47,9 @@ alter table public.completions add column if not exists partner_id   uuid;
 alter table public.completions add column if not exists partner_name text;
 -- Id de la tarea compartida (para limpiar la completada cuando se borra la tarea).
 alter table public.completions add column if not exists shared_id    text;
+-- Si fue una tarea aleatoria del generador (para el desglose "aleatorias vs
+-- normales" que ve un amigo en tu perfil).
+alter table public.completions add column if not exists random bool default false;
 
 alter table public.completions enable row level security;
 
