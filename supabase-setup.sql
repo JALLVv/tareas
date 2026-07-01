@@ -244,8 +244,8 @@ begin
         where recipient_id = f and actor_id = new.user_id and type = 'shared_done'
           and task_title = new.title and created_at > now() - interval '6 hours'
       ) then
-        insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url)
-        values(f, new.user_id, cname, 'shared_done', new.title, new.photo_url);
+        insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url, ref_key)
+        values(f, new.user_id, cname, 'shared_done', new.title, new.photo_url, coalesce(new.shared_id, new.id));
       end if;
     exception when others then null;
     end;
@@ -297,8 +297,8 @@ begin
   loop
     if o is null or o = new.author_id then continue; end if;
     begin
-      insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url)
-      values(o, new.author_id, cname, 'comment', coalesce(ttl,''), ph);
+      insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url, ref_key)
+      values(o, new.author_id, cname, 'comment', coalesce(ttl,''), ph, new.completion_key);
     exception when others then null;
     end;
   end loop;
@@ -319,6 +319,8 @@ create table if not exists public.notifications (
   task_title  text, photo_url text,
   created_at  timestamptz default now(), read boolean default false
 );
+-- clave de la completada relacionada (para abrir sus comentarios desde el aviso)
+alter table public.notifications add column if not exists ref_key text;
 alter table public.notifications enable row level security;
 drop policy if exists "notif_read"   on public.notifications;
 drop policy if exists "notif_insert" on public.notifications;
