@@ -1630,12 +1630,15 @@ const Store = (() => {
     // para no descontar retroactivamente días pasados antes de esta función.
     (state.tasks||[]).forEach(t=>{ const ty=t.recurrence&&t.recurrence.type;
       if(ty && ty!=='once' && ty!=='date' && !t.penalizedUpTo) t.penalizedUpTo=yesterdayKey(); });
-    // Auto-corrección: los puntos y la racha se derivan del historial menos las
-    // penalizaciones. Repara cualquier desajuste (p. ej. puntos fantasma).
-    const ptsSum=Math.max(0, (state.history||[]).reduce((a,h)=>a+(h.points||0),0) - (state.penalties||0));
+    // Auto-corrección: puntos = historial − penalizaciones. La penalización se
+    // TOPA en el total ganado: nunca se pierde más de lo que has sumado, así
+    // completar una tarea siempre suma (no queda un "déficit" invisible en 0).
+    const rawSum=(state.history||[]).reduce((a,h)=>a+(h.points||0),0);
+    const cappedPen=Math.min(state.penalties||0, rawSum);
+    const ptsSum=rawSum - cappedPen;
     const stk=streakFromHistory(state.history||[]);
-    if(state.points!==ptsSum || state.streak.current!==stk.current || state.streak.best!==stk.best){
-      state.points=ptsSum;
+    if(state.points!==ptsSum || state.penalties!==cappedPen || state.streak.current!==stk.current || state.streak.best!==stk.best){
+      state.points=ptsSum; state.penalties=cappedPen;
       state.streak.current=stk.current; state.streak.best=stk.best; state.streak.lastDate=stk.lastDate;
       save();
     }
@@ -2001,7 +2004,11 @@ const Tasks = (() => {
     Store.update(st=>{
       if(expired.length) st.tasks = st.tasks.filter(t=>!isExpired(t,today));
       updates.forEach(u=>{ const t=st.tasks.find(x=>x.id===u.id); if(t) t.penalizedUpTo=u.upTo; });
-      if(penalty>0){ st.penalties=(st.penalties||0)+penalty; st.points=Math.max(0, st.points-penalty); }
+      if(penalty>0){
+        const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
+        st.penalties=Math.min((st.penalties||0)+penalty, sum); // topada en lo ganado
+        st.points=Math.max(0, sum - st.penalties);
+      }
     });
     if(penalty>0){
       if(Cloud.enabled()) Cloud.pushProfile();   // refleja el descuento en la nube (y para amigos)
@@ -2970,7 +2977,7 @@ const Cloud = (() => {
     catch(e){ console.warn("addComment:", e && e.message); return false; }
     // aviso al dueño de la tarea (push; la fila in-app la crea el trigger)
     if(opts && opts.ownerId && opts.ownerId!==uid){
-      sendPush(opts.ownerId, "Tareas", `${name} te comentó en una tarea`, opts.photoUrl||null);
+      sendPush(opts.ownerId, "Tareas", `${name} te comentó`, opts.photoUrl||null);
     }
     return true;
   }
@@ -3436,12 +3443,14 @@ const Notifs = (() => {
       </div>`;
     }
     const done=n.type==='shared_done', comment=n.type==='comment';
-    const text = comment ? `<b>${esc(n.actor_name||"Alguien")}</b> te comentó en una tarea`
+    const text = comment ? `<b>${esc(n.actor_name||"Alguien")}</b> te comentó`
       : done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea`
       : `<b>${esc(n.actor_name||"Un amigo")}</b> te añadió a una tarea`;
     const withPhoto=(done||comment) && n.photo_url;
     const thumb = withPhoto ? `<div class="gal-thumb"><img src="${esc(n.photo_url)}"></div>` : `<div class="notif-ic ${done||comment?'done':'add'}">${comment?commentSvg():done?checkSvg():plusSvg()}</div>`;
-    return `<div class="card gal-item notif-item" ${withPhoto?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}"`:''}>
+    // abrir la tarea con sus comentarios desde el aviso (misma mecánica del calendario)
+    const openAttrs = (withPhoto && n.ref_key) ? `data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}" data-key="${esc(n.ref_key)}" data-owner="${comment?'':esc(n.actor_id||'')}"` : (withPhoto?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}"`:'');
+    return `<div class="card gal-item notif-item" ${openAttrs}>
       ${thumb}
       <div class="gal-info"><div class="t">${text}</div><div class="m">${esc(n.task_title||'')}${n.task_title?' · ':''}${timeAgo(n.created_at)}</div></div>
       <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
@@ -3483,8 +3492,9 @@ const Notifs = (() => {
       Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==nid); }); updateBadge();
       UI.toast("Solicitud rechazada","check","var(--label-2)"); openSheet();
     });
-    // abrir foto (sin disparar al pulsar la ✕)
-    $$("#ntList [data-photo]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return; Lightbox.show(c.getAttribute("data-photo"), {title:c.getAttribute("data-title"), time:"", category:"", points:0}); });
+    // abrir la tarea (foto + comentarios) desde el aviso, sin disparar al pulsar la ✕
+    $$("#ntList [data-photo]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return;
+      Lightbox.show(c.getAttribute("data-photo"), { title:c.getAttribute("data-title"), key:c.getAttribute("data-key")||null, ownerId:c.getAttribute("data-owner")||null }); });
     // marcar como leídas
     Cloud.markNotifsRead(); Store.update(s=>{ (s.notifs||[]).forEach(n=>n.read=true); }); updateBadge();
   }
