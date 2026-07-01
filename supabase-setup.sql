@@ -279,11 +279,43 @@ create policy "comments_read"   on public.comments for select to authenticated u
 create policy "comments_insert" on public.comments for insert to authenticated with check (auth.uid() = author_id);
 create policy "comments_delete" on public.comments for delete to authenticated using (auth.uid() = author_id);
 
+-- Al COMENTAR: avisa al dueño (o dueños, si es compartida) de la tarea.
+create or replace function public.notify_comment()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare o uuid; ttl text; ph text; cname text;
+begin
+  select name into cname from public.profiles where id = new.author_id;
+  select title, photo_url into ttl, ph from public.completions
+    where id = new.completion_key or shared_id = new.completion_key limit 1;
+  for o in
+    select distinct user_id from public.completions
+    where id = new.completion_key or shared_id = new.completion_key
+  loop
+    if o is null or o = new.author_id then continue; end if;
+    begin
+      insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url)
+      values(o, new.author_id, cname, 'comment', coalesce(ttl,''), ph);
+    exception when others then null;
+    end;
+  end loop;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notify_comment on public.comments;
+create trigger trg_notify_comment
+  after insert on public.comments
+  for each row execute function public.notify_comment();
+
 -- 5) NOTIFICACIONES ---------------------------------------------------
 create table if not exists public.notifications (
   id          uuid default gen_random_uuid() primary key,
   recipient_id uuid, actor_id uuid, actor_name text,
-  type        text,                      -- 'shared_added' | 'shared_done' | 'friend_request'
+  type        text,                      -- 'shared_added' | 'shared_done' | 'friend_request' | 'comment'
   task_title  text, photo_url text,
   created_at  timestamptz default now(), read boolean default false
 );

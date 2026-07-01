@@ -576,11 +576,18 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .lightbox .lb-close svg{width:18px;height:18px;color:#fff;stroke-width:2.6;}
 .lb-comments{width:100%;margin-top:22px;text-align:left;}
 .lb-c-title{font-size:13px;font-weight:700;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px;}
-.lb-c-list{display:flex;flex-direction:column;gap:9px;}
-.lb-c-item{background:rgba(255,255,255,0.09);border-radius:14px;padding:10px 13px;}
-.lb-c-item .a{font-size:12.5px;font-weight:700;color:#fff;}
-.lb-c-item .x{font-size:14.5px;color:rgba(255,255,255,0.92);margin-top:3px;white-space:pre-wrap;word-break:break-word;line-height:1.35;}
+.lb-c-list{display:flex;flex-direction:column;gap:10px;}
+.lb-c-item{display:flex;gap:10px;background:rgba(255,255,255,0.09);border-radius:14px;padding:10px 12px;}
+.lb-c-av{flex:0 0 auto;width:36px;height:36px;border-radius:50%;overflow:hidden;background:var(--blue);
+  display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;}
+.lb-c-av img{width:100%;height:100%;object-fit:cover;}
+.lb-c-body{flex:1;min-width:0;}
+.lb-c-head{display:flex;align-items:center;gap:8px;}
+.lb-c-item .a{font-size:13px;font-weight:700;color:#fff;}
+.lb-c-streak{font-size:12px;font-weight:700;color:#FF9F0A;}
+.lb-c-item .x{font-size:14.5px;color:rgba(255,255,255,0.92);margin-top:2px;white-space:pre-wrap;word-break:break-word;line-height:1.35;}
 .lb-c-item .when{font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;}
+.lb-c-del{color:rgba(255,120,120,0.9);cursor:pointer;}
 .lb-c-empty{font-size:13.5px;color:rgba(255,255,255,0.45);padding:2px 0 4px;}
 .lb-c-input{display:flex;gap:8px;margin-top:14px;}
 .lb-c-input input{flex:1;min-width:0;background:rgba(255,255,255,0.1);border:none;border-radius:13px;padding:12px 14px;color:#fff;font-size:16px;outline:none;}
@@ -2943,16 +2950,33 @@ const Cloud = (() => {
     friends.forEach(f=> sendPush(f.cloudId, "Tareas", `${name} completó una tarea`, photoUrl||null));
   }
   /* ---------- Comentarios en tareas completadas ---------- */
+  // Devuelve los comentarios con la foto/racha/nombre ACTUALES del autor (se leen
+  // de profiles al vuelo, no se guardan en el comentario → nunca quedan obsoletos).
   async function fetchComments(key){
     if(!enabled() || !await init() || !client || !key) return [];
-    try{ const { data }=await client.from('comments').select('*').eq('completion_key', key).order('created_at',{ascending:true}); return data||[]; }
-    catch(e){ console.warn("fetchComments:", e && e.message); return []; }
+    try{
+      const { data }=await client.from('comments').select('*').eq('completion_key', key).order('created_at',{ascending:true});
+      const comments=data||[]; if(!comments.length) return [];
+      const ids=[...new Set(comments.map(c=>c.author_id).filter(Boolean))];
+      let pm={};
+      if(ids.length){ const { data:profs }=await client.from('profiles').select('id,name,avatar_url,streak_current').in('id', ids); (profs||[]).forEach(p=>pm[p.id]=p); }
+      return comments.map(c=>{ const p=pm[c.author_id]||{}; return { ...c, author_name:p.name||c.author_name||"Alguien", avatar:p.avatar_url||null, streak:p.streak_current||0, mine:c.author_id===uid }; });
+    }catch(e){ console.warn("fetchComments:", e && e.message); return []; }
   }
-  async function addComment(key, text){
+  async function addComment(key, text, opts){
     if(!enabled() || !await init() || !client || !key || !text) return false;
     const name=(Store.get().profile.name||"Atleta");
-    try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text }); if(error) throw error; return true; }
+    try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text }); if(error) throw error; }
     catch(e){ console.warn("addComment:", e && e.message); return false; }
+    // aviso al dueño de la tarea (push; la fila in-app la crea el trigger)
+    if(opts && opts.ownerId && opts.ownerId!==uid){
+      sendPush(opts.ownerId, "Tareas", `${name} te comentó en una tarea`, opts.photoUrl||null);
+    }
+    return true;
+  }
+  async function deleteComment(id){
+    if(!enabled() || !await init() || !client || !id) return;
+    try{ await client.from('comments').delete().eq('id', id).eq('author_id', uid); }catch(e){}
   }
   async function fetchNotifs(){
     if(!enabled() || !await init() || !client) return [];
@@ -3051,7 +3075,7 @@ const Cloud = (() => {
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
     createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, notifySelf, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
-    pushFriendsCompletion, fetchComments, addComment };
+    pushFriendsCompletion, fetchComments, addComment, deleteComment };
 })();
 
 /* =====================================================================
@@ -3357,7 +3381,7 @@ const Friends = (() => {
       const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
       if(h.photoUrl){
         const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
-        thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl,h);
+        thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl,{...h, ownerId:f.cloudId}); // el dueño es el amigo (para avisarle)
       } else thumb.innerHTML=noPhotoThumb();
     });
   }
@@ -3411,10 +3435,13 @@ const Notifs = (() => {
         </div>
       </div>`;
     }
-    const done=n.type==='shared_done';
-    const text = done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea` : `<b>${esc(n.actor_name||"Un amigo")}</b> te añadió a una tarea`;
-    const thumb = (done && n.photo_url) ? `<div class="gal-thumb"><img src="${esc(n.photo_url)}"></div>` : `<div class="notif-ic ${done?'done':'add'}">${done?checkSvg():plusSvg()}</div>`;
-    return `<div class="card gal-item notif-item" ${done&&n.photo_url?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}"`:''}>
+    const done=n.type==='shared_done', comment=n.type==='comment';
+    const text = comment ? `<b>${esc(n.actor_name||"Alguien")}</b> te comentó en una tarea`
+      : done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea`
+      : `<b>${esc(n.actor_name||"Un amigo")}</b> te añadió a una tarea`;
+    const withPhoto=(done||comment) && n.photo_url;
+    const thumb = withPhoto ? `<div class="gal-thumb"><img src="${esc(n.photo_url)}"></div>` : `<div class="notif-ic ${done||comment?'done':'add'}">${comment?commentSvg():done?checkSvg():plusSvg()}</div>`;
+    return `<div class="card gal-item notif-item" ${withPhoto?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}"`:''}>
       ${thumb}
       <div class="gal-info"><div class="t">${text}</div><div class="m">${esc(n.task_title||'')}${n.task_title?' · ':''}${timeAgo(n.created_at)}</div></div>
       <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
@@ -3466,6 +3493,7 @@ const Notifs = (() => {
 })();
 function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
 function bellSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 004 0"/></svg>';}
+function commentSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-11.5 7.2L4 20l1-4.5A8 8 0 1121 12z"/></svg>';}
 function noPhotoThumb(){return '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--label-3)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5"/></svg></div>';}
 // Resumen del título para listas: si es muy largo (>10 palabras) deja una frase
 // corta identificativa con puntos suspensivos. El título completo se conserva aparte.
@@ -3479,19 +3507,35 @@ function shortTitle(s, maxWords=10, keep=7){
 const Lightbox = (() => {
   const box=$("#lightbox"), img=$("#lbImg"), t=$("#lbTitle"), m=$("#lbMeta");
   const scroll=$("#lbScroll"), cWrap=$("#lbComments"), cList=$("#lbCList"), cInput=$("#lbCInput"), cSend=$("#lbCSend");
-  let curKey=null, curGen=0;
+  let curKey=null, curGen=0, curOwner=null, curPhoto=null, pollTimer=null, lastSig="";
   function ago(iso){ try{ const d=(Date.now()-new Date(iso).getTime())/1000;
     if(d<60) return "ahora"; if(d<3600) return `hace ${Math.floor(d/60)} min`;
     if(d<86400) return `hace ${Math.floor(d/3600)} h`; return `hace ${Math.floor(d/86400)} d`; }catch(e){ return ""; } }
+  function avatarHtml(c){
+    if(c.avatar) return `<div class="lb-c-av"><img src="${esc(c.avatar)}" alt=""></div>`;
+    return `<div class="lb-c-av">${esc((c.author_name||"A").trim().charAt(0).toUpperCase()||"A")}</div>`;
+  }
   function renderComments(list){
     if(!list || !list.length){ cList.innerHTML=`<div class="lb-c-empty">Sé el primero en comentar.</div>`; return; }
-    cList.innerHTML=list.map(c=>`<div class="lb-c-item"><div class="a">${esc(c.author_name||"Alguien")}</div><div class="x">${esc(c.text||"")}</div><div class="when">${ago(c.created_at)}</div></div>`).join("");
+    cList.innerHTML=list.map(c=>`
+      <div class="lb-c-item">
+        ${avatarHtml(c)}
+        <div class="lb-c-body">
+          <div class="lb-c-head"><span class="a">${esc(c.author_name||"Alguien")}</span><span class="lb-c-streak">🔥 ${c.streak||0}</span></div>
+          <div class="x">${esc(c.text||"")}</div>
+          <div class="when">${ago(c.created_at)}${c.mine?` · <span class="lb-c-del" data-cid="${esc(c.id)}">Borrar</span>`:""}</div>
+        </div>
+      </div>`).join("");
+    $$(".lb-c-del",cList).forEach(b=> b.onclick=async ()=>{ haptic(); await Cloud.deleteComment(b.getAttribute("data-cid")); load(curKey, curGen); });
   }
   async function load(key, gen){
-    cList.innerHTML=`<div class="lb-c-empty">Cargando…</div>`;
+    if(!cList.children.length) cList.innerHTML=`<div class="lb-c-empty">Cargando…</div>`;
     const list=await Cloud.fetchComments(key);
-    if(gen===curGen) renderComments(list);
+    if(gen!==curGen) return;
+    const sig=JSON.stringify(list.map(c=>[c.id,c.text,c.author_name,c.avatar,c.streak]));
+    if(sig!==lastSig){ lastSig=sig; renderComments(list); } // solo re-pinta si cambió (evita parpadeo)
   }
+  function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
   function show(data,h){
     h=h||{};
     img.src=data; t.textContent=h.title||"";
@@ -3499,18 +3543,23 @@ const Lightbox = (() => {
     box.classList.add("show"); haptic();
     if(scroll) scroll.scrollTop=0;
     curKey = (h.sharedId || h.id || h.key) || null; // clave de la completada
-    curGen++;
-    if(curKey && Cloud.enabled()){ cWrap.style.display="block"; load(curKey, curGen); }
-    else { cWrap.style.display="none"; }
+    curOwner = h.ownerId || null; curPhoto = (typeof data==="string" && data.indexOf("http")===0) ? data : (h.photoUrl||null);
+    curGen++; lastSig=""; cList.innerHTML="";
+    stopPoll();
+    if(curKey && Cloud.enabled()){
+      cWrap.style.display="block"; load(curKey, curGen);
+      // actualización automática en vivo (foto/racha/nuevos comentarios al instante)
+      const g=curGen; pollTimer=setInterval(()=>{ if(g!==curGen || !box.classList.contains("show")){ stopPoll(); return; } load(curKey, g); }, 5000);
+    } else { cWrap.style.display="none"; }
   }
-  function hide(){ box.classList.remove("show"); curKey=null; curGen++; if(cInput) cInput.value=""; }
+  function hide(){ box.classList.remove("show"); curKey=null; curOwner=null; curGen++; stopPoll(); if(cInput) cInput.value=""; }
   $("#lbClose").onclick=hide;
   box.onclick=(e)=>{ if(e.target===box) hide(); };
   async function send(){
     const txt=(cInput.value||"").trim(); if(!txt || !curKey) return;
     cInput.value=""; cInput.blur();
     const key=curKey, gen=curGen;
-    const ok=await Cloud.addComment(key, txt);
+    const ok=await Cloud.addComment(key, txt, { ownerId:curOwner, photoUrl:curPhoto });
     if(!ok){ UI.toast("No se pudo comentar","bell","var(--red)"); }
     if(gen===curGen) load(key, gen);
   }
