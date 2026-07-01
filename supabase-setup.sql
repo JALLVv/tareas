@@ -366,7 +366,7 @@ create trigger trg_cleanup_comment_notif
 create table if not exists public.notifications (
   id          uuid default gen_random_uuid() primary key,
   recipient_id uuid, actor_id uuid, actor_name text,
-  type        text,                      -- 'shared_added' | 'shared_done' | 'friend_request' | 'comment'
+  type        text,                      -- 'shared_invite' | 'shared_done' | 'friend_request' | 'comment' | 'weekly_summary'
   task_title  text, photo_url text,
   created_at  timestamptz default now(), read boolean default false
 );

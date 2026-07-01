@@ -403,6 +403,22 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .streak-best .v{font-size:20px;font-weight:800;color:var(--orange);}
 .streak-best .l{font-size:11px;color:var(--label-2);font-weight:600;}
 
+/* Resumen de la semana */
+.week-card{margin-top:14px;padding:18px 18px 20px;}
+.week-head{display:flex;align-items:baseline;justify-content:space-between;}
+.week-head .t{font-size:16px;font-weight:700;letter-spacing:-0.01em;}
+.week-head .range{font-size:12.5px;color:var(--label-2);font-weight:600;}
+.week-vibe{margin-top:10px;font-size:14px;font-weight:700;color:var(--indigo);}
+.week-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:12px;}
+.wk-stat{background:var(--fill-2);border-radius:14px;padding:12px;text-align:center;}
+.wk-stat .v{font-size:22px;font-weight:800;letter-spacing:-0.02em;}
+.wk-stat .l{font-size:11.5px;color:var(--label-2);font-weight:600;margin-top:2px;}
+.week-cmp{margin-top:10px;font-size:13px;color:var(--label-2);font-weight:600;line-height:1.4;}
+.week-cmp.muted{font-style:italic;}
+.week-top{margin-top:8px;font-size:13px;color:var(--label-2);font-weight:600;}
+.week-top b{color:var(--label);}
+.week-empty{margin-top:10px;font-size:13.5px;color:var(--label-2);font-weight:500;line-height:1.4;}
+
 /* Calendario */
 .cal-card{margin-top:14px;padding:18px 16px 20px;overflow:hidden;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:0 4px;}
@@ -757,6 +773,8 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
       <div class="card stat"><div class="v pur" id="stRandom">0</div><div class="l">Tareas aleatorias</div></div>
       <div class="card stat"><div class="v grn" id="stNormal">0</div><div class="l">Tareas normales</div></div>
     </div>
+
+    <div id="weekCardWrap"></div>
 
     <div class="card cal-card">
       <div class="cal-head">
@@ -1566,6 +1584,78 @@ function streakFromHistory(history){
 }
 const timeLabel = (d=new Date()) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---------------------------------------------------------------------
+   RESUMEN SEMANAL (lunes-domingo) — compartido entre tu perfil y el de un
+   amigo. El resumen es siempre el de la ÚLTIMA semana YA TERMINADA (nunca
+   la que está en curso), comparado con la anterior a esa.
+   --------------------------------------------------------------------- */
+function shiftDate(key,n){ const [y,m,d]=key.split("-").map(Number); const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()+n); return dateKey(dt); }
+function mondayOf(key){ const [y,m,d]=key.split("-").map(Number); const dow=(new Date(y,m-1,d).getDay()+6)%7; return shiftDate(key,-dow); }
+function weekStats(history, monday){
+  const end=shiftDate(monday,6);
+  const items=(history||[]).filter(h=> h.date && h.date>=monday && h.date<=end);
+  const cats={};
+  items.forEach(h=>{ const c=h.category||"Otra"; cats[c]=(cats[c]||0)+1; });
+  let topCategory=null, topCount=0;
+  Object.entries(cats).forEach(([c,n])=>{ if(n>topCount){ topCount=n; topCategory=c; } });
+  return { points: items.reduce((a,h)=>a+(h.points||0),0), tasks: items.length, topCategory, topCount };
+}
+function weeklySummaryFor(history){
+  const weekStart = shiftDate(mondayOf(dateKey()), -7);
+  const weekEnd = shiftDate(weekStart,6);
+  const prevStart = shiftDate(weekStart,-7);
+  const prevEnd = shiftDate(prevStart,6);
+  const cur = weekStats(history, weekStart);
+  const prev = weekStats(history, prevStart);
+  const hasData = (history||[]).some(h=> h.date && h.date<=weekEnd);
+  const hadEarlierActivity = (history||[]).some(h=> h.date && h.date<=prevEnd);
+  const diffPoints = cur.points - prev.points, diffTasks = cur.tasks - prev.tasks;
+  const vibe = !hadEarlierActivity ? { emoji:"🌱", label:"Primera semana registrada" }
+    : diffPoints>0 ? { emoji:"📈", label:"Semana en subida" }
+    : diffPoints<0 ? { emoji:"📉", label:"Semana más floja" }
+    : { emoji:"⚖️", label:"Ritmo constante" };
+  return { weekStart, weekEnd, points:cur.points, tasks:cur.tasks, topCategory:cur.topCategory, topCount:cur.topCount,
+    diffPoints, diffTasks, hasData, hadEarlierActivity, vibe };
+}
+function weekRangeLabel(weekStart, weekEnd){
+  const mo=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const [,ms,ds]=weekStart.split("-").map(Number); const [,me,de]=weekEnd.split("-").map(Number);
+  return ms===me ? `${ds}–${de} ${mo[ms-1]}` : `${ds} ${mo[ms-1]} – ${de} ${mo[me-1]}`;
+}
+function weekDiffLine(verb, diff, singular, plural){
+  if(diff===0) return `${verb} el mismo número de ${plural} que la semana anterior`;
+  const abs=Math.abs(diff), noun = abs===1?singular:plural;
+  return `${verb} ${abs} ${noun} ${diff>0?"más":"menos"} que la semana anterior`;
+}
+// Tarjeta HTML del resumen (misma para tu perfil y el de un amigo; "mine"
+// decide primera/tercera persona: Obtuviste/Obtuvo, Hiciste/Hizo).
+function weekSummaryHtml(ws, opts){
+  opts=opts||{}; const mine=!!opts.mine;
+  if(!ws.hasData){
+    return `<div class="card week-card">
+      <div class="week-head"><span class="t">Resumen de la semana</span></div>
+      <div class="week-empty">${mine?"Tu resumen aparecerá aquí en cuanto termine tu primera semana completa.":"Su resumen aparecerá aquí en cuanto termine su primera semana completa."}</div>
+    </div>`;
+  }
+  const range = weekRangeLabel(ws.weekStart, ws.weekEnd);
+  const ptsVerb = mine?"Obtuviste":"Obtuvo", taskVerb = mine?"Hiciste":"Hizo";
+  const cmp = ws.hadEarlierActivity ? `
+      <div class="week-cmp">${esc(weekDiffLine(ptsVerb, ws.diffPoints, "punto","puntos"))}</div>
+      <div class="week-cmp">${esc(weekDiffLine(taskVerb, ws.diffTasks, "tarea","tareas"))}</div>`
+    : `<div class="week-cmp muted">${mine?"Aún no tienes":"Aún no tiene"} una semana anterior con la que comparar.</div>`;
+  const top = ws.topCategory ? `<div class="week-top">${mine?"Tu categoría estrella":"Su categoría estrella"}: <b>${esc(ws.topCategory)}</b> (${ws.topCount})</div>` : "";
+  return `<div class="card week-card">
+    <div class="week-head"><span class="t">Resumen de la semana</span><span class="range">${esc(range)}</span></div>
+    <div class="week-vibe">${ws.vibe.emoji} ${esc(ws.vibe.label)}</div>
+    <div class="week-grid">
+      <div class="wk-stat"><div class="v gold">${ws.points}</div><div class="l">Puntos</div></div>
+      <div class="wk-stat"><div class="v">${ws.tasks}</div><div class="l">Tareas</div></div>
+    </div>
+    ${cmp}
+    ${top}
+  </div>`;
+}
 
 /* ---------------------------------------------------------------------
    DB — fotografías en IndexedDB (capacidad muy superior a localStorage)
@@ -2608,6 +2698,9 @@ const Profile = (() => {
     $("#stRandom").textContent = rnd;
     $("#stNormal").textContent = total-rnd;
 
+    // resumen de la semana (lunes-domingo, última ya terminada)
+    $("#weekCardWrap").innerHTML = weekSummaryHtml(weeklySummaryFor(s.history), {mine:true});
+
     renderCalendar();
   }
 
@@ -2940,6 +3033,22 @@ const Cloud = (() => {
     try{ await client.from('notifications').insert({ recipient_id:uid, actor_id:uid, actor_name:actorName||"Un amigo", type, task_title:taskTitle||"", photo_url:photoUrl||null }); }
     catch(e){ console.warn("notifySelf:", e && e.message); }
   }
+  // Avisa (in-app + push) de que el resumen de la semana ya está disponible.
+  // weekKey identifica la semana (su lunes); se comprueba en el SERVIDOR antes
+  // de insertar para no duplicar el aviso aunque se use más de un dispositivo.
+  async function maybeNotifyWeeklySummary(weekKey){
+    if(!enabled() || !await init() || !client || !weekKey) return false;
+    try{
+      const { data } = await client.from('notifications').select('id')
+        .eq('recipient_id',uid).eq('type','weekly_summary').eq('ref_key',weekKey).limit(1);
+      if(data && data.length) return false; // ya avisado
+    }catch(e){ return false; }
+    const name=(Store.get().profile.name||"Atleta");
+    try{ await client.from('notifications').insert({ recipient_id:uid, actor_id:uid, actor_name:name, type:'weekly_summary', task_title:"", ref_key:weekKey }); }
+    catch(e){ console.warn("maybeNotifyWeeklySummary:", e && e.message); }
+    sendPush(uid, "Tareas", "Ya está disponible tu resumen de la semana", null);
+    return true;
+  }
 
   /* ---------- Amistades (solicitudes + amigos) ---------- */
   // Envía una solicitud de amistad: crea la relación 'pending' + notificación + push.
@@ -3126,7 +3235,7 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
-    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
+    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     pushFriendsCompletion, fetchComments, addComment, deleteComment };
 })();
@@ -3332,6 +3441,7 @@ const Friends = (() => {
           <div class="card stat"><div class="v gold">${fv.points}</div><div class="l">Puntos totales</div></div>
           <div class="card stat"><div class="v">${(fv.dates||[]).length}</div><div class="l">Días activos</div></div>
         </div>
+        ${weekSummaryHtml(weeklySummaryFor(fv.history), {mine:false})}
         <div class="card cal-card" style="margin-top:14px;">
           <div class="cal-head"><span class="m" id="fpMonth">—</span>
             <div class="cal-nav">
@@ -3511,6 +3621,13 @@ const Notifs = (() => {
         </div>
       </div>`;
     }
+    if(n.type==='weekly_summary'){
+      return `<div class="card gal-item notif-item" data-goto-profile="1">
+        <div class="notif-ic done" style="font-size:19px;">📊</div>
+        <div class="gal-info"><div class="t">Ya está disponible tu resumen de la semana</div><div class="m">${timeAgo(n.created_at)}</div></div>
+        <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
+      </div>`;
+    }
     const done=n.type==='shared_done', comment=n.type==='comment';
     const text = comment ? `<b>${esc(n.actor_name||"Alguien")}</b> te comentó`
       : done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea`
@@ -3609,6 +3726,9 @@ const Notifs = (() => {
         if(h){ meta={ time:h.time, category:h.category, points:h.points }; title=h.title||title; }
       }
       Lightbox.show(c.getAttribute("data-photo"), { title, key, ownerId:c.getAttribute("data-owner")||null, ...meta }); });
+    // abrir el resumen de la semana desde el aviso: cierra el menú y va a tu perfil
+    $$("#ntList [data-goto-profile]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return;
+      Sheets.close(); Router.go("profile"); });
     // marcar como leídas
     Cloud.markNotifsRead(); Store.update(s=>{ (s.notifs||[]).forEach(n=>n.read=true); }); updateBadge();
   }
@@ -3842,6 +3962,14 @@ function boot(){
   // "solo hoy"/fecha vencidas desaparezcan solas), sin depender de la nube.
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden) Tasks.render(); });
 
+  // Si ya terminó una semana (lunes-domingo) que aún no se avisó, notifica
+  // (con push) que el resumen está disponible. Idempotente en el servidor
+  // (no duplica aunque se llame desde varios dispositivos o al cada rato).
+  function checkWeeklySummary(){
+    const ws = weeklySummaryFor(Store.get().history);
+    if(ws.hasData) Cloud.maybeNotifyWeeklySummary(ws.weekStart);
+  }
+
   // Nube (si está activada): inicia sesión y sube perfil + historial en segundo plano
   if (Cloud.enabled()){
     Cloud.init().then(id=>{
@@ -3852,12 +3980,13 @@ function boot(){
       Tasks.syncShared();   // reconcilia tareas compartidas
       Notifs.refresh();     // trae notificaciones + avisa en primer plano
       autoEnablePush();     // activa el push automáticamente (pide permiso al abrir)
+      checkWeeklySummary();
       // Sondeo periódico: tareas compartidas + notificaciones nuevas; y cada
       // ~minuto, reconcilia la nube (borra del servidor lo que ya eliminaste)
       let tick=0;
       setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); if((++tick%5)===0) Cloud.reconcile(); }, 12000);
       // Al volver a primer plano, refresca de inmediato
-      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); } });
+      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); checkWeeklySummary(); } });
     });
   }
 
