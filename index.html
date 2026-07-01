@@ -3483,7 +3483,7 @@ const Friends = (() => {
           ${avHtml(f,"big-av")}
           <div class="fpn">${esc(f.name)}</div>
           <div class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</div>
-          ${(!fetched && f.cloudId)?'<div id="fpSync" class="hint" style="margin-top:6px;">Actualizando…</div>':''}
+          ${(!alreadyOpen && f.cloudId)?'<div id="fpSync" class="hint" style="margin-top:6px;">Actualizando…</div>':''}
         </div>
         <div class="friends-actions" style="justify-content:center;margin-top:14px;">
           <button class="mini-btn danger" id="fpDel">Eliminar amigo</button>
