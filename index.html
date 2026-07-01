@@ -2106,7 +2106,12 @@ const Tasks = (() => {
         });
       }
     });
-    if(prunedNotifs && Notifs && Notifs.updateBadge) Notifs.updateBadge();
+    if(prunedNotifs && Notifs){
+      if(Notifs.updateBadge) Notifs.updateBadge();
+      // si el menú de notificaciones está abierto, refréscalo al instante
+      const sheetOpen = !!$("#ntList") && $("#scrim").classList.contains("show");
+      if(sheetOpen && Notifs.openSheet) Notifs.openSheet();
+    }
     // subir a la nube las completadas compartidas que acabo de recibir, para que
     // aparezcan en MI calendario (el que ven mis amigos) y se reflejen mis puntos,
     // y crear MI notificación in-app de que un amigo completó la tarea
@@ -3431,6 +3436,7 @@ const Notifs = (() => {
     const n=list.filter(x=>!x.read).length;
     const b=$("#notifBadge"); if(b){ b.style.display=n?"grid":"none"; b.textContent=n>9?"9+":String(n); }
   }
+  const notifSig = (list)=> JSON.stringify((list||[]).map(n=>n.id));
   async function refresh(){
     if(!Cloud.enabled()) return;
     let list=await Cloud.fetchNotifs();
@@ -3438,8 +3444,14 @@ const Notifs = (() => {
     const old=list.filter(n=> !fresh(n));
     list=list.filter(fresh);
     if(old.length) Cloud.clearNotifs(old.map(n=>n.id));
+    const prevSig = notifSig(listNow());
     Store.update(s=>{ s.notifs=list; s.notifSeen=list.map(n=>n.id); });
     updateBadge();
+    // Si el menú de notificaciones está abierto, refréscalo solo (sin que el
+    // usuario tenga que cerrarlo y volver a abrirlo): p.ej. cuando un amigo borra
+    // una tarea o un comentario, su aviso desaparece al instante de tu lista.
+    const sheetOpen = !!$("#ntList") && $("#scrim").classList.contains("show");
+    if(sheetOpen && notifSig(listNow())!==prevSig) openSheet();
     // Nota: el aviso del SISTEMA lo muestra el push (service worker), así que aquí
     // NO creamos otro con new Notification() para no duplicar la notificación.
   }
@@ -3463,8 +3475,10 @@ const Notifs = (() => {
       : `<b>${esc(n.actor_name||"Un amigo")}</b> te añadió a una tarea`;
     const withPhoto=(done||comment) && n.photo_url;
     const thumb = withPhoto ? `<div class="gal-thumb"><img src="${esc(n.photo_url)}"></div>` : `<div class="notif-ic ${done||comment?'done':'add'}">${comment?commentSvg():done?checkSvg():plusSvg()}</div>`;
-    // abrir la tarea con sus comentarios desde el aviso (misma mecánica del calendario)
-    const openAttrs = (withPhoto && n.ref_key) ? `data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}" data-key="${esc(n.ref_key)}" data-owner="${comment?'':esc(n.actor_id||'')}"` : (withPhoto?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}"`:'');
+    // abrir la tarea con sus comentarios desde el aviso (misma mecánica del calendario).
+    // Incluye hora/categoría/puntos del propio aviso: el destinatario puede no
+    // tener esa completada en su historial (p.ej. tarea de un amigo no compartida).
+    const openAttrs = (withPhoto && n.ref_key) ? `data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}" data-key="${esc(n.ref_key)}" data-owner="${comment?'':esc(n.actor_id||'')}" data-time="${esc(n.task_time||'')}" data-category="${esc(n.task_category||'')}" data-points="${n.task_points!=null?n.task_points:''}"` : (withPhoto?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}"`:'');
     return `<div class="card gal-item notif-item" ${openAttrs}>
       ${thumb}
       <div class="gal-info"><div class="t">${text}</div><div class="m">${esc(n.task_title||'')}${n.task_title?' · ':''}${timeAgo(n.created_at)}</div></div>
@@ -3508,14 +3522,21 @@ const Notifs = (() => {
       UI.toast("Solicitud rechazada","check","var(--label-2)"); openSheet();
     });
     // abrir la tarea (foto + comentarios) desde el aviso, sin disparar al pulsar la ✕.
-    // Se abre EXACTAMENTE igual que desde el calendario: buscamos la completada en
-    // el historial por su clave (sharedId o id) para mostrar también la línea de
-    // detalle (hora · categoría · puntos) debajo del título.
+    // Se abre EXACTAMENTE igual que desde el calendario: el propio aviso ya trae
+    // la línea de detalle (hora · categoría · puntos), así que se ve igual aunque
+    // el destinatario no tenga esa completada en su historial (p.ej. la tarea de
+    // un amigo no compartida contigo). Si el aviso es antiguo y no la trae (antes
+    // de esta versión), se busca como respaldo en el historial local.
     $$("#ntList [data-photo]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return;
       const key=c.getAttribute("data-key")||null;
-      const h=key ? (Store.get().history||[]).find(x=> String(x.sharedId||x.id)===String(key)) : null;
-      const meta = h ? { time:h.time, category:h.category, points:h.points } : {};
-      Lightbox.show(c.getAttribute("data-photo"), { title:(h&&h.title)||c.getAttribute("data-title"), key, ownerId:c.getAttribute("data-owner")||null, ...meta }); });
+      const time=c.getAttribute("data-time")||"", category=c.getAttribute("data-category")||"", ptsAttr=c.getAttribute("data-points");
+      let meta = (time||category||ptsAttr) ? { time, category, points: ptsAttr!==""?Number(ptsAttr):null } : {};
+      let title = c.getAttribute("data-title");
+      if(!time && !category && ptsAttr===""){
+        const h=key ? (Store.get().history||[]).find(x=> String(x.sharedId||x.id)===String(key)) : null;
+        if(h){ meta={ time:h.time, category:h.category, points:h.points }; title=h.title||title; }
+      }
+      Lightbox.show(c.getAttribute("data-photo"), { title, key, ownerId:c.getAttribute("data-owner")||null, ...meta }); });
     // marcar como leídas
     Cloud.markNotifsRead(); Store.update(s=>{ (s.notifs||[]).forEach(n=>n.read=true); }); updateBadge();
   }

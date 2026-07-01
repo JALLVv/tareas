@@ -250,8 +250,8 @@ begin
         where recipient_id = f and actor_id = new.user_id and type = 'shared_done'
           and task_title = new.title and created_at > now() - interval '6 hours'
       ) then
-        insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url, ref_key)
-        values(f, new.user_id, cname, 'shared_done', new.title, new.photo_url, coalesce(new.shared_id, new.id));
+        insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url, ref_key, task_time, task_category, task_points)
+        values(f, new.user_id, cname, 'shared_done', new.title, new.photo_url, coalesce(new.shared_id, new.id), new.time, new.category, new.points);
       end if;
     exception when others then null;
     end;
@@ -315,10 +315,10 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare o uuid; ttl text; ph text; cname text;
+declare o uuid; ttl text; ph text; cname text; ctime text; ccat text; cpts int;
 begin
   select name into cname from public.profiles where id = new.author_id;
-  select title, photo_url into ttl, ph from public.completions
+  select title, photo_url, time, category, points into ttl, ph, ctime, ccat, cpts from public.completions
     where id = new.completion_key or shared_id = new.completion_key limit 1;
   for o in
     select distinct user_id from public.completions
@@ -326,8 +326,8 @@ begin
   loop
     if o is null or o = new.author_id then continue; end if;
     begin
-      insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url, ref_key)
-      values(o, new.author_id, cname, 'comment', coalesce(ttl,''), ph, new.completion_key);
+      insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url, ref_key, task_time, task_category, task_points, comment_id)
+      values(o, new.author_id, cname, 'comment', coalesce(ttl,''), ph, new.completion_key, ctime, ccat, cpts, new.id);
     exception when others then null;
     end;
   end loop;
@@ -340,6 +340,28 @@ create trigger trg_notify_comment
   after insert on public.comments
   for each row execute function public.notify_comment();
 
+-- Al BORRAR un comentario: borra el aviso que generó (solo ese, no los de otros
+-- comentarios en la misma tarea).
+create or replace function public.cleanup_comment_notification()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  begin
+    delete from public.notifications where comment_id = old.id;
+  exception when others then null;
+  end;
+  return old;
+end;
+$$;
+
+drop trigger if exists trg_cleanup_comment_notif on public.comments;
+create trigger trg_cleanup_comment_notif
+  after delete on public.comments
+  for each row execute function public.cleanup_comment_notification();
+
 -- 5) NOTIFICACIONES ---------------------------------------------------
 create table if not exists public.notifications (
   id          uuid default gen_random_uuid() primary key,
@@ -350,6 +372,15 @@ create table if not exists public.notifications (
 );
 -- clave de la completada relacionada (para abrir sus comentarios desde el aviso)
 alter table public.notifications add column if not exists ref_key text;
+-- detalle de la tarea (hora · categoría · puntos), para que abrir la tarea desde
+-- el aviso se vea igual que abrirla en el calendario aunque el destinatario no
+-- tenga esa completada en su propio historial (p.ej. un amigo completó SU tarea,
+-- no compartida contigo).
+alter table public.notifications add column if not exists task_time     text;
+alter table public.notifications add column if not exists task_category text;
+alter table public.notifications add column if not exists task_points   int;
+-- comentario concreto que originó el aviso (para borrarlo si se borra el comentario)
+alter table public.notifications add column if not exists comment_id uuid;
 alter table public.notifications enable row level security;
 drop policy if exists "notif_read"   on public.notifications;
 drop policy if exists "notif_insert" on public.notifications;
