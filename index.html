@@ -3413,11 +3413,11 @@ const Friends = (() => {
     "ID del amigo");
   }
 
-  function openProfile(f, fetched, restoreScrollTop){
+  function openProfile(f, fetched, restoreScrollTop, initialMonth){
     const myGen = fetched ? gen : ++gen; // vista nueva salvo que sea el re-pintado tras refrescar
     loadMyShared(); // refresca mis tareas compartidas para anotar "Contigo"
     const fv = f; // los datos de la nube ya son correctos (el trigger limpia al borrar)
-    let cal=new Date();
+    let cal = initialMonth ? new Date(initialMonth.y, initialMonth.m, 1) : new Date();
     const dateSet=new Set(fv.dates||[]);
     Sheets.open(`
       <div class="grabber"></div>
@@ -3483,7 +3483,13 @@ const Friends = (() => {
     $("#fpNext").onclick=()=>{ cal.setMonth(cal.getMonth()+1); haptic(); draw(); };
     draw();
     // al volver de ver un día con "Atrás", queda donde estabas (no salta al inicio)
-    if(restoreScrollTop!=null){ const sb=$(".sheet-body"); if(sb) sb.scrollTop=restoreScrollTop; }
+    const sheetBodyEl = $(".sheet-body");
+    if(restoreScrollTop!=null && sheetBodyEl) sheetBodyEl.scrollTop=restoreScrollTop;
+    // sigue el scroll y el mes en vivo, para que un re-pintado (sondeo en vivo)
+    // conserve dónde estabas en vez de reiniciar la vista por defecto: la
+    // estructura solo se reinicia al VOLVER A ABRIR el perfil desde la lista.
+    let liveScroll = restoreScrollTop||0;
+    if(sheetBodyEl) sheetBodyEl.addEventListener("scroll", ()=>{ liveScroll=sheetBodyEl.scrollTop; }, {passive:true});
     // aplica datos frescos: guarda en el store y re-pinta si sigues en esta vista
     const applyFresh = (fr, hideSync)=>{
       if(hideSync){ const sync=$("#fpSync"); if(sync) sync.remove(); }
@@ -3492,7 +3498,7 @@ const Friends = (() => {
       Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
       const open = $("#scrim").classList.contains("show") && $("#fpDel"); // sheet aún abierto en este perfil
       if(gen!==myGen || !open || fsig(updated)===fsig(f)) return; // navegó/cerró o nada cambió
-      stopPoll(); openProfile(updated, true);
+      stopPoll(); openProfile(updated, true, liveScroll, {y:cal.getFullYear(), m:cal.getMonth()});
     };
     // Auto-actualización inmediata al abrir
     if(!fetched && f.cloudId){ Cloud.pullFriend(f.cloudId).then(fr=>applyFresh(fr, true)); }
@@ -3522,7 +3528,7 @@ const Friends = (() => {
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" id="fdBack">‹ Atrás</span><span class="title">${title}</span><span class="act" id="fdClose">Listo</span></div>
       <div class="sheet-body"><div class="day-gallery" id="fdList"></div></div>`);
-    $("#fdBack").onclick=()=>openProfile(f, undefined, profileScrollTop);
+    $("#fdBack").onclick=()=>openProfile(f, undefined, profileScrollTop, {y:parseInt(y), m:parseInt(mo)-1});
     $("#fdClose").onclick=Sheets.close;
     const listEl=$("#fdList");
     const myName=((Store.get().profile.name||"").trim().toLowerCase());
