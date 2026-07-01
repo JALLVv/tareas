@@ -3413,7 +3413,7 @@ const Friends = (() => {
     "ID del amigo");
   }
 
-  function openProfile(f, fetched){
+  function openProfile(f, fetched, restoreScrollTop){
     const myGen = fetched ? gen : ++gen; // vista nueva salvo que sea el re-pintado tras refrescar
     loadMyShared(); // refresca mis tareas compartidas para anotar "Contigo"
     const fv = f; // los datos de la nube ya son correctos (el trigger limpia al borrar)
@@ -3482,6 +3482,8 @@ const Friends = (() => {
     $("#fpPrev").onclick=()=>{ cal.setMonth(cal.getMonth()-1); haptic(); draw(); };
     $("#fpNext").onclick=()=>{ cal.setMonth(cal.getMonth()+1); haptic(); draw(); };
     draw();
+    // al volver de ver un día con "Atrás", queda donde estabas (no salta al inicio)
+    if(restoreScrollTop!=null){ const sb=$(".sheet-body"); if(sb) sb.scrollTop=restoreScrollTop; }
     // aplica datos frescos: guarda en el store y re-pinta si sigues en esta vista
     const applyFresh = (fr, hideSync)=>{
       if(hideSync){ const sync=$("#fpSync"); if(sync) sync.remove(); }
@@ -3507,6 +3509,8 @@ const Friends = (() => {
   // Galería del día de un amigo: fotos (URL) + títulos
   function openFriendDay(f, key){
     stopPoll(); gen++; haptic();
+    // recordar el scroll del perfil para restaurarlo al volver con "Atrás"
+    const profileScrollTop = ($(".sheet-body")||{}).scrollTop || 0;
     loadMyShared(); // refresca mis compartidas en segundo plano (ya suele estar cargado)
     f = Store.get().friends.find(x=>x.id===f.id) || f; // usar los datos más frescos del store
     const myCloudId=Cloud.myId&&Cloud.myId();
@@ -3518,7 +3522,7 @@ const Friends = (() => {
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" id="fdBack">‹ Atrás</span><span class="title">${title}</span><span class="act" id="fdClose">Listo</span></div>
       <div class="sheet-body"><div class="day-gallery" id="fdList"></div></div>`);
-    $("#fdBack").onclick=()=>openProfile(f);
+    $("#fdBack").onclick=()=>openProfile(f, undefined, profileScrollTop);
     $("#fdClose").onclick=Sheets.close;
     const listEl=$("#fdList");
     const myName=((Store.get().profile.name||"").trim().toLowerCase());
