@@ -1767,22 +1767,23 @@ const Generator = (() => {
     const newId=uid();
     const rec={type:"once",days:[]};
     const partner=genPartner;
-    Store.update(s=>{
-      const nt={
-        id:newId, title:current.title, desc:"", category:current.category,
-        minutes:current.minutes, people:current.people||1, urgent:false, recurrence:rec,
-        random:true, createdAt:Date.now(), done:false, lastDone:null
-      };
-      if(partner){ nt.shared=true; nt.sharedId=newId; nt.ownerId=Cloud.myId(); nt.partnerId=partner.cloudId; nt.partnerName=partner.name; }
-      s.tasks.unshift(nt);
-    });
+    // Con compañero: es solo una INVITACIÓN (como una solicitud de amistad). No
+    // se añade a tu lista todavía; se añadirá a ambas listas cuando la acepte.
+    if(!partner){
+      Store.update(s=>{
+        s.tasks.unshift({
+          id:newId, title:current.title, desc:"", category:current.category,
+          minutes:current.minutes, people:current.people||1, urgent:false, recurrence:rec,
+          random:true, createdAt:Date.now(), done:false, lastDone:null
+        });
+      });
+    }
     if(partner){
       const meName=Store.get().profile.name||"Atleta";
       Cloud.createShared({ id:newId, owner_id:Cloud.myId(), owner_name:meName, partner_id:partner.cloudId, partner_name:partner.name,
-        title:current.title, descr:"", category:current.category, minutes:current.minutes, people:current.people||1, urgent:false, recurrence:rec, only_on_days:false, status:'pending' })
-        .then(ok=>{ if(ok) Cloud.notify(partner.cloudId, 'shared_added', current.title); });
+        title:current.title, descr:"", category:current.category, minutes:current.minutes, people:current.people||1, urgent:false, recurrence:rec, only_on_days:false });
     }
-    UI.toast(partner?`Compartida con ${esc(partner.name)}`:"Añadida a tus tareas", "check", "var(--green)");
+    UI.toast(partner?`Invitación enviada a ${esc(partner.name)}`:"Añadida a tus tareas", "check", "var(--green)");
     UI.renderTasks();
     UI.flashTab("tasks");
     clearOutput();
@@ -2057,9 +2058,11 @@ const Tasks = (() => {
     });
     if(removeHistIds.size) changed=true;
     const prunedNotifs = goneKeys.size || goneTitles.size; if(prunedNotifs) changed=true;
-    // B) añadir las que me han compartido y aún no tengo (pendientes)
+    // B) añadir las que me han compartido y aún no tengo (pendientes). Las
+    // "invited" son solo una invitación sin responder: no se añaden a ninguna
+    // lista hasta que el destinatario la acepte (ver Notifs: Aceptar/Rechazar).
     rows.forEach(r=>{
-      if(r.status==='done') return;
+      if(r.status==='done' || r.status==='invited') return;
       if(tasks.some(t=>t.sharedId===r.id)) return;
       const amOwner=r.owner_id===myId;
       tasks.unshift({ id:r.id, title:r.title, desc:r.descr||"", category:r.category, minutes:r.minutes||10, people:r.people||1,
@@ -2404,26 +2407,27 @@ const Tasks = (() => {
       const rec = {type:recur, days:days.slice(), dates:monthDays.slice()};
       if(recur==="date") rec.date = taskDate; // fecha concreta (YYYY-MM-DD)
       const newId = uid();
-      Store.update(s=>{
-        if(editing){
-          const t = s.tasks.find(x=>x.id===existing.id);
-          if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent; t.recurrence=rec; t.onlyOnDays=onlyDays; }
-        } else {
-          const nt={ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
-            recurrence:rec, onlyOnDays:onlyDays, random:false, createdAt:Date.now(), done:false, lastDone:null };
-          if(partner){ nt.shared=true; nt.sharedId=newId; nt.ownerId=Cloud.myId(); nt.partnerId=partner.cloudId; nt.partnerName=partner.name; }
-          s.tasks.unshift(nt);
-        }
-      });
+      // Con compañero: es solo una INVITACIÓN (como una solicitud de amistad). No
+      // se añade a tu lista todavía; se añadirá a ambas listas cuando la acepte.
+      if(editing || !partner){
+        Store.update(s=>{
+          if(editing){
+            const t = s.tasks.find(x=>x.id===existing.id);
+            if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent; t.recurrence=rec; t.onlyOnDays=onlyDays; }
+          } else {
+            s.tasks.unshift({ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
+              recurrence:rec, onlyOnDays:onlyDays, random:false, createdAt:Date.now(), done:false, lastDone:null });
+          }
+        });
+      }
       // compartir en la nube
       if(!editing && partner){
         const meName=Store.get().profile.name||"Atleta";
         Cloud.createShared({ id:newId, owner_id:Cloud.myId(), owner_name:meName, partner_id:partner.cloudId, partner_name:partner.name,
-          title, descr:desc, category:cat, minutes:dur, people:ppl, urgent, recurrence:rec, only_on_days:onlyDays, status:'pending' })
-          .then(ok=>{ if(ok) Cloud.notify(partner.cloudId, 'shared_added', title); });
+          title, descr:desc, category:cat, minutes:dur, people:ppl, urgent, recurrence:rec, only_on_days:onlyDays });
       }
       haptic(15); Sheets.close(); render();
-      UI.toast(editing?"Cambios guardados":(partner?`Compartida con ${esc(partner.name)}`:"Tarea creada"),"check","var(--green)");
+      UI.toast(editing?"Cambios guardados":(partner?`Invitación enviada a ${esc(partner.name)}`:"Tarea creada"),"check","var(--green)");
     };
     if(editing){ const delBtn=$("#ctDelete",sheet); if(delBtn) delBtn.onclick=()=>{ haptic(); confirmDelete(existing); }; }
     if(!editing) setTimeout(()=>titleInput.focus(),350);
@@ -2865,10 +2869,15 @@ const Cloud = (() => {
   }
 
   /* ---------- Tareas compartidas ---------- */
+  // Crear una compartida es una INVITACIÓN (igual que una solicitud de amistad):
+  // se guarda como 'invited' y NO se añade a ninguna lista hasta que el
+  // destinatario la acepte (ver acceptShared). El aviso lleva Aceptar/Rechazar.
   async function createShared(row){
     if(!enabled() || !await init() || !client) return false;
-    try{ const { error }=await client.from('shared_tasks').insert(row); if(error) throw error; return true; }
+    try{ const { error }=await client.from('shared_tasks').insert({ ...row, status:'invited' }); if(error) throw error; }
     catch(e){ console.warn("createShared:", e && e.message); return false; }
+    await notify(row.partner_id, 'shared_invite', row.title, null, false, row.id);
+    return true;
   }
   async function fetchShared(){
     // Devuelve null si la consulta FALLÓ (para no confundir "sin red" con "sin
@@ -2876,6 +2885,23 @@ const Cloud = (() => {
     if(!enabled() || !await init() || !client) return null;
     try{ const { data, error }=await client.from('shared_tasks').select('*').or(`owner_id.eq.${uid},partner_id.eq.${uid}`); if(error) throw error; return data||[]; }
     catch(e){ console.warn("fetchShared:", e && e.message); return null; }
+  }
+  async function fetchSharedOne(id){
+    if(!enabled() || !await init() || !client || !id) return null;
+    try{ const { data, error }=await client.from('shared_tasks').select('*').eq('id', id).maybeSingle(); if(error) throw error; return data; }
+    catch(e){ console.warn("fetchSharedOne:", e && e.message); return null; }
+  }
+  // Aceptar/rechazar una invitación a una tarea compartida (solo el invitado, y
+  // solo mientras siga 'invited'), igual que aceptar/rechazar una solicitud de amistad.
+  async function acceptShared(id){
+    if(!enabled() || !await init() || !client) return false;
+    try{ const { error }=await client.from('shared_tasks').update({ status:'pending' }).eq('id', id).eq('partner_id', uid).eq('status','invited'); if(error) throw error; return true; }
+    catch(e){ console.warn("acceptShared:", e && e.message); return false; }
+  }
+  async function rejectShared(id){
+    if(!enabled() || !await init() || !client) return;
+    try{ await client.from('shared_tasks').delete().eq('id', id).eq('partner_id', uid).eq('status','invited'); }
+    catch(e){ console.warn("rejectShared:", e && e.message); }
   }
   async function completeShared(id, fields){
     if(!enabled() || !await init() || !client) return false;
@@ -2892,17 +2918,17 @@ const Cloud = (() => {
   }
 
   /* ---------- Notificaciones ---------- */
-  async function notify(recipientId, type, taskTitle, photoUrl, pushOnly){
+  async function notify(recipientId, type, taskTitle, photoUrl, pushOnly, refKey){
     if(!enabled() || !await init() || !client || recipientId===uid) return;
     const actorName=(Store.get().profile.name||"Atleta");
     // pushOnly: solo manda el push (la fila in-app la crea el destinatario al
     // detectar el cambio, así no depende de la versión del que la completó).
     if(!pushOnly){
-      try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null }); }
+      try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null, ref_key:refKey||null }); }
       catch(e){ console.warn("notify:", e && e.message); }
     }
     // push en segundo plano (vía Edge Function)
-    const body = type==='shared_added' ? `${actorName} te añadió a una tarea`
+    const body = type==='shared_invite' ? `${actorName} quiere agregarte a una tarea`
       : type==='friend_request' ? `${actorName} te ha enviado una solicitud de amistad`
       : `${actorName} completó una tarea`;
     sendPush(recipientId, "Tareas", body, photoUrl);
@@ -3100,7 +3126,7 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
-    createShared, fetchShared, completeShared, deleteShared, uploadShared, notify, notifySelf, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
+    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     pushFriendsCompletion, fetchComments, addComment, deleteComment };
 })();
@@ -3428,9 +3454,9 @@ const Notifs = (() => {
       if(d<86400) return `hace ${Math.floor(d/3600)} h`; return `hace ${Math.floor(d/86400)} d`;
     }catch(e){ return ""; }
   }
-  // Una notificación se conserva si es una solicitud de amistad (no vence) o si
-  // tiene menos de 24 h. El resto se considera vencido.
-  const fresh = (n)=> n.type==='friend_request' || (Date.now()-new Date(n.created_at).getTime()) < 86400000;
+  // Una notificación se conserva si es una solicitud (de amistad o de tarea
+  // compartida: no vencen hasta que se responden) o si tiene menos de 24 h.
+  const fresh = (n)=> n.type==='friend_request' || n.type==='shared_invite' || (Date.now()-new Date(n.created_at).getTime()) < 86400000;
   function updateBadge(){
     const list=(Store.get().notifs||[]).filter(fresh);
     const n=list.filter(x=>!x.read).length;
@@ -3469,6 +3495,22 @@ const Notifs = (() => {
         </div>
       </div>`;
     }
+    if(n.type==='shared_invite'){
+      // Exactamente el mismo formato que la solicitud de amistad, pero para
+      // unirte a una tarea compartida (Aceptar la añade a ambas listas al
+      // instante; Rechazar solo borra el aviso, sin afectar a nadie más).
+      return `<div class="card gal-item notif-item notif-req">
+        <div class="notif-ic add">${plusSvg()}</div>
+        <div class="gal-info">
+          <div class="t"><b>${esc(n.actor_name||"Alguien")}</b> quiere agregarte a una tarea</div>
+          <div class="m">${esc(n.task_title||'')}${n.task_title?' · ':''}${timeAgo(n.created_at)}</div>
+          <div class="req-actions">
+            <button class="mini-btn accent" data-accept-shared="${esc(n.id)}" data-shared-id="${esc(n.ref_key||'')}">Aceptar</button>
+            <button class="mini-btn" data-reject-shared="${esc(n.id)}" data-shared-id="${esc(n.ref_key||'')}">Rechazar</button>
+          </div>
+        </div>
+      </div>`;
+    }
     const done=n.type==='shared_done', comment=n.type==='comment';
     const text = comment ? `<b>${esc(n.actor_name||"Alguien")}</b> te comentó`
       : done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea`
@@ -3497,7 +3539,7 @@ const Notifs = (() => {
       <div class="sheet-body">
         ${blocked?'<div class="card friends-empty" style="margin-bottom:12px">Las notificaciones están bloqueadas. Actívalas en Ajustes del iPhone → esta app → Notificaciones.</div>':''}
         ${list.length?'<button class="notif-clear-all" id="ntClearAll">Borrar todas</button>':''}
-        <div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando un amigo te añada a una tarea o complete una.<br>Las notificaciones se borran solas a las 24 horas.</div>'}</div>
+        <div class="day-gallery" id="ntList">${list.length?list.map(notifHtml).join(""):'<div class="card friends-empty">Sin notificaciones todavía.<br>Aquí verás cuando alguien te invite a una tarea, te comente, o complete una.<br>Las notificaciones se borran solas a las 24 horas.</div>'}</div>
       </div>`);
     $("#ntClose").onclick=Sheets.close;
     // borrar una notificación
@@ -3520,6 +3562,36 @@ const Notifs = (() => {
       await Cloud.rejectFriend(actor); Cloud.clearNotif(nid);
       Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==nid); }); updateBadge();
       UI.toast("Solicitud rechazada","check","var(--label-2)"); openSheet();
+    });
+    // aceptar invitación a una tarea compartida: se añade a tu lista al instante
+    // (y a la del que te invitó, en cuanto sincronice); igual que aceptar amistad.
+    $$("#ntList [data-accept-shared]").forEach(b=> b.onclick=async (e)=>{ e.stopPropagation(); haptic(15);
+      const nid=b.getAttribute("data-accept-shared"), sid=b.getAttribute("data-shared-id");
+      b.textContent="Aceptando…"; b.disabled=true;
+      const row = sid ? await Cloud.fetchSharedOne(sid) : null;
+      const ok = row && await Cloud.acceptShared(sid);
+      if(ok){
+        const myId=Cloud.myId(), amOwner=row.owner_id===myId;
+        Store.update(s=>{
+          if(!s.tasks.some(t=>t.sharedId===sid)){
+            s.tasks.unshift({ id:sid, title:row.title, desc:row.descr||"", category:row.category, minutes:row.minutes||10, people:row.people||1,
+              urgent:!!row.urgent, recurrence:row.recurrence||{type:'once',days:[]}, onlyOnDays:!!row.only_on_days,
+              random:false, createdAt:Date.now(), done:false, lastDone:null,
+              shared:true, sharedId:sid, ownerId:row.owner_id, partnerId:amOwner?row.partner_id:row.owner_id, partnerName:amOwner?row.partner_name:row.owner_name });
+          }
+          s.notifs=(s.notifs||[]).filter(n=>n.id!==nid);
+        });
+        Cloud.clearNotif(nid); updateBadge();
+        UI.toast("Tarea añadida a tu lista","check","var(--green)"); if(UI.renderTasks) UI.renderTasks(); openSheet();
+      } else { b.textContent="Aceptar"; b.disabled=false; UI.toast("No se pudo aceptar","bell","var(--red)"); }
+    });
+    // rechazar invitación a una tarea compartida: solo borra el aviso, sin
+    // afectar a ninguna lista (ni la tuya ni la del que te invitó).
+    $$("#ntList [data-reject-shared]").forEach(b=> b.onclick=async (e)=>{ e.stopPropagation(); haptic();
+      const nid=b.getAttribute("data-reject-shared"), sid=b.getAttribute("data-shared-id");
+      if(sid) await Cloud.rejectShared(sid);
+      Cloud.clearNotif(nid); Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==nid); }); updateBadge();
+      UI.toast("Invitación rechazada","check","var(--label-2)"); openSheet();
     });
     // abrir la tarea (foto + comentarios) desde el aviso, sin disparar al pulsar la ✕.
     // Se abre EXACTAMENTE igual que desde el calendario: el propio aviso ya trae

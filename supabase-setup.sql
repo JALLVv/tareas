@@ -87,7 +87,7 @@ create table if not exists public.shared_tasks (
   partner_id   uuid, partner_name text,
   title        text, descr text, category text, minutes int, people int, urgent bool,
   recurrence   jsonb, only_on_days bool,
-  status       text default 'pending',   -- pending | done
+  status       text default 'invited',  -- invited (sin responder) | pending | done
   completed_by uuid, photo_url text, points int, done_date date, done_time text,
   created_at   timestamptz default now()
 );
