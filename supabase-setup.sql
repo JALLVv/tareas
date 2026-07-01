@@ -171,6 +171,12 @@ begin
     exception when others then null;  -- nunca bloquear el borrado
     end;
   end loop;
+  -- Borra los avisos (completó / comentó) que apuntaban a esta tarea, para que no
+  -- sigan apareciendo en el menú de notificaciones de nadie tras eliminarla.
+  begin
+    delete from public.notifications where ref_key = old.id;
+  exception when others then null;
+  end;
   return old;
 end;
 $$;
@@ -258,6 +264,29 @@ drop trigger if exists trg_notify_friends on public.completions;
 create trigger trg_notify_friends
   after insert on public.completions
   for each row execute function public.notify_friends_on_completion();
+
+-- (iv) Al BORRAR una completada: elimina los avisos (completó / comentó) que
+-- apuntaban a ella, para que las tareas eliminadas dejen de verse en el menú de
+-- notificaciones. La clave del aviso es shared_id (si compartida) o el id.
+create or replace function public.cleanup_completion_notifications()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  begin
+    delete from public.notifications where ref_key = coalesce(old.shared_id, old.id);
+  exception when others then null;
+  end;
+  return old;
+end;
+$$;
+
+drop trigger if exists trg_cleanup_completion_notifs on public.completions;
+create trigger trg_cleanup_completion_notifs
+  after delete on public.completions
+  for each row execute function public.cleanup_completion_notifications();
 
 -- 4c) COMENTARIOS en tareas completadas --------------------------------
 -- Se identifican por la "clave" de la completada: shared_id si es compartida,

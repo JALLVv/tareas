@@ -2035,7 +2035,9 @@ const Tasks = (() => {
     //    tarea borrada deje de verse en TU calendario y en el de tus amigos.
     const vanished=tasks.filter(t=> t.shared && t.sharedId && !rowById[t.sharedId]);
     const removeHistIds=new Set(); let removedPts=0;
+    const goneKeys=new Set(), goneTitles=new Set(); // para purgar sus avisos in-app
     if(vanished.length){
+      vanished.forEach(t=>{ if(t.sharedId) goneKeys.add(t.sharedId); if(t.title) goneTitles.add((t.title||"").trim()); });
       tasks=tasks.filter(t=> !(t.shared && t.sharedId && !rowById[t.sharedId]));
       changed=true;
     }
@@ -2050,9 +2052,11 @@ const Tasks = (() => {
       if(!h.shared && !isSh) return;
       let sid = h.sharedId || (isSh ? h.id.slice(3) : null);
       if(!sid){ const r=rows.find(r=> norm(r.title)===norm(h.title)); sid = r ? r.id : '__gone__'; }
-      if(sid==='__gone__' || !rowById[sid]){ removeHistIds.add(h.id); removedPts+=(h.points||0); }
+      if(sid==='__gone__' || !rowById[sid]){ removeHistIds.add(h.id); removedPts+=(h.points||0);
+        if(sid && sid!=='__gone__') goneKeys.add(sid); if(h.title) goneTitles.add((h.title||"").trim()); }
     });
     if(removeHistIds.size) changed=true;
+    const prunedNotifs = goneKeys.size || goneTitles.size; if(prunedNotifs) changed=true;
     // B) añadir las que me han compartido y aún no tengo (pendientes)
     rows.forEach(r=>{
       if(r.status==='done') return;
@@ -2091,7 +2095,18 @@ const Tasks = (() => {
         const stk=streakFromHistory(st.history);
         st.streak.current=stk.current; st.streak.best=stk.best; st.streak.lastDate=stk.lastDate;
       }
+      // purga inmediata de avisos (completó/comentó) de tareas ya borradas por el
+      // otro, para que no queden en el menú de notificaciones (el servidor también
+      // los borra por trigger; esto es para que se vea al instante).
+      if(prunedNotifs){
+        st.notifs=(st.notifs||[]).filter(n=>{
+          if(n.type!=='shared_done' && n.type!=='comment') return true;
+          if(n.ref_key) return !goneKeys.has(n.ref_key);
+          return !goneTitles.has((n.task_title||"").trim()); // avisos antiguos sin ref_key
+        });
+      }
     });
+    if(prunedNotifs && Notifs && Notifs.updateBadge) Notifs.updateBadge();
     // subir a la nube las completadas compartidas que acabo de recibir, para que
     // aparezcan en MI calendario (el que ven mis amigos) y se reflejen mis puntos,
     // y crear MI notificación in-app de que un amigo completó la tarea
@@ -3492,9 +3507,15 @@ const Notifs = (() => {
       Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.id!==nid); }); updateBadge();
       UI.toast("Solicitud rechazada","check","var(--label-2)"); openSheet();
     });
-    // abrir la tarea (foto + comentarios) desde el aviso, sin disparar al pulsar la ✕
+    // abrir la tarea (foto + comentarios) desde el aviso, sin disparar al pulsar la ✕.
+    // Se abre EXACTAMENTE igual que desde el calendario: buscamos la completada en
+    // el historial por su clave (sharedId o id) para mostrar también la línea de
+    // detalle (hora · categoría · puntos) debajo del título.
     $$("#ntList [data-photo]").forEach(c=> c.onclick=(e)=>{ if(e.target.closest(".notif-del")) return;
-      Lightbox.show(c.getAttribute("data-photo"), { title:c.getAttribute("data-title"), key:c.getAttribute("data-key")||null, ownerId:c.getAttribute("data-owner")||null }); });
+      const key=c.getAttribute("data-key")||null;
+      const h=key ? (Store.get().history||[]).find(x=> String(x.sharedId||x.id)===String(key)) : null;
+      const meta = h ? { time:h.time, category:h.category, points:h.points } : {};
+      Lightbox.show(c.getAttribute("data-photo"), { title:(h&&h.title)||c.getAttribute("data-title"), key, ownerId:c.getAttribute("data-owner")||null, ...meta }); });
     // marcar como leídas
     Cloud.markNotifsRead(); Store.update(s=>{ (s.notifs||[]).forEach(n=>n.read=true); }); updateBadge();
   }
@@ -3562,7 +3583,10 @@ const Lightbox = (() => {
       const g=curGen; pollTimer=setInterval(()=>{ if(g!==curGen || !box.classList.contains("show")){ stopPoll(); return; } load(curKey, g); }, 5000);
     } else { cWrap.style.display="none"; }
   }
-  function hide(){ box.classList.remove("show"); curKey=null; curOwner=null; curGen++; stopPoll(); if(cInput) cInput.value=""; }
+  function hide(){ box.classList.remove("show"); curKey=null; curOwner=null; curGen++; stopPoll(); if(cInput) cInput.value="";
+    // limpiar la foto/comentarios anteriores para que al abrir otra tarea NO se
+    // vea por un instante la que se abrió antes (evita el "arrastre" visual).
+    img.removeAttribute("src"); t.textContent=""; m.textContent=""; if(cList) cList.innerHTML=""; lastSig=""; }
   $("#lbClose").onclick=hide;
   box.onclick=(e)=>{ if(e.target===box) hide(); };
   async function send(){
@@ -3736,7 +3760,7 @@ function boot(){
       let tick=0;
       setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); if((++tick%5)===0) Cloud.reconcile(); }, 12000);
       // Al volver a primer plano, refresca de inmediato
-      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); } });
+      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.render(); Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); } });
     });
   }
 
