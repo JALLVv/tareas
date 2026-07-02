@@ -2625,12 +2625,11 @@ const Tasks = (() => {
       Sheets.close();
       Gamify.awardCompletion(entry);
       render(); UI.renderProfile();
-      // sincronizar con la nube (si está activada)
+      // sincronizar con la nube (si está activada). El aviso a mis amigos (con
+      // push) lo crea el trigger del servidor al insertarse la completada,
+      // para cualquier tarea (compartida o no) y sin depender de mi conexión.
       if (Cloud.enabled()){
         Cloud.pushCompletion(entry, photoData); Cloud.pushProfile();
-        // avisar a TODOS mis amigos por push (el aviso in-app lo crea el trigger
-        // al insertarse la completada). Aplica a cualquier tarea, compartida o no.
-        Cloud.pushFriendsCompletion(task.title);
       }
       // tarea compartida: subir la foto y marcar la fila como hecha (para ambos)
       if (task.shared && task.sharedId && Cloud.enabled() && photoData){
@@ -3020,7 +3019,7 @@ const Cloud = (() => {
     if(!enabled() || !await init() || !client) return false;
     try{ const { error }=await client.from('shared_tasks').insert({ ...row, status:'invited' }); if(error) throw error; }
     catch(e){ console.warn("createShared:", e && e.message); return false; }
-    await notify(row.partner_id, 'shared_invite', row.title, null, false, row.id);
+    await notify(row.partner_id, 'shared_invite', row.title, null, row.id);
     return true;
   }
   async function fetchShared(){
@@ -3062,20 +3061,14 @@ const Cloud = (() => {
   }
 
   /* ---------- Notificaciones ---------- */
-  async function notify(recipientId, type, taskTitle, photoUrl, pushOnly, refKey){
+  // El push ya NO se manda desde aquí: un trigger del servidor lo envía en
+  // cuanto se inserta la fila, así llega aunque cierres la app justo después
+  // (antes, si lo hacías, el push se perdía aunque el aviso in-app sí quedara).
+  async function notify(recipientId, type, taskTitle, photoUrl, refKey){
     if(!enabled() || !await init() || !client || recipientId===uid) return;
     const actorName=(Store.get().profile.name||"Atleta");
-    // pushOnly: solo manda el push (la fila in-app la crea el destinatario al
-    // detectar el cambio, así no depende de la versión del que la completó).
-    if(!pushOnly){
-      try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null, ref_key:refKey||null }); }
-      catch(e){ console.warn("notify:", e && e.message); }
-    }
-    // push en segundo plano (vía Edge Function)
-    const body = type==='shared_invite' ? `${actorName} quiere agregarte a una tarea`
-      : type==='friend_request' ? `${actorName} te ha enviado una solicitud de amistad`
-      : `${actorName} completó una tarea`;
-    sendPush(recipientId, "Tareas", body, photoUrl);
+    try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null, ref_key:refKey||null }); }
+    catch(e){ console.warn("notify:", e && e.message); }
   }
   // Crea una notificación PARA MÍ MISMO (cuando detecto que un amigo completó una
   // tarea compartida). Así el aviso in-app es fiable aunque su app sea vieja.
@@ -3097,7 +3090,6 @@ const Cloud = (() => {
     const name=(Store.get().profile.name||"Atleta");
     try{ await client.from('notifications').insert({ recipient_id:uid, actor_id:uid, actor_name:name, type:'weekly_summary', task_title:"", ref_key:weekKey }); }
     catch(e){ console.warn("maybeNotifyWeeklySummary:", e && e.message); }
-    sendPush(uid, "Tareas", "Ya está disponible tu resumen de la semana", null);
     return true;
   }
 
@@ -3154,14 +3146,6 @@ const Cloud = (() => {
     try{ await client.from('friendships').insert({ requester:uid, addressee:otherId, status:'accepted' }); return true; }
     catch(e){ return false; }
   }
-  // Envía un push a TODOS mis amigos cuando completo una tarea (el aviso in-app
-  // lo crea el trigger del servidor; esto es solo el aviso del sistema).
-  async function pushFriendsCompletion(title, photoUrl){
-    if(!enabled() || !await init() || !client) return;
-    const name=(Store.get().profile.name||"Atleta");
-    const friends=(Store.get().friends||[]).filter(f=>f.cloudId);
-    friends.forEach(f=> sendPush(f.cloudId, "Tareas", `${name} completó una tarea`, photoUrl||null));
-  }
   /* ---------- Comentarios en tareas completadas ---------- */
   // Devuelve los comentarios con la foto/racha/nombre ACTUALES del autor (se leen
   // de profiles al vuelo, no se guardan en el comentario → nunca quedan obsoletos).
@@ -3176,15 +3160,14 @@ const Cloud = (() => {
       return comments.map(c=>{ const p=pm[c.author_id]||{}; return { ...c, author_name:p.name||c.author_name||"Alguien", avatar:p.avatar_url||null, streak:p.streak_current||0, mine:c.author_id===uid }; });
     }catch(e){ console.warn("fetchComments:", e && e.message); return []; }
   }
-  async function addComment(key, text, opts){
+  // El aviso in-app Y el push (vía trigger del servidor) los crea
+  // trg_notify_comment al insertarse el comentario: fiable aunque cierres la
+  // app justo después de comentar.
+  async function addComment(key, text){
     if(!enabled() || !await init() || !client || !key || !text) return false;
     const name=(Store.get().profile.name||"Atleta");
     try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text }); if(error) throw error; }
     catch(e){ console.warn("addComment:", e && e.message); return false; }
-    // aviso al dueño de la tarea (push; la fila in-app la crea el trigger)
-    if(opts && opts.ownerId && opts.ownerId!==uid){
-      sendPush(opts.ownerId, "Tareas", `${name} te comentó`, opts.photoUrl||null);
-    }
     return true;
   }
   async function deleteComment(id){
@@ -3251,12 +3234,6 @@ const Cloud = (() => {
       return true;
     }catch(e){ console.warn("ensurePush:", e && e.message); return false; }
   }
-  async function sendPush(recipientId, title, body, photoUrl){
-    try{
-      if(!client || !uid) return;
-      await client.functions.invoke('send-push', { body:{ recipientId, title, body, photo:photoUrl||null } });
-    }catch(e){ console.warn("sendPush:", e && e.message); }
-  }
   // Envía una notificación de PRUEBA a tus propios dispositivos. Sirve para
   // diagnosticar el push: si llega, toda la cadena (Edge Function + claves +
   // suscripción) funciona. Devuelve {ok, error, sent}.
@@ -3288,7 +3265,7 @@ const Cloud = (() => {
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
     createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
-    pushFriendsCompletion, fetchComments, addComment, deleteComment };
+    fetchComments, addComment, deleteComment };
 })();
 
 /* =====================================================================
@@ -3882,7 +3859,7 @@ const Lightbox = (() => {
     const txt=(cInput.value||"").trim(); if(!txt || !curKey) return;
     cInput.value=""; cInput.blur();
     const key=curKey, gen=curGen;
-    const ok=await Cloud.addComment(key, txt, { ownerId:curOwner, photoUrl:curPhoto });
+    const ok=await Cloud.addComment(key, txt);
     if(!ok){ UI.toast("No se pudo comentar","bell","var(--red)"); }
     if(gen===curGen) load(key, gen);
   }

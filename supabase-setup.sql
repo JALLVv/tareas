@@ -429,8 +429,54 @@ drop policy if exists "push_all" on public.push_subscriptions;
 create policy "push_all" on public.push_subscriptions for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- 7) PUSH FIABLE: se envía desde el SERVIDOR, no desde el que actúa --------
+-- Antes, cada acción (comentar, invitar a una tarea, completar, etc.) mandaba
+-- el push desde el propio dispositivo del que actuó, justo después de crear
+-- el aviso. Si cerrabas la app (o se cortaba la conexión) en ese instante, el
+-- push se perdía aunque el aviso in-app sí quedara guardado (así pasó con un
+-- comentario). Ahora un trigger en la tabla notifications manda el push en
+-- cuanto se inserta CUALQUIER aviso, sin depender de que el dispositivo que
+-- actuó siga conectado ni de que su app llegue a ejecutar ese paso.
+create extension if not exists pg_net;
+
+create or replace function public.send_push_for_notification()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare body text;
+begin
+  body := case new.type
+    when 'friend_request' then coalesce(new.actor_name,'Alguien') || ' te ha enviado una solicitud de amistad'
+    when 'shared_invite'   then coalesce(new.actor_name,'Alguien') || ' quiere agregarte a una tarea'
+    when 'comment'         then coalesce(new.actor_name,'Alguien') || ' te comentó'
+    when 'shared_done'     then coalesce(new.actor_name,'Un amigo') || ' completó una tarea'
+    when 'weekly_summary'  then 'Ya está disponible tu resumen de la semana'
+    else coalesce(new.actor_name,'Alguien') || ' te envió una notificación'
+  end;
+  begin
+    perform net.http_post(
+      url     := 'https://muvqfjyzneszkptsjxgi.supabase.co/functions/v1/send-push',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11dnFmanl6bmVzemtwdHNqeGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDI0NjIsImV4cCI6MjA5ODI3ODQ2Mn0.Ud4QhDc2EsTKPQoHtEaubH3jMTppI4CKDZKZqGf2Uao'
+      ),
+      body    := jsonb_build_object('recipientId', new.recipient_id, 'title', 'Tareas', 'body', body, 'photo', new.photo_url)
+    );
+  exception when others then null; -- nunca bloquear la inserción del aviso
+  end;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_send_push_notification on public.notifications;
+create trigger trg_send_push_notification
+  after insert on public.notifications
+  for each row execute function public.send_push_for_notification();
+
 -- =====================================================================
--- 7) ÚLTIMO PASO (en el panel, no en SQL):
+-- 8) ÚLTIMO PASO (en el panel, no en SQL):
 --    Authentication → Sign In / Providers → activa "Anonymous sign-ins".
 --    Sin esto, la app no podrá iniciar sesión anónima y la nube no funcionará.
 -- =====================================================================
