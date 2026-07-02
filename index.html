@@ -323,16 +323,16 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .task-body{flex:1;min-width:0;}
 .task-title{font-size:15px;font-weight:600;letter-spacing:-0.01em;line-height:1.25;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.task-meta{display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap;}
-.tag{font-size:13.5px;font-weight:600;color:var(--label-2);}
+.task-meta{display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;}
+.tag{font-size:12.5px;font-weight:500;color:var(--label-2);}
 .tag.dot::before{content:"·";margin-right:6px;color:var(--label-3);}
 .tag.rnd{color:var(--purple);}
-.tag.shared{color:var(--indigo);font-weight:700;}
-.tag.today{color:var(--blue);font-weight:800;}
+.tag.shared{color:var(--indigo);}
+.tag.today{color:var(--blue);font-weight:700;}
 /* Tarea urgente: burbuja roja, bien marcada */
 .task-card.urgent{background:rgba(255,69,58,0.32);box-shadow:inset 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,69,58,0.30);}
 .task-card.urgent.done{background:rgba(255,69,58,0.14);box-shadow:inset 0 0 0 1px rgba(255,69,58,0.45);}
-.tag.pts{color:var(--yellow);}
+.tag.pts{color:var(--yellow);font-weight:600;}
 .task-check{width:30px;height:30px;border-radius:50%;border:2px solid var(--label-3);flex:0 0 auto;padding:0;
   display:grid;place-items:center;transition:transform .15s var(--ease-out), background .2s, border-color .2s;}
 .task-check svg{width:18px;height:18px;color:#fff;opacity:0;transform:scale(0.5);transition:.2s var(--ease-out);}
@@ -872,7 +872,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v71";
+const APP_VERSION = "v72";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
