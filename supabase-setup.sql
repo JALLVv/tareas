@@ -243,6 +243,31 @@ create trigger trg_propagate_shared
   after update on public.shared_tasks
   for each row execute function public.propagate_shared_completion();
 
+-- RECUPERACIÓN (una vez, segura de repetir): antes de separar los bloques de
+-- arriba, un fallo silencioso en el recálculo del perfil podía deshacer el
+-- registro que le tocaba ver al otro implicado de una compartida ya
+-- completada. Esto revisa TODAS las compartidas ya marcadas 'done' y crea el
+-- registro que le falte a quien no lo tenga (no toca nada si ya existe).
+do $$
+declare r record; u uuid; cname text;
+begin
+  for r in select * from public.shared_tasks where status = 'done' loop
+    foreach u in array array[r.owner_id, r.partner_id]
+    loop
+      if u is null or u = r.completed_by then continue; end if;
+      if not exists (select 1 from public.completions where id = 'sh_' || r.id) then
+        select name into cname from public.profiles where id = r.completed_by;
+        begin
+          insert into public.completions(id, user_id, date, title, category, points, time, photo_url, partner_id, partner_name, shared_id)
+          values('sh_' || r.id, u, r.done_date, r.title, r.category, r.points, r.done_time, r.photo_url, r.completed_by, cname, r.id);
+          perform public.recompute_profile(u);
+        exception when others then null;
+        end;
+      end if;
+    end loop;
+  end loop;
+end $$;
+
 -- (iii) Al COMPLETAR CUALQUIER tarea (compartida o no): avisa a TODOS tus
 -- amigos. Se dispara al insertarse tu completada; ignora las recibidas (sh_).
 create or replace function public.notify_friends_on_completion()
