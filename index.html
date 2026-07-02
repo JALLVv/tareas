@@ -3231,6 +3231,12 @@ const Cloud = (() => {
       if(!sub){ sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:wantKey }); }
       const json=sub.toJSON();
       await client.from('push_subscriptions').upsert({ user_id:uid, endpoint:sub.endpoint, subscription:json, updated_at:new Date().toISOString() });
+      // Limpia OTRAS suscripciones de este mismo usuario (de una reinstalación
+      // anterior de la PWA: el navegador emite un endpoint nuevo y la fila vieja
+      // se queda huérfana, sin fallar nunca con 404 porque sigue siendo válida
+      // para el servicio de push). Si no se limpian, cada aviso se manda a
+      // todas → notificaciones duplicadas y más lentas de entregar.
+      try{ await client.from('push_subscriptions').delete().eq('user_id', uid).neq('endpoint', sub.endpoint); }catch(_){}
       return true;
     }catch(e){ console.warn("ensurePush:", e && e.message); return false; }
   }
