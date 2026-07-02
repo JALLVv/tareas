@@ -872,7 +872,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v70";
+const APP_VERSION = "v71";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4120,7 +4120,21 @@ function boot(){
 
   // Service Worker: solo cuando se sirve por http(s) (no en file://)
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")){
-    window.addEventListener("load",()=> navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
+    window.addEventListener("load",async ()=>{
+      try{
+        const reg = await navigator.serviceWorker.register("service-worker.js");
+        // En iOS, la app puede tardar mucho en detectar sola una versión nueva
+        // del service worker (sobre todo si nunca se cierra del todo). Forzamos
+        // la comprobación al abrir y al volver de segundo plano, y recargamos
+        // una vez cuando el nuevo SW toma el control.
+        reg.update().catch(()=>{});
+        document.addEventListener("visibilitychange",()=>{ if(!document.hidden) reg.update().catch(()=>{}); });
+        let reloaded=false;
+        navigator.serviceWorker.addEventListener("controllerchange",()=>{
+          if(reloaded) return; reloaded=true; location.reload();
+        });
+      }catch(e){}
+    });
   }
 }
 document.addEventListener("DOMContentLoaded", ()=>{
