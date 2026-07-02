@@ -167,11 +167,17 @@ begin
   foreach u in array array[old.owner_id, old.partner_id]
   loop
     if u is null or u = auth.uid() then continue; end if;  -- al que borra no se le toca
+    -- Dos bloques SEPARADOS (no uno solo): en PL/pgSQL, un bloque "begin/exception"
+    -- es un savepoint implícito — si recompute_profile fallara DENTRO del mismo
+    -- bloque que el delete, el delete ya hecho se revertiría también, en silencio.
     begin
       delete from public.completions
         where user_id = u and (id = 'sh_' || old.id or shared_id = old.id);
-      perform public.recompute_profile(u);
     exception when others then null;  -- nunca bloquear el borrado
+    end;
+    begin
+      perform public.recompute_profile(u);
+    exception when others then null;
     end;
   end loop;
   -- Borra los avisos (completó / comentó) que apuntaban a esta tarea, para que no
@@ -206,6 +212,10 @@ begin
     foreach u in array array[new.owner_id, new.partner_id]
     loop
       if u is null or u = new.completed_by then continue; end if;  -- el que completó ya tiene la suya
+      -- Dos bloques SEPARADOS: si recompute_profile fallara dentro del MISMO
+      -- bloque que el insert, el insert ya hecho se revertiría también (savepoint
+      -- implícito de begin/exception), y la tarea nunca aparecería del otro lado
+      -- aunque el insert en sí hubiera funcionado bien.
       begin
         insert into public.completions(id, user_id, date, title, category, points, time, photo_url, partner_id, partner_name, shared_id)
         values('sh_' || new.id, u, new.done_date, new.title, new.category, new.points, new.done_time, new.photo_url,
@@ -214,10 +224,13 @@ begin
           date=excluded.date, title=excluded.title, category=excluded.category, points=excluded.points,
           time=excluded.time, photo_url=excluded.photo_url, partner_id=excluded.partner_id,
           partner_name=excluded.partner_name, shared_id=excluded.shared_id;
-        perform public.recompute_profile(u);
         -- (la notificación "completó una tarea" la crea trg_notify_friends al
         --  insertarse la completada del que la hizo; aquí no, para no duplicar.)
       exception when others then null;  -- nunca bloquear la compleción
+      end;
+      begin
+        perform public.recompute_profile(u);
+      exception when others then null;
       end;
     end loop;
   end if;

@@ -1703,7 +1703,12 @@ function openWeekSummarySheet(ws, opts){
 // (propio y de amigos) y en la pestaña "Completadas" — hora · categoría ·
 // con quién · puntos.
 function historyItemHtml(h){
-  const meta=[h.time||"", h.category||"", (h.shared&&h.partnerName?`con ${esc(h.partnerName)}`:""), (h.points!=null?`${h.points} pts`:"")].filter(Boolean);
+  const meta=[
+    h.time?esc(h.time):"",
+    h.category?esc(h.category):"",
+    (h.shared&&h.partnerName?`<span class="pts" style="color:var(--indigo)">con ${esc(h.partnerName)}</span>`:""),
+    (h.points!=null?`<span class="pts">${h.points} pts</span>`:"")
+  ].filter(Boolean);
   return `<div class="card gal-item" data-h="${h.id}">
     <div class="gal-thumb"></div>
     <div class="gal-info">
