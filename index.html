@@ -573,6 +573,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 /* Galería del día */
 .day-gallery{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
 .gal-item{display:flex;gap:13px;align-items:center;padding:10px;min-width:0;}
+.gal-item.anim-in{animation:cardIn .4s var(--ease-out) backwards;}
 .gal-thumb{width:64px;height:64px;border-radius:14px;overflow:hidden;flex:0 0 auto;background:var(--fill-2);}
 .gal-thumb img{width:100%;height:100%;object-fit:cover;}
 .gal-info{flex:1;min-width:0;}
@@ -1701,15 +1702,16 @@ function openWeekSummarySheet(ws, opts){
 
 // Tarjeta de una completada (historial): mismo formato en el calendario
 // (propio y de amigos) y en la pestaña "Completadas" — hora · categoría ·
-// con quién · puntos.
-function historyItemHtml(h){
+// con quién · puntos. "i" (opcional): índice para la animación de entrada
+// escalonada, igual que la lista de pendientes (solo se pasa desde ahí).
+function historyItemHtml(h, i){
   const meta=[
     h.time?esc(h.time):"",
     h.category?esc(h.category):"",
     (h.shared&&h.partnerName?`<span class="pts" style="color:var(--indigo)">con ${esc(h.partnerName)}</span>`:""),
     (h.points!=null?`<span class="pts">${h.points} pts</span>`:"")
   ].filter(Boolean);
-  return `<div class="card gal-item" data-h="${h.id}">
+  return `<div class="card gal-item${i!=null?' anim-in':''}" data-h="${h.id}"${i!=null?` style="animation-delay:${Math.min(i*40,240)}ms"`:""}>
     <div class="gal-thumb"></div>
     <div class="gal-info">
       <div class="t">${esc(shortTitle(h.title))}</div>
@@ -2364,7 +2366,7 @@ const Tasks = (() => {
         ${isToday?"":'<button class="mini-btn" id="doneDateToday">Hoy</button>'}
       </div>`;
     const listHtml = items.length
-      ? `<div class="day-gallery">${items.map(historyItemHtml).join("")}</div>`
+      ? `<div class="day-gallery">${items.map((h,i)=>historyItemHtml(h,i)).join("")}</div>`
       : emptyState(isToday?"Nada completado hoy todavía":"Nada completado ese día",
                     isToday?"Completa una tarea para verla aquí":"Elige otra fecha para ver esas tareas");
     wrap.innerHTML = dateBar + listHtml;
@@ -2865,7 +2867,7 @@ const Profile = (() => {
     Sheets.open(head);
     $("#dgClose").onclick=Sheets.close;
     const listEl=$("#dgList");
-    listEl.innerHTML = items.length ? items.map(historyItemHtml).join("") : `<div class="card friends-empty">Sin tareas registradas este día.</div>`;
+    listEl.innerHTML = items.length ? items.map(h=>historyItemHtml(h)).join("") : `<div class="card friends-empty">Sin tareas registradas este día.</div>`;
     bindHistoryThumbs(listEl, items);
   }
 
