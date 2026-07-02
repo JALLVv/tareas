@@ -67,7 +67,10 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;margin:0;padding:0;overflow:hidden;}
+/* En iOS (app instalada en pantalla de inicio) "100%"/"100vh" a veces no
+   coincide con el alto real de la pantalla, dejando una franja negra debajo
+   de la barra inferior fija. "100dvh" usa el alto real del viewport visual. */
+html,body{height:100%;height:100dvh;margin:0;padding:0;overflow:hidden;}
 body{
   font-family:var(--font);
   background:var(--bg);
@@ -292,6 +295,10 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
    TARJETAS DE TAREA
    ========================================================================= */
 .tasklist{display:flex;flex-direction:column;gap:11px;}
+.done-datebar{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.done-datebar input[type=date]{color-scheme:dark;background:var(--fill-2);border:0.5px solid var(--hairline);
+  border-radius:12px;padding:9px 12px;color:var(--label);font-size:15px;flex:1;}
+.done-datebar .mini-btn{flex:0 0 auto;}
 .task-card{display:flex;align-items:center;gap:13px;padding:14px;animation:cardIn .4s var(--ease-out) backwards;}
 @keyframes cardIn{from{opacity:0;transform:translateY(10px) scale(0.98);}}
 .task-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;
@@ -1692,6 +1699,34 @@ function openWeekSummarySheet(ws, opts){
   animateCounters($("#sheet"));
 }
 
+// Tarjeta de una completada (historial): mismo formato en el calendario
+// (propio y de amigos) y en la pestaña "Completadas" — hora · categoría ·
+// con quién · puntos.
+function historyItemHtml(h){
+  const meta=[h.time||"", h.category||"", (h.shared&&h.partnerName?`con ${esc(h.partnerName)}`:""), (h.points!=null?`${h.points} pts`:"")].filter(Boolean);
+  return `<div class="card gal-item" data-h="${h.id}">
+    <div class="gal-thumb"></div>
+    <div class="gal-info">
+      <div class="t">${esc(shortTitle(h.title))}</div>
+      <div class="m">${meta.join(" · ")}${h.random?" · ✦":""}</div>
+    </div>
+  </div>`;
+}
+// Carga las miniaturas (locales o por URL) y abre el visor (foto + comentarios)
+// al tocarlas. ownerId: dueño de la tarea (para avisarle al comentar).
+function bindHistoryThumbs(listEl, items, ownerId){
+  items.forEach(async (h,idx)=>{
+    const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
+    if(h.photoId){ const data=await DB.get(h.photoId);
+      if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); thumb.parentElement.onclick=()=>Lightbox.show(data, {...h, ownerId}); }
+      else thumb.innerHTML=noPhotoThumb();
+    } else if(h.photoUrl){
+      const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
+      thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl, {...h, ownerId});
+    } else { thumb.innerHTML=noPhotoThumb(); }
+  });
+}
+
 /* ---------------------------------------------------------------------
    DB — fotografías en IndexedDB (capacidad muy superior a localStorage)
    --------------------------------------------------------------------- */
@@ -2010,6 +2045,7 @@ const Sheets = (() => {
    ===================================================================== */
 const Tasks = (() => {
   let filter = "pending";
+  let doneDate = dateKey(); // fecha mostrada en "Completadas" (por defecto, hoy)
   let sharedBackfilled = false; // re-sube una vez por sesión las compartidas (para rellenar "con quién")
 
   const RECUR = [
@@ -2292,35 +2328,48 @@ const Tasks = (() => {
   /* ---------- LISTA ---------- */
   function render(){
     cleanupExpired();
+    if(filter==="done"){ renderDone(); return; }
     const wrap = $("#taskListWrap");
     const s = Store.get();
-    let list = s.tasks.slice();
-    if (filter==="pending") list = list.filter(t=>!isDoneToday(t) && scheduledToday(t));
-    if (filter==="done")    list = list.filter(t=>isDoneToday(t));
-    // urgentes y pendientes primero
-    list.sort((a,b)=>{
-      const da=isDoneToday(a)?1:0, db=isDoneToday(b)?1:0;
-      if(da!==db) return da-db;
-      const ua=a.urgent?0:1, ub=b.urgent?0:1;
-      return ua-ub;
-    });
+    let list = s.tasks.filter(t=>!isDoneToday(t) && scheduledToday(t));
+    list.sort((a,b)=>{ const ua=a.urgent?0:1, ub=b.urgent?0:1; return ua-ub; }); // urgentes primero
 
     if (!s.tasks.length){
       wrap.innerHTML = emptyState("Aún no tienes tareas","Genera una o crea la tuya con el botón +");
       $("#fab").classList.add("show"); return;
     }
     if (!list.length){
-      wrap.innerHTML = emptyState(
-        filter==="done"?"Nada completado todavía":"¡Todo al día!",
-        filter==="done"?"Completa una tarea para verla aquí":"No tienes tareas pendientes");
+      wrap.innerHTML = emptyState("¡Todo al día!","No tienes tareas pendientes");
       return;
     }
     wrap.innerHTML = `<div class="tasklist">${list.map((t,i)=>cardHtml(t,i)).join("")}</div>`;
     bind(wrap);
   }
+  // "Completadas": se lista por HISTORIAL (no por la lista de tareas), filtrado
+  // por una fecha elegible (por defecto, hoy) — mismo formato que el calendario
+  // (hora · categoría · con quién · puntos), incluida la miniatura/foto tocable.
+  function renderDone(){
+    const wrap = $("#taskListWrap");
+    const s = Store.get();
+    const items = (s.history||[]).filter(h=>h.date===doneDate).sort((a,b)=> (a.time||"")<(b.time||"")?-1:1);
+    const isToday = doneDate===dateKey();
+    const dateBar = `
+      <div class="done-datebar">
+        <input type="date" id="doneDatePick" value="${doneDate}" max="${dateKey()}"/>
+        ${isToday?"":'<button class="mini-btn" id="doneDateToday">Hoy</button>'}
+      </div>`;
+    const listHtml = items.length
+      ? `<div class="day-gallery">${items.map(historyItemHtml).join("")}</div>`
+      : emptyState(isToday?"Nada completado hoy todavía":"Nada completado ese día",
+                    isToday?"Completa una tarea para verla aquí":"Elige otra fecha para ver esas tareas");
+    wrap.innerHTML = dateBar + listHtml;
+    const listEl = $(".day-gallery",wrap);
+    if(listEl) bindHistoryThumbs(listEl, items);
+    const dp=$("#doneDatePick",wrap); if(dp) dp.onchange=()=>{ if(dp.value){ haptic(); doneDate=dp.value; render(); } };
+    const tb=$("#doneDateToday",wrap); if(tb) tb.onclick=()=>{ haptic(); doneDate=dateKey(); render(); };
+  }
   function cardHtml(t,i){
     const color = catColor(t.category);
-    const done = isDoneToday(t);
     const pts = taskPoints(t.minutes,t.random);
     const meta = [];
     // solo el día (recurrencia) y los puntos
@@ -2328,7 +2377,7 @@ const Tasks = (() => {
     if(t.shared && t.partnerName) meta.push(`<span class="tag dot shared">con ${esc(t.partnerName)}</span>`);
     meta.push(`<span class="tag dot pts">${pts} pts</span>`);
     return `
-      <div class="card task-card${done?" done":""}${t.urgent?" urgent":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
+      <div class="card task-card${t.urgent?" urgent":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
         <div class="task-icon" style="background:${color}">${Icons.get(t.category)}</div>
         <div class="task-body" data-tap="${t.id}" role="button">
           <div class="task-title">${esc(t.title)}</div>
@@ -2646,7 +2695,10 @@ const Tasks = (() => {
     try{ return await Cloud.uploadShared(sharedId, dataUrl); }catch(e){ return null; }
   }
 
-  function setFilter(f){ filter=f; render(); }
+  function setFilter(f){
+    if(f==="done" && filter!=="done") doneDate=dateKey(); // al entrar a "Completadas", parte de hoy
+    filter=f; render();
+  }
   function init(){
     $("#fab").onclick = openCreate;
     $$("#taskFilter .seg").forEach(seg=> seg.onclick=()=>{
@@ -2808,25 +2860,8 @@ const Profile = (() => {
     Sheets.open(head);
     $("#dgClose").onclick=Sheets.close;
     const listEl=$("#dgList");
-    listEl.innerHTML = items.map(h=>`
-      <div class="card gal-item" data-h="${h.id}">
-        <div class="gal-thumb"></div>
-        <div class="gal-info">
-          <div class="t">${esc(shortTitle(h.title))}${h.shared&&h.partnerName?` · <span class="pts" style="color:var(--indigo)">con ${esc(h.partnerName)}</span>`:''}</div>
-          <div class="m">${h.time} · ${esc(h.category)} · <span class="pts">${h.points} pts</span>${h.random?' · ✦':''}</div>
-        </div>
-      </div>`).join("");
-    // cargar miniaturas: desde IndexedDB (locales) o por URL (tareas compartidas)
-    items.forEach(async (h,idx)=>{
-      const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
-      if(h.photoId){ const data=await DB.get(h.photoId);
-        if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); thumb.parentElement.onclick=()=>Lightbox.show(data,h); }
-        else thumb.innerHTML=noPhotoThumb();
-      } else if(h.photoUrl){
-        const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
-        thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl,h);
-      } else { thumb.innerHTML=noPhotoThumb(); }
-    });
+    listEl.innerHTML = items.length ? items.map(historyItemHtml).join("") : `<div class="card friends-empty">Sin tareas registradas este día.</div>`;
+    bindHistoryThumbs(listEl, items);
   }
 
   function changeMonth(delta){ calDate.setMonth(calDate.getMonth()+delta); haptic(); renderCalendar(delta); }
