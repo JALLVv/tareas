@@ -2,7 +2,7 @@
    App-shell offline caching. The app stores all user data in
    localStorage + IndexedDB, so caching the shell is enough to run offline. */
 
-const CACHE = "rachas-v72";
+const CACHE = "rachas-v73";
 
 const SHELL = [
   "./",
@@ -83,5 +83,30 @@ self.addEventListener("notificationclick", (event) => {
       }
       if (self.clients.openWindow) return self.clients.openWindow(target);
     })
+  );
+});
+
+// --- Renovación de la suscripción push -----------------------------------
+// El navegador puede invalidar/rotar la suscripción por su cuenta (rotación de
+// claves, limpieza del sistema, etc.) y avisa con este evento. Si no
+// reaccionamos, la app se queda "suscrita" a un endpoint muerto para siempre.
+// Volvemos a suscribirnos con la misma clave VAPID y avisamos a las páginas
+// abiertas para que guarden la nueva suscripción en Supabase (el service
+// worker no tiene sesión propia para hacerlo él solo).
+const VAPID_PUBLIC = "BALkr9K1ATw7s5_C4jOzRk6TX8-bVL-BuYsNxHF3miixd2r9s-cHeFcsNkrpWo67Ouq53s2Pbx7dxWf8L66-W7Q";
+function urlB64ToUint8(base64) {
+  const pad = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b = (base64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(VAPID_PUBLIC) })
+      .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
+      .then((list) => list.forEach((c) => c.postMessage({ type: "push-resubscribed" })))
+      .catch(() => {})
   );
 });

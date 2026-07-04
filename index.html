@@ -872,7 +872,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v72";
+const APP_VERSION = "v73";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3294,6 +3294,18 @@ const Cloud = (() => {
         }
       }
       if(!sub){ sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:wantKey }); }
+      else{
+        // La suscripción local puede seguir "viva" para el navegador aunque el
+        // servidor de push ya la haya invalidado (p. ej. tras un 410 que borró
+        // su fila). Si no encontramos su fila en Supabase, no la resucitamos
+        // tal cual: forzamos una nueva de verdad, o quedaría reintentando para
+        // siempre un endpoint muerto cada vez que se abre la app.
+        const { data: existing } = await client.from('push_subscriptions').select('endpoint').eq('endpoint', sub.endpoint).maybeSingle();
+        if(!existing){
+          try{ await sub.unsubscribe(); }catch(_){}
+          sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:wantKey });
+        }
+      }
       const json=sub.toJSON();
       await client.from('push_subscriptions').upsert({ user_id:uid, endpoint:sub.endpoint, subscription:json, updated_at:new Date().toISOString() });
       // Limpia OTRAS suscripciones de este mismo usuario (de una reinstalación
@@ -4111,7 +4123,14 @@ function boot(){
       let tick=0;
       setInterval(()=>{ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); if((++tick%5)===0) Cloud.reconcile(); }, 12000);
       // Al volver a primer plano, refresca de inmediato
-      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); checkWeeklySummary(); } });
+      document.addEventListener("visibilitychange",()=>{
+        if(document.hidden) return;
+        Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); checkWeeklySummary();
+        // Revalida la suscripción push cada vez que vuelves a la app (no solo al
+        // arrancar): así, si el sistema la invalidó en algún momento, se repara
+        // sola sin esperar a un reinicio completo de la app.
+        if(("Notification" in window) && Notification.permission==="granted") Cloud.ensurePush();
+      });
     });
   }
 
@@ -4132,6 +4151,13 @@ function boot(){
         let reloaded=false;
         navigator.serviceWorker.addEventListener("controllerchange",()=>{
           if(reloaded) return; reloaded=true; location.reload();
+        });
+        // El SW se resuscribió solo tras un "pushsubscriptionchange" (el
+        // sistema invalidó/rotó la suscripción). Guardamos la nueva de
+        // inmediato en Supabase, en vez de esperar a la próxima vez que se
+        // abra la app.
+        navigator.serviceWorker.addEventListener("message",(e)=>{
+          if(e.data && e.data.type==="push-resubscribed") Cloud.ensurePush();
         });
       }catch(e){}
     });
