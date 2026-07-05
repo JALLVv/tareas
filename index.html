@@ -334,7 +334,10 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .task-card.urgent.done{background:rgba(255,69,58,0.14);box-shadow:inset 0 0 0 1px rgba(255,69,58,0.45);}
 .tag.pts{color:var(--yellow);font-weight:600;}
 .task-check{width:30px;height:30px;border-radius:50%;border:2px solid var(--label-3);flex:0 0 auto;padding:0;
-  display:grid;place-items:center;transition:transform .15s var(--ease-out), background .2s, border-color .2s;}
+  display:grid;place-items:center;position:relative;
+  transition:transform .15s var(--ease-out), background .2s, border-color .2s;}
+/* zona táctil ampliada a ~44px (mínimo iOS) sin agrandar el círculo visible */
+.task-check::after{content:"";position:absolute;inset:-9px;border-radius:50%;}
 .task-check svg{width:18px;height:18px;color:#fff;opacity:0;transform:scale(0.5);transition:.2s var(--ease-out);}
 .task-check:active{transform:scale(0.85);}
 .task-card.done .task-check{background:var(--green);border-color:var(--green);}
@@ -493,7 +496,9 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .req-actions{display:flex;gap:8px;margin-top:10px;}
 .req-actions .mini-btn{flex:0 0 auto;padding:7px 18px;}
 .notif-del{flex:0 0 auto;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;align-self:center;
-  color:var(--label-2);background:rgba(120,120,128,0.18);font-size:13px;line-height:1;border:none;}
+  color:var(--label-2);background:rgba(120,120,128,0.18);font-size:13px;line-height:1;border:none;position:relative;}
+/* zona táctil ampliada a ~44px (mínimo iOS) sin agrandar la ✕ visible */
+.notif-del::after{content:"";position:absolute;inset:-8px;border-radius:50%;}
 .notif-del:active{transform:scale(0.88);}
 .notif-clear-all{display:block;width:100%;text-align:center;margin:0 0 12px;color:var(--red);font-weight:600;font-size:14px;background:none;border:none;padding:6px;}
 .notif-activate{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:14px 16px;}
@@ -513,7 +518,9 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .mini-btn.danger{background:rgba(255,69,58,0.18);color:var(--red);}
 .mini-btn:active{transform:scale(0.94);}
 .sheet-head .act.danger{color:var(--red);font-weight:600;}
-.friend-card{display:flex;align-items:center;gap:13px;padding:12px 14px;margin-bottom:10px;cursor:pointer;}
+.friend-card{display:flex;align-items:center;gap:13px;padding:12px 14px;margin-bottom:10px;cursor:pointer;
+  transition:transform .15s var(--ease-out);}
+.friend-card:active{transform:scale(0.98);}
 .friend-av{width:46px;height:46px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;overflow:hidden;
   font-size:19px;font-weight:800;color:#fff;background:linear-gradient(135deg,#5E5CE6,#0A84FF);}
 .friend-av img,.friend-profile-head .big-av img{width:100%;height:100%;object-fit:cover;}
@@ -590,6 +597,9 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .day-gallery{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
 .gal-item{display:flex;gap:13px;align-items:center;padding:10px;min-width:0;}
 .gal-item.anim-in{animation:cardIn .4s var(--ease-out) backwards;}
+/* respuesta táctil (estilo iOS) solo en las tarjetas que abren algo al tocarlas */
+.gal-item.tappable{cursor:pointer;transition:transform .15s var(--ease-out);}
+.gal-item.tappable:active{transform:scale(0.97);}
 .app-version{text-align:center;font-size:11px;color:var(--label-4);font-weight:600;margin-top:16px;letter-spacing:0.02em;}
 .gal-thumb{width:64px;height:64px;border-radius:14px;overflow:hidden;flex:0 0 auto;background:var(--fill-2);}
 .gal-thumb img{width:100%;height:100%;object-fit:cover;}
@@ -681,7 +691,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 @keyframes fall{to{transform:translateY(105vh) rotate(720deg);opacity:0.9;}}
 
 /* Toast */
-.toast{position:fixed;left:50%;top:calc(var(--safe-top) + 14px);z-index:330;transform:transl(-50%,0);
+.toast{position:fixed;left:50%;top:calc(var(--safe-top) + 14px);z-index:330;
   transform:translateX(-50%) translateY(-120%);
   background:var(--mat-thick);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
   border:0.5px solid var(--sep);border-radius:18px;padding:12px 20px;display:flex;align-items:center;gap:10px;
@@ -872,7 +882,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v73";
+const APP_VERSION = "v74";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1715,7 +1725,7 @@ function animateCounters(root, duration){
 // Abre el resumen de la semana como su propia hoja (botón "Ver resumen
 // semanal" en un perfil, o al tocar el aviso "Ya está disponible…").
 function openWeekSummarySheet(ws, opts){
-  Sheets.open(`
+  Sheets.show(`
     <div class="grabber"></div>
     <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Resumen de la semana</span><span class="act" id="wsClose">Cerrar</span></div>
     <div class="sheet-body">${weekSummaryHtml(ws, {...(opts||{}), hideTitle:true})}</div>`);
@@ -1747,12 +1757,13 @@ function historyItemHtml(h, i){
 function bindHistoryThumbs(listEl, items, ownerId){
   items.forEach(async (h,idx)=>{
     const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
+    const card=thumb.parentElement;
     if(h.photoId){ const data=await DB.get(h.photoId);
-      if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); thumb.parentElement.onclick=()=>Lightbox.show(data, {...h, ownerId}); }
+      if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); card.classList.add("tappable"); card.onclick=()=>Lightbox.show(data, {...h, ownerId}); }
       else thumb.innerHTML=noPhotoThumb();
     } else if(h.photoUrl){
       const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
-      thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl, {...h, ownerId});
+      card.classList.add("tappable"); card.onclick=()=>Lightbox.show(h.photoUrl, {...h, ownerId});
     } else { thumb.innerHTML=noPhotoThumb(); }
   });
 }
@@ -1889,7 +1900,9 @@ const Generator = (() => {
   function clearOutput(){ current=null; genPartner=null; const o=$("#genOutput"); if(o) o.innerHTML=""; }
 
   function renderCats(){
-    const wrap = $("#genCats"); wrap.innerHTML="";
+    // se conserva el scroll horizontal: al re-pintar (elegir un chip lejano)
+    // antes la tira saltaba de vuelta al inicio.
+    const wrap = $("#genCats"); const sl=wrap.scrollLeft; wrap.innerHTML="";
     CATEGORIES.forEach(c=>{
       const chip = el("button","chip"+(c.name===selCat?" sel":""));
       chip.style.setProperty("--accent", c.color);
@@ -1897,22 +1910,25 @@ const Generator = (() => {
       chip.onclick = ()=>{ selCat=c.name; haptic(); renderCats(); clearOutput(); };
       wrap.appendChild(chip);
     });
+    wrap.scrollLeft=sl;
   }
   function renderPeople(){
-    const wrap = $("#genPeople"); wrap.innerHTML="";
+    const wrap = $("#genPeople"); const sl=wrap.scrollLeft; wrap.innerHTML="";
     PEOPLE.forEach(p=>{
       const seg = el("div","seg"+(p.k===selPeople?" sel":""), p.short);
       seg.onclick = ()=>{ selPeople=p.k; haptic(); renderPeople(); clearOutput(); };
       wrap.appendChild(seg);
     });
+    wrap.scrollLeft=sl;
   }
   function renderDur(){
-    const wrap = $("#genDur"); wrap.innerHTML="";
+    const wrap = $("#genDur"); const sl=wrap.scrollLeft; wrap.innerHTML="";
     DURATIONS.forEach(m=>{
       const seg = el("div","seg"+(m===selDur?" sel":""), durShort(m));
       seg.onclick = ()=>{ selDur=m; haptic(); renderDur(); clearOutput(); };
       wrap.appendChild(seg);
     });
+    wrap.scrollLeft=sl;
   }
   function renderOutput(){
     const out = $("#genOutput");
@@ -2008,6 +2024,7 @@ const Gamify = (() => {
     const s = Store.get();
     const before = rankFor(s.points).index;
 
+    let streakUp = 0; // fuera del entry: no debe persistirse en el historial
     Store.update(st=>{
       st.points += entry.points;
       st.history.unshift(entry);
@@ -2019,17 +2036,16 @@ const Gamify = (() => {
         else st.streak.current = 1;
         st.streak.lastDate = today;
         if (st.streak.current > st.streak.best) st.streak.best = st.streak.current;
-        entry._streakUp = st.streak.current;
+        streakUp = st.streak.current;
       }
-      st.points = st.points;
     });
 
     UI.pointsPop("+"+entry.points);
     const after = rankFor(Store.get().points).index;
 
     // racha primero (banner), luego rango si subió
-    if (entry._streakUp){ setTimeout(()=>UI.streakBanner(entry._streakUp), 500); }
-    if (after > before){ setTimeout(()=>UI.rankUp(RANKS[after]), entry._streakUp?1500:700); }
+    if (streakUp){ setTimeout(()=>UI.streakBanner(streakUp), 500); }
+    if (after > before){ setTimeout(()=>UI.rankUp(RANKS[after]), streakUp?1500:700); }
   }
   return { awardCompletion };
 })();
@@ -2066,8 +2082,15 @@ const Sheets = (() => {
     scrim.classList.remove("show");
     if (onClose){ const f=onClose; onClose=null; setTimeout(f,300); }
   }
+  // Abre si está cerrado; si ya hay una hoja abierta, solo cambia el contenido
+  // (swap). Así, navegar dentro de una hoja (aceptar un aviso, pasar de las
+  // acciones de una tarea a completarla, etc.) no re-anima la hoja entera
+  // desde abajo ("temblor"), igual que en las hojas nativas de iOS.
+  function show(html, cls){
+    return (scrim.classList.contains("show") ? swap : open)(html, cls);
+  }
   function setOnClose(f){ onClose=f; }
-  return { open, swap, close, setOnClose, host };
+  return { open, swap, show, close, setOnClose, host };
 })();
 
 /* =====================================================================
@@ -2366,7 +2389,11 @@ const Tasks = (() => {
 
     if (!s.tasks.length){
       wrap.innerHTML = emptyState("Aún no tienes tareas","Genera una o crea la tuya con el botón +");
-      $("#fab").classList.add("show"); return;
+      // el FAB solo se muestra si la vista de tareas es la activa: render()
+      // también se llama en segundo plano (sondeo/sincronización) y antes
+      // hacía aparecer el botón + encima del Generador o del Perfil.
+      if($("#view-tasks").classList.contains("active")) $("#fab").classList.add("show");
+      return;
     }
     if (!list.length){
       wrap.innerHTML = emptyState("¡Todo al día!","No tienes tareas pendientes");
@@ -2444,7 +2471,7 @@ const Tasks = (() => {
           <button class="action-btn danger" id="taDelete">${trashSvg()} Eliminar tarea</button>
         </div>
       </div>`;
-    Sheets.open(head);
+    Sheets.show(head);
     $("#taCancel").onclick = Sheets.close;
     const de=$("#taDone"); if(de) de.onclick = ()=>{ haptic(); openComplete(task); };
     $("#taEdit").onclick   = ()=>{ haptic(); openTaskForm(task); };
@@ -2461,7 +2488,7 @@ const Tasks = (() => {
         <p>“${esc(task.title)}” se quitará de tu lista. Si ya la habías completado, sus puntos se descontarán y se borrarán su registro y su foto.</p>
         <button class="btn danger" id="cdConfirm">Eliminar tarea</button>
       </div>`;
-    Sheets.open(head);
+    Sheets.show(head);
     $("#cdCancel").onclick = Sheets.close;
     $("#cdConfirm").onclick = ()=>{
       haptic(20);
@@ -2563,21 +2590,22 @@ const Tasks = (() => {
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="ctCancel">Cancelar</span><span class="title">${editing?"Editar tarea":"Nueva tarea"}</span><span class="act" style="opacity:0">•</span></div>
       <div class="sheet-body">${body}</div>`;
-    const sheet = Sheets.open(head);
+    const sheet = Sheets.show(head);
 
-    const renderCats = ()=>{ const w=$("#ctCats",sheet); w.innerHTML="";
+    // en todos: se conserva el scroll horizontal al re-pintar (antes saltaba al inicio)
+    const renderCats = ()=>{ const w=$("#ctCats",sheet); const sl=w.scrollLeft; w.innerHTML="";
       CATEGORIES.forEach(c=>{ const chip=el("button","chip"+(c.name===cat?" sel":"")); chip.style.setProperty("--accent",c.color);
         chip.innerHTML=`<span class="ic" style="color:${c.name===cat?'#fff':c.color}">${Icons.get(c.name)}</span>${esc(c.name)}`;
-        chip.onclick=()=>{cat=c.name;haptic();renderCats();}; w.appendChild(chip); }); };
-    const renderPeople = ()=>{ const w=$("#ctPeople",sheet); w.innerHTML="";
-      PEOPLE.forEach(p=>{ const seg=el("div","seg"+(p.k===ppl?" sel":""),p.short); seg.onclick=()=>{ppl=p.k;haptic();renderPeople();}; w.appendChild(seg); }); };
-    const renderDur = ()=>{ const w=$("#ctDur",sheet); w.innerHTML="";
-      DURATIONS.forEach(m=>{ const seg=el("div","seg"+(m===dur?" sel":""),durShort(m)); seg.onclick=()=>{dur=m;haptic();renderDur();}; w.appendChild(seg); }); };
-    const renderRecur = ()=>{ const w=$("#ctRecur",sheet); w.innerHTML="";
+        chip.onclick=()=>{cat=c.name;haptic();renderCats();}; w.appendChild(chip); }); w.scrollLeft=sl; };
+    const renderPeople = ()=>{ const w=$("#ctPeople",sheet); const sl=w.scrollLeft; w.innerHTML="";
+      PEOPLE.forEach(p=>{ const seg=el("div","seg"+(p.k===ppl?" sel":""),p.short); seg.onclick=()=>{ppl=p.k;haptic();renderPeople();}; w.appendChild(seg); }); w.scrollLeft=sl; };
+    const renderDur = ()=>{ const w=$("#ctDur",sheet); const sl=w.scrollLeft; w.innerHTML="";
+      DURATIONS.forEach(m=>{ const seg=el("div","seg"+(m===dur?" sel":""),durShort(m)); seg.onclick=()=>{dur=m;haptic();renderDur();}; w.appendChild(seg); }); w.scrollLeft=sl; };
+    const renderRecur = ()=>{ const w=$("#ctRecur",sheet); const sl=w.scrollLeft; w.innerHTML="";
       RECUR.forEach(r=>{ const seg=el("div","seg"+(r.k===recur?" sel":""),r.l); seg.onclick=()=>{recur=r.k;haptic();renderRecur();
         $("#ctDaysWrap",sheet).style.display = recur==="weekly"?"block":"none";
         $("#ctDatesWrap",sheet).style.display = recur==="monthly"?"block":"none";
-        $("#ctDateWrap",sheet).style.display = recur==="date"?"block":"none"; validate(); }; w.appendChild(seg); }); };
+        $("#ctDateWrap",sheet).style.display = recur==="date"?"block":"none"; validate(); }; w.appendChild(seg); }); w.scrollLeft=sl; };
     const renderDays = ()=>{ const w=$("#ctDays",sheet); if(!w) return; w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
         cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
@@ -2667,7 +2695,7 @@ const Tasks = (() => {
         </div>
         <button class="btn" id="pcConfirm" disabled>Marcar como completada</button>
       </div>`;
-    Sheets.open(head);
+    Sheets.show(head);
     const preview=$("#pcPreview"), img=$("#pcImg"), confirm=$("#pcConfirm");
     const fileCam=$("#fileCam"), fileLib=$("#fileLib");
 
@@ -2887,7 +2915,7 @@ const Profile = (() => {
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" style="opacity:0">•</span><span class="title">${title}</span><span class="act" id="dgClose">Listo</span></div>
       <div class="sheet-body"><div class="day-gallery" id="dgList"></div></div>`;
-    Sheets.open(head);
+    Sheets.show(head);
     $("#dgClose").onclick=Sheets.close;
     const listEl=$("#dgList");
     listEl.innerHTML = items.length ? items.map(h=>historyItemHtml(h)).join("") : `<div class="card friends-empty">Sin tareas registradas este día.</div>`;
@@ -2903,7 +2931,7 @@ const Profile = (() => {
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="pnCancel">Cancelar</span><span class="title">Tu nombre</span><span class="act" id="pnSave">Guardar</span></div>
       <div class="sheet-body"><div class="form-group" style="margin-top:6px;"><div class="field-block"><input class="field" id="pnInput" maxlength="24" value="${esc(cur)}" placeholder="Tu nombre"/></div></div></div>`;
-    Sheets.open(head);
+    Sheets.show(head);
     const input=$("#pnInput");
     $("#pnCancel").onclick=Sheets.close;
     $("#pnSave").onclick=()=>{ const v=input.value.trim()||"Atleta"; Store.update(s=>{s.profile.name=v;}); Sheets.close(); render(); if(Cloud.enabled()) Cloud.pushProfile(); };
@@ -3240,9 +3268,11 @@ const Cloud = (() => {
     try{ await client.from('comments').delete().eq('id', id).eq('author_id', uid); }catch(e){}
   }
   async function fetchNotifs(){
-    if(!enabled() || !await init() || !client) return [];
-    try{ const { data }=await client.from('notifications').select('*').eq('recipient_id',uid).order('created_at',{ascending:false}).limit(100); return data||[]; }
-    catch(e){ console.warn("fetchNotifs:", e && e.message); return []; }
+    // null = la consulta FALLÓ (sin red): el llamador no debe tocar la lista
+    // local, o las notificaciones "desaparecerían" con cada corte de conexión.
+    if(!enabled() || !await init() || !client) return null;
+    try{ const { data, error }=await client.from('notifications').select('*').eq('recipient_id',uid).order('created_at',{ascending:false}).limit(100); if(error) throw error; return data||[]; }
+    catch(e){ console.warn("fetchNotifs:", e && e.message); return null; }
   }
   async function markNotifsRead(){
     if(!enabled() || !await init() || !client) return;
@@ -3395,7 +3425,7 @@ const Friends = (() => {
     loadMyShared(); // precarga mis tareas compartidas (para anotar "Contigo")
     const myGen=++gen;
     const avail = Cloud.configured();
-    Sheets.open(`
+    Sheets.show(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Amigos</span><span class="act" id="frClose">Cerrar</span></div>
       <div class="sheet-body">
@@ -3486,7 +3516,7 @@ const Friends = (() => {
   }
 
   function shareSheet(){
-    Sheets.open(`
+    Sheets.show(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" id="fcBack">‹ Atrás</span><span class="title">Mi ID</span><span class="act" id="fcCopy">Copiar</span></div>
       <div class="sheet-body">
@@ -3498,7 +3528,7 @@ const Friends = (() => {
   }
 
   function pasteSheet(title, onValue, help, placeholder){
-    Sheets.open(`
+    Sheets.show(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="paCancel">Cancelar</span><span class="title">${esc(title)}</span><span class="act" id="paSave">Listo</span></div>
       <div class="sheet-body">
@@ -3534,8 +3564,10 @@ const Friends = (() => {
     // Si el sheet YA estaba abierto (volviendo de ver un día, o el re-pintado
     // del sondeo en vivo) se usa swap(): mismo contenido, sin re-animar toda la
     // hoja (evita el "temblor"). Solo al abrir de cero (desde la lista) se anima.
-    const alreadyOpen = !!fetched || restoreScrollTop!=null;
-    (alreadyOpen ? Sheets.swap : Sheets.open)(`
+    // Sheets.show ya decide solo: si la hoja está abierta (viniendo de la
+    // lista de amigos, de un día, o un re-pintado en vivo) cambia el contenido
+    // sin re-animar; solo anima la entrada si estaba cerrada.
+    Sheets.show(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" id="fpBack">‹ Atrás</span><span class="title">Amigo</span><span class="act" id="fpClose">Cerrar</span></div>
       <div class="sheet-body">
@@ -3680,6 +3712,7 @@ const Friends = (() => {
       const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
       if(h.photoUrl){
         const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
+        thumb.parentElement.classList.add("tappable");
         thumb.parentElement.onclick=()=>Lightbox.show(h.photoUrl,{...h, ownerId:f.cloudId}); // el dueño es el amigo (para avisarle)
       } else thumb.innerHTML=noPhotoThumb();
     });
@@ -3712,6 +3745,7 @@ const Notifs = (() => {
   async function refresh(){
     if(!Cloud.enabled()) return;
     let list=await Cloud.fetchNotifs();
+    if(list===null) return; // fallo de red: conservar la lista local tal cual
     // Vencen a las 24 h (excepto las solicitudes de amistad): se borran y no se muestran.
     const old=list.filter(n=> !fresh(n));
     list=list.filter(fresh);
@@ -3758,7 +3792,7 @@ const Notifs = (() => {
       </div>`;
     }
     if(n.type==='weekly_summary'){
-      return `<div class="card gal-item notif-item" data-open-week-summary="1">
+      return `<div class="card gal-item notif-item tappable" data-open-week-summary="1">
         <div class="notif-ic done" style="font-size:19px;">📊</div>
         <div class="gal-info"><div class="t">Ya está disponible tu resumen de la semana</div><div class="m">${timeAgo(n.created_at)}</div></div>
         <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
@@ -3774,7 +3808,7 @@ const Notifs = (() => {
     // Incluye hora/categoría/puntos del propio aviso: el destinatario puede no
     // tener esa completada en su historial (p.ej. tarea de un amigo no compartida).
     const openAttrs = (withPhoto && n.ref_key) ? `data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}" data-key="${esc(n.ref_key)}" data-owner="${comment?'':esc(n.actor_id||'')}" data-time="${esc(n.task_time||'')}" data-category="${esc(n.task_category||'')}" data-points="${n.task_points!=null?n.task_points:''}"` : (withPhoto?`data-photo="${esc(n.photo_url)}" data-title="${esc(n.task_title||'')}"`:'');
-    return `<div class="card gal-item notif-item" ${openAttrs}>
+    return `<div class="card gal-item notif-item${withPhoto?' tappable':''}" ${openAttrs}>
       ${thumb}
       <div class="gal-info"><div class="t">${text}</div><div class="m">${esc(n.task_title||'')}${n.task_title?' · ':''}${timeAgo(n.created_at)}</div></div>
       <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
@@ -3786,7 +3820,7 @@ const Notifs = (() => {
     // El permiso se pide solo al abrir la app; aquí solo avisamos si está bloqueado.
     const blocked=("Notification" in window && Notification.permission==='denied');
     const list=listNow();
-    Sheets.open(`
+    Sheets.show(`
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Notificaciones</span><span class="act" id="ntClose">Cerrar</span></div>
       <div class="sheet-body">
