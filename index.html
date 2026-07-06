@@ -12,20 +12,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Rachas" />
 <link rel="manifest" href="manifest.json" />
-<script>
-/* En iOS (app instalada), 100dvh a veces no coincide con el alto real de la
-   pantalla. Medimos el alto real con JS (más fiable que las unidades CSS) y
-   lo exponemos como variable para usarlo como último recurso. */
-(function(){
-  function setVh(){
-    document.documentElement.style.setProperty("--real-vh", window.innerHeight + "px");
-  }
-  setVh();
-  window.addEventListener("resize", setVh);
-  window.addEventListener("orientationchange", setVh);
-  if (window.visualViewport) window.visualViewport.addEventListener("resize", setVh);
-})();
-</script>
 <!-- Favicon: icono de la pestaña del navegador y de la dirección https -->
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
@@ -81,12 +67,12 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-/* En iOS (app instalada en pantalla de inicio) "100%"/"100vh" a veces no
-   coincide con el alto real de la pantalla, dejando una franja negra debajo
-   de la barra inferior fija. "100dvh" usa el alto real del viewport visual,
-   y "--real-vh" (medido con JS en el <head>) es el último recurso si el
-   navegador tampoco calcula bien dvh en modo standalone. */
-html,body{height:100%;height:100dvh;height:var(--real-vh,100dvh);margin:0;padding:0;overflow:hidden;}
+/* IMPORTANTE: el body NO lleva height. Con position:fixed + inset:0 ya cubre
+   exactamente el viewport SIEMPRE; un height explícito (100vh/100dvh/medido
+   con JS) ANULA el bottom:0 y, si iOS lo mide mal en el arranque en frío
+   (habitual en modo app instalada), deja una franja que corta la app abajo. */
+html{height:100%;}
+html,body{margin:0;padding:0;overflow:hidden;}
 body{
   font-family:var(--font);
   background:var(--bg);
@@ -882,7 +868,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v74";
+const APP_VERSION = "v75";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4009,6 +3995,11 @@ const Router = (() => {
     const v=$(views[cur]);
     const title=v.getAttribute("data-title");
     $("#navTitle").textContent=title;
+    // sincronizar también la VISIBILIDAD de la barra compacta con el scroll de
+    // la vista actual. Antes solo se actualizaba con el evento de scroll: al
+    // cambiar de sección (la nueva empieza en scroll 0, sin evento) la franja
+    // del título de la sección anterior se quedaba pegada tapando el contenido.
+    $("#navbar").classList.toggle("show", v.scrollTop>30);
     // ya no hay acción de navbar: editar/eliminar se abre tocando la tarea
     const act=$("#navAction");
     act.style.display="none"; act.onclick=null;
@@ -4118,7 +4109,19 @@ function autoEnablePush(){
   document.addEventListener("click",ask,{once:true});
 }
 function boot(){
-  const av=document.getElementById("appVersion"); if(av) av.textContent=APP_VERSION;
+  // Versión + modo de pantalla real. El modo delata la causa de la franja
+  // negra bajo la barra: "fullscreen" = el ícono se instaló con el manifest
+  // antiguo e iOS reserva esa franja FUERA de la app (solo se cura borrando
+  // el ícono y volviéndolo a añadir); "standalone" = todo correcto.
+  const av=document.getElementById("appVersion");
+  if(av){
+    let mode="navegador";
+    try{
+      ["standalone","fullscreen","minimal-ui"].forEach(m=>{ if(matchMedia(`(display-mode: ${m})`).matches) mode=m; });
+      if(mode==="navegador" && navigator.standalone) mode="standalone";
+    }catch(e){}
+    av.textContent=APP_VERSION+" · "+mode;
+  }
   Store.load();
   Generator.init();
   Tasks.init();
