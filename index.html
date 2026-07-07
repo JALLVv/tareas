@@ -144,11 +144,16 @@ img{display:block;}
    franja oscura bajo el reloj). */
 .topbar{
   position:fixed;top:0;left:0;right:0;z-index:40;
-  height:calc(var(--safe-top) + 54px);
+  /* alto pensado para que el botón (centrado) quede a la altura del título
+     grande de la sección: el título arranca en ~safe-top+34 y mide ~36px, su
+     centro cae en ~safe-top+52; con este alto y align-items:center el botón
+     centra ahí mismo. El degradado usa medidas en px (no %) para que su
+     blend quede confinado al borde superior aunque la barra sea alta. */
+  height:calc(var(--safe-top) + 104px);
   padding:var(--safe-top) 16px 0;
   display:flex;align-items:center;justify-content:flex-end;gap:10px;
   pointer-events:none; /* el degradado no intercepta toques; los botones sí */
-  background:linear-gradient(to bottom, var(--bg) 0%, rgba(0,0,0,0.5) 40%, transparent 100%);
+  background:linear-gradient(to bottom, var(--bg) 0, rgba(0,0,0,0.55) 20px, rgba(0,0,0,0) 76px);
 }
 .tb-title{font-size:17px;font-weight:700;letter-spacing:-0.02em;color:var(--label);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -893,7 +898,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v84";
+const APP_VERSION = "v85";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
