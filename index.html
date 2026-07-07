@@ -153,10 +153,13 @@ img{display:block;}
   padding:var(--safe-top) 16px 0;
   display:flex;align-items:center;justify-content:flex-end;gap:10px;
   pointer-events:none; /* el degradado no intercepta toques; los botones sí */
-  /* Degradado marcado pero CORTO: fuerte en el borde superior (funde la barra
-     de estado) y totalmente transparente a los ~32px, ANTES de llegar al
-     título grande (que arranca en ~40px) para no oscurecerlo. */
-  background:linear-gradient(to bottom, rgba(0,0,0,0.6) 0, rgba(0,0,0,0.55) 12px, rgba(0,0,0,0) 32px);
+  /* Degradado NEGRO OPACO en el borde superior que se desvanece a
+     transparente: el contenido que sube al hacer scroll se funde por completo
+     en negro (igual que la barra de estado del sistema) antes de llegar al
+     borde, en vez de verse a medias y cortarse de golpe. Totalmente
+     transparente a los ~44px, justo antes del título grande, para no
+     oscurecerlo. */
+  background:linear-gradient(to bottom, var(--bg) 0, var(--bg) 10px, rgba(0,0,0,0) 44px);
 }
 .tb-title{font-size:17px;font-weight:700;letter-spacing:-0.02em;color:var(--label);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -904,7 +907,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v89";
+const APP_VERSION = "v90";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
