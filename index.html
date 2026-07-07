@@ -907,7 +907,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v93";
+const APP_VERSION = "v94";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1786,10 +1786,16 @@ function bindHistoryThumbs(listEl, items, ownerId){
     if(h.photoId){ const data=await DB.get(h.photoId);
       if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); card.classList.add("tappable"); card.onclick=()=>Lightbox.show(data, {...h, ownerId}); }
       else thumb.innerHTML=noPhotoThumb();
-    } else if(h.photoUrl){
-      const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); }; im.src=h.photoUrl; thumb.appendChild(im);
-      card.classList.add("tappable"); card.onclick=()=>Lightbox.show(h.photoUrl, {...h, ownerId});
-    } else { thumb.innerHTML=noPhotoThumb(); }
+    } else {
+      // URL conocida o, como último recurso, la "adivinada" desde el Storage de
+      // esta cuenta (recupera fotos que perdieron su enlace tras transferir).
+      const url = h.photoUrl || (Cloud.guessPhotoUrl && Cloud.guessPhotoUrl(h.id));
+      if(url){
+        const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); card.classList.remove("tappable"); card.onclick=null; };
+        im.src=url; thumb.appendChild(im);
+        card.classList.add("tappable"); card.onclick=()=>Lightbox.show(url, {...h, ownerId});
+      } else thumb.innerHTML=noPhotoThumb();
+    }
   });
 }
 
@@ -3029,6 +3035,14 @@ const Cloud = (() => {
     return initing;
   }
   function myId(){ return uid; }
+  // URL pública "adivinada" de la foto de una completada, según el patrón de
+  // subida ({uid}/{id}.jpg). Sirve como último recurso para mostrar una foto
+  // que perdió su enlace: si el archivo existe en el Storage de esta cuenta se
+  // ve; si no, la imagen falla y se muestra el marcador (no se guarda nada).
+  function guessPhotoUrl(id){
+    try{ if(!client || !uid || !id) return null; return client.storage.from('photos').getPublicUrl(`${uid}/${id}.jpg`).data.publicUrl; }
+    catch(e){ return null; }
+  }
 
   async function uploadDataUrl(path, dataUrl){
     try{
@@ -3057,11 +3071,21 @@ const Cloud = (() => {
   function markSynced(id){ Store.update(s=>{ s.cloud=s.cloud||{}; s.cloud.syncedCompletions=s.cloud.syncedCompletions||[]; if(!s.cloud.syncedCompletions.includes(id)) s.cloud.syncedCompletions.push(id); }); }
   async function pushCompletion(entry, photoDataUrl){
     if(!enabled() || !await init() || !client) return;
-    let photo_url=null, photoOk=!photoDataUrl; // si no hay foto, no hay nada que subir
+    // CLAVE: si no hay foto nueva que subir, se CONSERVA la URL existente
+    // (entry.photoUrl) en vez de poner null. Antes se ponía null y eso BORRABA
+    // el enlace de la foto en la nube — así, tras una transferencia (que quita
+    // la foto local y deja solo la URL), cualquier re-subida dejaba el
+    // calendario sin fotos.
+    let photo_url = entry.photoUrl || null;
+    let photoOk = !photoDataUrl;
     if(photoDataUrl){
-      photo_url=await uploadDataUrl(`${uid}/${entry.id}.jpg`, photoDataUrl); // foto original (máxima calidad)
-      if(!photo_url){ photo_url=await uploadDataUrl(`${uid}/${entry.id}.jpg`, photoDataUrl); } // un reintento
-      photoOk=!!photo_url;
+      let up=await uploadDataUrl(`${uid}/${entry.id}.jpg`, photoDataUrl); // foto original (máxima calidad)
+      if(!up){ up=await uploadDataUrl(`${uid}/${entry.id}.jpg`, photoDataUrl); } // un reintento
+      if(up){ photo_url=up; photoOk=true;
+        // guardar la URL en el historial local: así la foto sobrevive a una
+        // transferencia (el código lleva photoUrl) y se puede volver a mostrar.
+        Store.update(s=>{ const h=(s.history||[]).find(x=>x.id===entry.id); if(h && !h.photoUrl) h.photoUrl=up; });
+      } else photoOk=false;
     }
     try{
       await client.from('completions').upsert({ id:entry.id, user_id:uid, date:entry.date, title:entry.title,
@@ -3106,7 +3130,7 @@ const Cloud = (() => {
       } else {
         let photo=null; if(h.photoId){ try{ photo=await DB.get(h.photoId); }catch(e){} }
         await pushCompletion({ id:h.id, date:h.date, title:h.title, category:h.category, points:h.points, time:h.time, random:h.random,
-          partnerId:h.partnerId, partnerName:h.partnerName }, photo);
+          partnerId:h.partnerId, partnerName:h.partnerName, photoUrl:h.photoUrl }, photo);
       }
     }
   }
@@ -3150,6 +3174,24 @@ const Cloud = (() => {
     Store.update(s=>{ if(s.cloud){ s.cloud.syncedCompletions=[]; s.cloud.avatarSrc=null; } });
     await pushProfile(); await syncBacklog(2000); await reconcile(); // sube TODO el historial
     return true;
+  }
+  // Rellena en el historial local las URLs de foto que falten, leyéndolas de las
+  // completadas de la nube de esta misma cuenta. Recupera fotos del calendario
+  // que, tras una transferencia, quedaron sin enlace local (solo tenían la foto
+  // en la nube). Devuelve true si cambió algo.
+  async function relinkPhotos(){
+    if(!enabled() || !await init() || !client) return false;
+    try{
+      const { data } = await client.from('completions').select('id,photo_url').eq('user_id', uid).limit(2000);
+      const urlById={}; (data||[]).forEach(c=>{ if(c.photo_url) urlById[c.id]=c.photo_url; });
+      let changed=false;
+      Store.update(s=>{
+        (s.history||[]).forEach(h=>{
+          if(!h.photoId && !h.photoUrl && urlById[h.id]){ h.photoUrl=urlById[h.id]; changed=true; }
+        });
+      });
+      return changed;
+    }catch(e){ console.warn("relinkPhotos:", e && e.message); return false; }
   }
 
   /* ---------- Tareas compartidas ---------- */
@@ -3450,7 +3492,7 @@ const Cloud = (() => {
     }catch(e){ console.warn("restoreSession:", e && e.message); return false; }
   }
 
-  return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
+  return { configured, enabled, init, myId, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
     createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     fetchComments, addComment, deleteComment, exportSession, restoreSession };
@@ -4387,7 +4429,10 @@ function boot(){
     Cloud.init().then(id=>{
       if(!id) return;
       Cloud.pushProfile();
-      Cloud.syncBacklog().then(()=>Cloud.reconcile());
+      // recupera enlaces de foto que falten en el calendario (p.ej. tras una
+      // transferencia) ANTES de re-subir, para no pisarlos con null.
+      Cloud.relinkPhotos().then(ok=>{ if(ok){ Tasks.render(); Profile.render(); } })
+        .then(()=>Cloud.syncBacklog()).then(()=>Cloud.reconcile());
       Friends.syncFriends();
       Tasks.syncShared();   // reconcilia tareas compartidas
       Notifs.refresh();     // trae notificaciones + avisa en primer plano
