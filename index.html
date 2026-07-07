@@ -75,6 +75,15 @@
 
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
+  /* Corrección del viewport encogido (bug de WebKit en PWA instalada con
+     barra de estado translúcida): el layout viewport mide (pantalla − barra
+     de estado) pero el área PINTABLE llega hasta el borde inferior real —
+     prueba: env(safe-area-inset-bottom) sí se entrega (34px). Los elementos
+     anclados abajo (tab bar, hojas, FAB…) restan esta corrección a su
+     bottom para asentarse en el borde físico. La fija el JS (updateDiag)
+     midiendo pantalla − ventana SOLO en modo instalado; vale 0px cuando el
+     sistema está sano, dejando todo exactamente igual que siempre. */
+  --vp-gap:0px;
   --ease:cubic-bezier(0.32,0.72,0,1);            /* curva tipo iOS spring */
   --ease-out:cubic-bezier(0.22,1,0.36,1);
 }
@@ -104,7 +113,7 @@ img{display:block;}
 /* Fondo ambiental: blobs de color difusos detrás del cristal. Llega hasta el
    borde superior de la pantalla (bajo la hora/batería), como una app nativa:
    la app corre a pantalla completa real con la barra de estado translúcida. */
-.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+.ambient{position:fixed;inset:0;bottom:calc(0px - var(--vp-gap));z-index:0;overflow:hidden;pointer-events:none;}
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
   filter:blur(80px);opacity:0.5;
@@ -127,7 +136,7 @@ img{display:block;}
   -webkit-overflow-scrolling:touch;
   padding:0 16px;
   padding-top:calc(var(--safe-top) + 22px);
-  padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 28px);
+  padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 28px - var(--vp-gap));
   opacity:0;transform:translateY(8px) scale(0.992);
   transition:opacity .34s var(--ease-out), transform .34s var(--ease-out);
   pointer-events:none;
@@ -167,7 +176,7 @@ img{display:block;}
    TAB BAR
    ========================================================================= */
 .tabbar{
-  position:fixed;left:0;right:0;bottom:0;z-index:50;
+  position:fixed;left:0;right:0;bottom:calc(0px - var(--vp-gap));z-index:50;
   height:calc(var(--tabbar-h) + var(--safe-bottom));
   padding-bottom:var(--safe-bottom);
   display:flex;align-items:stretch;
@@ -377,7 +386,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .list-head{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 14px;}
 
 /* Botón flotante para crear */
-.fab{position:fixed;right:18px;bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 16px);z-index:45;
+.fab{position:fixed;right:18px;bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 16px - var(--vp-gap));z-index:45;
   width:56px;height:56px;border-radius:50%;background:var(--blue);
   display:grid;place-items:center;box-shadow:0 10px 28px rgba(10,132,255,0.45);
   transition:transform .15s var(--ease-out);opacity:0;pointer-events:none;transform:scale(0.6);}
@@ -544,13 +553,13 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 /* =========================================================================
    SHEETS / MODALES
    ========================================================================= */
-.scrim{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.5);
+.scrim{position:fixed;inset:0;bottom:calc(0px - var(--vp-gap));z-index:90;background:rgba(0,0,0,0.5);
   -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);}
 .scrim.show{opacity:1;pointer-events:auto;}
 
 .sheet{
-  position:fixed;left:0;right:0;bottom:0;z-index:100;
+  position:fixed;left:0;right:0;bottom:calc(0px - var(--vp-gap));z-index:100;
   max-height:min(82vh, calc(100vh - var(--safe-top) - 16px));display:flex;flex-direction:column;
   background:var(--mat-thick);
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
@@ -611,7 +620,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .gal-info .m .pts{color:var(--yellow);font-weight:600;}
 
 /* Lightbox */
-.lightbox{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.94);
+.lightbox{position:fixed;inset:0;bottom:calc(0px - var(--vp-gap));z-index:200;background:rgba(0,0,0,0.94);
   display:flex;align-items:flex-start;justify-content:center;
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);}
 .lightbox.show{opacity:1;pointer-events:auto;}
@@ -663,7 +672,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   100%{opacity:0;transform:translate(-50%,-130%) scale(0.95);}
 }
 
-.rankup{position:fixed;inset:0;z-index:320;display:flex;flex-direction:column;align-items:center;justify-content:center;
+.rankup{position:fixed;inset:0;bottom:calc(0px - var(--vp-gap));z-index:320;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:radial-gradient(circle at 50% 40%,rgba(94,92,230,0.4),rgba(0,0,0,0.85) 70%);
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
   opacity:0;pointer-events:none;transition:opacity .4s var(--ease-out);text-align:center;padding:24px;}
@@ -885,7 +894,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v80";
+const APP_VERSION = "v81";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4263,7 +4272,7 @@ function autoEnablePush(){
 // iPhone); si la ventana baja de la altura de la pantalla DURANTE el uso,
 // algo (una recarga, una restauración del sistema) encogió el webview.
 function updateDiag(){
-  const av=document.getElementById("appVersion"); if(!av) return;
+  const av=document.getElementById("appVersion"); // si no existe, igual se aplica la corrección
   let mode="navegador";
   try{
     ["standalone","fullscreen","minimal-ui"].forEach(m=>{ if(matchMedia(`(display-mode: ${m})`).matches) mode=m; });
@@ -4277,7 +4286,31 @@ function updateDiag(){
     sb=" · inf "+Math.round(parseFloat(getComputedStyle(probe).paddingBottom)||0)+"px";
     probe.remove();
   }catch(e){}
-  av.textContent=APP_VERSION+" · "+mode+sb+" · "+window.innerHeight+"/"+screen.height;
+  // CORRECCIÓN DEL VIEWPORT ENCOGIDO: en modo instalado, si la ventana mide
+  // menos que la pantalla (bug de WebKit: layout viewport = pantalla − barra
+  // de estado, pese a que el área pintable llega al borde real — prueba: el
+  // inset inferior sí se entrega), se compensa esa diferencia en los
+  // elementos anclados abajo vía --vp-gap. Con el sistema sano vale 0px.
+  let gap=0;
+  try{
+    if(mode!=="navegador"){
+      const d=screen.height - window.innerHeight;
+      if(d>0 && d<=70) gap=d; // solo magnitudes de barra de estado (defensivo)
+    }
+    document.documentElement.style.setProperty("--vp-gap", gap+"px");
+  }catch(e){}
+  // Medidas de unidades de viewport (diagnóstico): qué "ve" cada unidad CSS.
+  let units="";
+  try{
+    const m={};
+    [["vh","100vh"],["dvh","100dvh"],["lvh","100lvh"]].forEach(([k,v])=>{
+      const p=document.createElement("div");
+      p.style.cssText="position:fixed;visibility:hidden;height:"+v;
+      document.body.appendChild(p); m[k]=Math.round(p.getBoundingClientRect().height); p.remove();
+    });
+    units=" · vh"+m.vh+" dvh"+m.dvh+" lvh"+m.lvh;
+  }catch(e){}
+  if(av) av.textContent=APP_VERSION+" · "+mode+sb+" · "+window.innerHeight+"/"+screen.height+units+(gap?" · corr "+gap+"px":"");
 }
 function boot(){
   updateDiag();
