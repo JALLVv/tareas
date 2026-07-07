@@ -9,14 +9,14 @@
 <meta name="theme-color" content="#000000" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
-<!-- OJO: NO usar "black-translucent". Con él, iOS (bug de WebKit) ancla el
-     webview arriba pero lo corta a (pantalla − barra de estado): quedaba una
-     franja negra del sistema de 47pt bajo la barra de pestañas, imposible de
-     tapar con CSS (diagnóstico real: innerHeight 797 en pantalla de 844, con
-     env(safe-area-inset-bottom)=0). Con "black" la barra de estado es negra
-     sólida (igual que el fondo de la app: se ve idéntico) y el webview llega
-     hasta el borde inferior de la pantalla, con su inset correcto. -->
-<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<!-- Pantalla completa real: la app se extiende bajo la barra de estado.
+     IMPORTANTE: este modo se rompe si la página se recarga sola — un bug de
+     iOS encoge el webview la altura de la barra de estado (47pt) tras un
+     location.reload() en una PWA instalada, dejando una franja negra del
+     sistema (diagnóstico real: innerHeight 797 en pantalla de 844). Por eso
+     esta app NO usa recargas automáticas (ver el registro del service worker
+     y el manejador de pageshow: actualizan/reparan SIN reload). -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Rachas" />
 <link rel="manifest" href="manifest.json" />
 <!-- Favicon: icono de la pestaña del navegador y de la dirección https -->
@@ -101,15 +101,10 @@ input,textarea{user-select:text;-webkit-user-select:text;font-family:inherit;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
 img{display:block;}
 
-/* Fondo ambiental: blobs de color difusos detrás del cristal.
-   El brillo se desvanece a negro puro en el borde superior: con el estilo de
-   barra de estado "black" (necesario por el bug de WebKit de la franja
-   inferior), iOS pinta la zona de la hora/batería en negro sólido FUERA de
-   la app; si el brillo llegara hasta arriba se notaría el corte entre esa
-   barra y la app. Con el degradado, ambas se funden sin costura. */
-.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 130px);
-  mask-image:linear-gradient(to bottom,transparent 0,#000 130px);}
+/* Fondo ambiental: blobs de color difusos detrás del cristal. Llega hasta el
+   borde superior de la pantalla (bajo la hora/batería), como una app nativa:
+   la app corre a pantalla completa real con la barra de estado translúcida. */
+.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
   filter:blur(80px);opacity:0.5;
@@ -890,7 +885,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v79";
+const APP_VERSION = "v80";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4261,31 +4256,33 @@ function autoEnablePush(){
   document.addEventListener("touchstart",ask,{once:true,passive:true});
   document.addEventListener("click",ask,{once:true});
 }
+// Versión + diagnóstico de pantalla EN VIVO: modo real, inset inferior
+// aplicado (env(safe-area-inset-bottom), en px) y cobertura del viewport
+// (alto de la ventana / alto de la pantalla). En pantalla completa sana
+// debería leerse "standalone · inf 34px · 844/844" (o equivalente en cada
+// iPhone); si la ventana baja de la altura de la pantalla DURANTE el uso,
+// algo (una recarga, una restauración del sistema) encogió el webview.
+function updateDiag(){
+  const av=document.getElementById("appVersion"); if(!av) return;
+  let mode="navegador";
+  try{
+    ["standalone","fullscreen","minimal-ui"].forEach(m=>{ if(matchMedia(`(display-mode: ${m})`).matches) mode=m; });
+    if(mode==="navegador" && navigator.standalone) mode="standalone";
+  }catch(e){}
+  let sb="";
+  try{
+    const probe=document.createElement("div");
+    probe.style.cssText="position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)";
+    document.body.appendChild(probe);
+    sb=" · inf "+Math.round(parseFloat(getComputedStyle(probe).paddingBottom)||0)+"px";
+    probe.remove();
+  }catch(e){}
+  av.textContent=APP_VERSION+" · "+mode+sb+" · "+window.innerHeight+"/"+screen.height;
+}
 function boot(){
-  // Versión + diagnóstico de pantalla: modo real (standalone/fullscreen),
-  // inset inferior aplicado (env(safe-area-inset-bottom), en px) y cobertura
-  // del viewport (alto de la ventana / alto de la pantalla). Con esto se
-  // distingue al instante cualquier causa de "franja negra" inferior:
-  // fullscreen = ícono con manifest antiguo; inset 0 en un iPhone con home
-  // indicator = viewport-fit sin aplicar; ventana < pantalla = webview
-  // recortado por el sistema.
-  const av=document.getElementById("appVersion");
-  if(av){
-    let mode="navegador";
-    try{
-      ["standalone","fullscreen","minimal-ui"].forEach(m=>{ if(matchMedia(`(display-mode: ${m})`).matches) mode=m; });
-      if(mode==="navegador" && navigator.standalone) mode="standalone";
-    }catch(e){}
-    let sb="";
-    try{
-      const probe=document.createElement("div");
-      probe.style.cssText="position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)";
-      document.body.appendChild(probe);
-      sb=" · inf "+Math.round(parseFloat(getComputedStyle(probe).paddingBottom)||0)+"px";
-      probe.remove();
-    }catch(e){}
-    av.textContent=APP_VERSION+" · "+mode+sb+" · "+window.innerHeight+"/"+screen.height;
-  }
+  updateDiag();
+  window.addEventListener("resize", updateDiag);
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) setTimeout(updateDiag, 250); });
   Store.load();
   Generator.init();
   Tasks.init();
@@ -4342,16 +4339,22 @@ function boot(){
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")){
     window.addEventListener("load",async ()=>{
       try{
+        const hadController = !!navigator.serviceWorker.controller;
         const reg = await navigator.serviceWorker.register("service-worker.js");
         // En iOS, la app puede tardar mucho en detectar sola una versión nueva
         // del service worker (sobre todo si nunca se cierra del todo). Forzamos
-        // la comprobación al abrir y al volver de segundo plano, y recargamos
-        // una vez cuando el nuevo SW toma el control.
+        // la comprobación al abrir y al volver de segundo plano.
+        // IMPORTANTE: NUNCA recargar con location.reload() aquí — recargar una
+        // PWA instalada dispara un bug de iOS que encoge el webview la altura
+        // de la barra de estado (deja una franja negra permanente). El nuevo
+        // service worker toma el control al instante (skipWaiting+claim) y la
+        // versión nueva de la página se aplica sola en la próxima apertura.
         reg.update().catch(()=>{});
         document.addEventListener("visibilitychange",()=>{ if(!document.hidden) reg.update().catch(()=>{}); });
-        let reloaded=false;
+        let notified=false;
         navigator.serviceWorker.addEventListener("controllerchange",()=>{
-          if(reloaded) return; reloaded=true; location.reload();
+          if(!hadController || notified) return; notified=true;
+          UI.toast("Actualización lista · se aplicará al reabrir la app","check","var(--blue)");
         });
         // El SW se resuscribió solo tras un "pushsubscriptionchange" (el
         // sistema invalidó/rotó la suscripción). Guardamos la nueva de
@@ -4376,22 +4379,20 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
   }
 });
-// iOS a veces "congela" la app en segundo plano y, al reabrirla, Safari la
-// restaura desde su caché interna (bfcache) con la pantalla en negro en vez
-// de reanudarla. Forzar una recarga en ese caso la deja siempre funcional.
-window.addEventListener("pageshow",(e)=>{ if(e.persisted) location.reload(); });
-// Además (caso más común: cambiar a otra app y volver, sin pasar por
-// bfcache): el WebView de iOS a veces deja su render "congelado" en negro al
-// volver a primer plano. Forzar un repintado lo despierta al instante, sin
-// perder nada de lo que estabas haciendo (no hace falta recargar la página).
-document.addEventListener("visibilitychange", ()=>{
-  if(!document.hidden){
-    const b=document.body;
-    b.style.display="none";
-    void b.offsetHeight; // fuerza el reflow
-    b.style.display="";
-  }
-});
+// iOS a veces "congela" la app en segundo plano y, al reabrirla, la restaura
+// con el render en negro. Se repara forzando un REPINTADO, nunca con
+// location.reload(): recargar una PWA instalada dispara un bug de iOS que
+// encoge el webview la altura de la barra de estado (deja una franja negra
+// permanente hasta cerrar del todo la app). El repintado despierta el render
+// al instante sin perder nada de lo que estabas haciendo.
+function repaintNudge(){
+  const b=document.body;
+  b.style.display="none";
+  void b.offsetHeight; // fuerza el reflow
+  b.style.display="";
+}
+window.addEventListener("pageshow",(e)=>{ if(e.persisted) repaintNudge(); });
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) repaintNudge(); });
 
 // exponer para depuración
 window.RachasApp = { Store, Router, Transfer:{ makeTransferCode, restoreFromCode } };
