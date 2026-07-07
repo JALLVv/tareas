@@ -823,6 +823,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
       <div class="cal-dow-row" id="calDow"></div>
       <div class="cal-weeks" id="calGrid"></div>
     </div>
+    <button class="btn secondary" id="transferBtn" style="margin-top:14px;">Transferir datos a otra instalación</button>
     <div class="app-version" id="appVersion"></div>
   </section>
 </div>
@@ -882,7 +883,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v77";
+const APP_VERSION = "v78";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2940,6 +2941,7 @@ const Profile = (() => {
   function init(){
     $("#calPrev").onclick=()=>changeMonth(-1);
     $("#calNext").onclick=()=>changeMonth(1);
+    const tb=$("#transferBtn"); if(tb) tb.onclick=()=>{ haptic(); openTransferSheet(); };
     $("#profileName").onclick=editName;
     $("#avatar").onclick=()=> $("#fileAvatar").click();
     $("#fileAvatar").onchange=e=>{ const f=e.target.files[0]; if(!f)return;
@@ -3374,10 +3376,36 @@ const Cloud = (() => {
     }catch(e){ return { ok:false, error:(e&&e.message)||"error" }; }
   }
 
+  /* ---------- Transferencia de cuenta (cambiar de instalación) ----------
+     iOS aísla el almacenamiento por ícono instalado: al borrar el ícono se
+     pierde la sesión anónima (tu identidad en la nube). Estas dos funciones
+     permiten exportar la sesión como tokens y restaurarla en la instalación
+     nueva, recuperando la MISMA cuenta (puntos, historial, amigos, fotos). */
+  async function exportSession(){
+    if(!enabled() || !await init() || !client) return null;
+    try{
+      const { data:{ session } } = await client.auth.getSession();
+      if(!session) return null;
+      return { access_token:session.access_token, refresh_token:session.refresh_token };
+    }catch(e){ return null; }
+  }
+  async function restoreSession(tokens){
+    if(!configured() || !tokens || !tokens.refresh_token) return false;
+    try{
+      if(!client) client = sdk().createClient(SUPABASE_URL, SUPABASE_ANON, { auth:{ persistSession:true, autoRefreshToken:true } });
+      // refreshSession canjea el refresh token por una sesión nueva: funciona
+      // aunque el access token que viajó en el código ya haya caducado.
+      const { data, error } = await client.auth.refreshSession({ refresh_token:tokens.refresh_token });
+      if(error || !data || !data.session){ console.warn("restoreSession:", error && error.message); return false; }
+      uid = data.session.user.id; ready = true;
+      return true;
+    }catch(e){ console.warn("restoreSession:", e && e.message); return false; }
+  }
+
   return { configured, enabled, init, myId, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, pullFriend,
     createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
-    fetchComments, addComment, deleteComment };
+    fetchComments, addComment, deleteComment, exportSession, restoreSession };
 })();
 
 /* =====================================================================
@@ -3905,6 +3933,111 @@ const Notifs = (() => {
   return { init, refresh, openSheet, updateBadge };
 })();
 function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
+
+/* =====================================================================
+   TRANSFERENCIA — mover la cuenta y los datos a otra instalación.
+   iOS aísla el almacenamiento por ícono: al borrar el ícono de la pantalla
+   de inicio se pierden la sesión anónima y los datos locales. El código de
+   transferencia lleva la sesión (tokens) + el estado local (tareas,
+   historial sin fotos); al restaurarlo en la instalación nueva se recupera
+   la MISMA cuenta y las fotos se re-enlazan desde la nube (Storage).
+   ===================================================================== */
+async function makeTransferCode(){
+  const t=await Cloud.exportSession(); if(!t) return null;
+  const s=Store.get();
+  const payload={ v:1, uid:Cloud.myId(), at:t.access_token, rt:t.refresh_token,
+    st:{ name:s.profile.name, tasks:s.tasks, penalties:s.penalties||0, deletedShared:s.deletedShared||[],
+         // sin photoId: las fotos locales no viajan en el código; se re-enlazan
+         // desde la nube (photo_url) al restaurar.
+         history:(s.history||[]).map(h=>{ const {photoId, ...rest}=h; return rest; }) } };
+  try{ return btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); }catch(e){ return null; }
+}
+async function restoreFromCode(code){
+  let p=null;
+  try{ p=JSON.parse(decodeURIComponent(escape(atob((code||"").trim())))); }catch(e){}
+  if(!p || p.v!==1 || !p.uid || !p.rt) return { ok:false, error:"Código no válido" };
+  if(!await Cloud.init()) return { ok:false, error:"Necesitas conexión a internet" };
+  // 1) leer los datos en la nube de la cuenta antigua (visible como un perfil)
+  const prof=await Cloud.pullFriend(p.uid);
+  // 2) cambiar la sesión de esta instalación a la cuenta antigua
+  const ok=await Cloud.restoreSession({ access_token:p.at, refresh_token:p.rt });
+  if(!ok) return { ok:false, error:"El código expiró o ya se usó. Genera uno nuevo en la instalación vieja justo antes de transferir." };
+  // 3) reconstruir el estado local: base = lo que viajó en el código; las fotos
+  //    y las completadas que falten se completan desde la nube.
+  const st=p.st||{};
+  Store.update(s=>{
+    s.profile.name = st.name || (prof&&prof.name) || s.profile.name;
+    s.tasks = Array.isArray(st.tasks)? st.tasks : [];
+    const hist = Array.isArray(st.history)? st.history.slice() : [];
+    const byId={}; hist.forEach(h=>{ if(h&&h.id) byId[h.id]=h; });
+    ((prof&&prof.history)||[]).forEach(c=>{
+      if(byId[c.id]){ if(c.photoUrl){ byId[c.id].photoUrl=c.photoUrl; delete byId[c.id].photoId; } }
+      else hist.push({ id:c.id, taskId:null, title:c.title, category:c.category, minutes:0, points:c.points||0,
+        random:!!c.random, date:c.date, time:c.time||"", photoUrl:c.photoUrl||null,
+        shared:!!c.partnerId, partnerName:c.partnerName||"", partnerId:c.partnerId||null, sharedId:c.sharedId||null });
+    });
+    hist.sort((a,b)=> ((a.date||"")+(a.time||"")) > ((b.date||"")+(b.time||"")) ? -1 : 1); // recientes primero
+    s.history = hist;
+    s.penalties = st.penalties||0;
+    s.deletedShared = Array.isArray(st.deletedShared)? st.deletedShared : [];
+    const cloudIds=new Set(((prof&&prof.history)||[]).map(c=>c.id));
+    s.cloud = { syncedCompletions: hist.filter(h=>cloudIds.has(h.id)).map(h=>h.id),
+      avatarUrl:(prof&&prof.avatar)||null, avatarSrc:null };
+    s.notifs=[]; s.notifSeen=[]; s.friends=[]; // amigos y avisos se re-descargan de la cuenta
+  });
+  // avatar: re-descargarlo de la nube para verlo también sin conexión
+  if(prof && prof.avatar){
+    try{
+      const blob=await (await fetch(prof.avatar)).blob();
+      const du=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.onerror=()=>r(null); fr.readAsDataURL(blob); });
+      if(du) Store.update(s=>{ s.profile.avatar=du; s.cloud.avatarSrc=du; });
+    }catch(e){}
+  }
+  Store.load();          // recalcula puntos y racha desde el historial restaurado
+  Tasks.render(); Profile.render();
+  Friends.syncFriends(); Tasks.syncShared(); Notifs.refresh();
+  Cloud.pushProfile(); Cloud.ensurePush(); // suscripción push de ESTE dispositivo
+  return { ok:true };
+}
+function openTransferSheet(){
+  Sheets.show(`
+    <div class="grabber"></div>
+    <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Transferir datos</span><span class="act" id="tfClose">Cerrar</span></div>
+    <div class="sheet-body">
+      <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">Al borrar el ícono de la pantalla de inicio, iOS borra los datos de esa instalación. Con un <b>código de transferencia</b> recuperas tu cuenta completa (puntos, historial, fotos, amigos y tareas) en la instalación nueva.</p>
+      <div class="lbl-sm">1 · En la instalación vieja</div>
+      <button class="btn secondary" id="tfMake">Crear código de transferencia</button>
+      <div class="code-box" id="tfBox" style="display:none;margin-top:10px;"></div>
+      <button class="btn" id="tfCopy" style="display:none;margin-top:10px;">Copiar código</button>
+      <div class="hint">Créalo justo antes de borrar el ícono y guárdalo (Notas, mensaje a ti mismo…). No lo compartas: da acceso a tu cuenta.</div>
+      <div class="lbl-sm" style="margin-top:22px;">2 · En la instalación nueva</div>
+      <div class="field-block" style="border:0.5px solid var(--hairline);border-radius:14px;"><textarea class="field" id="tfInput" rows="3" placeholder="Pega aquí el código"></textarea></div>
+      <button class="btn" id="tfRestore" style="margin-top:12px;">Restaurar mis datos</button>
+      <div class="hint">La cuenta de la instalación vieja pasa a esta: tus amigos te siguen viendo igual.</div>
+    </div>`);
+  $("#tfClose").onclick=Sheets.close;
+  $("#tfMake").onclick=async ()=>{
+    haptic(); const b=$("#tfMake"); b.disabled=true; b.textContent="Creando…";
+    const code=await makeTransferCode();
+    b.disabled=false; b.textContent="Crear código de transferencia";
+    if(!code){ UI.toast("Necesitas conexión para crear el código","bell","var(--red)"); return; }
+    const box=$("#tfBox"), cp=$("#tfCopy");
+    box.style.display="block"; box.textContent=code;
+    cp.style.display="flex";
+    cp.onclick=()=>{ try{ navigator.clipboard && navigator.clipboard.writeText(code); }catch(e){}
+      try{ const rng=document.createRange(); rng.selectNodeContents(box); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(rng); }catch(e){}
+      haptic(); UI.toast("Código copiado","check","var(--green)"); };
+  };
+  $("#tfRestore").onclick=async ()=>{
+    const code=($("#tfInput").value||"").trim(); if(!code) return;
+    haptic(15); const b=$("#tfRestore"); b.disabled=true; b.textContent="Restaurando…";
+    const r=await restoreFromCode(code);
+    b.disabled=false; b.textContent="Restaurar mis datos";
+    if(!r.ok){ UI.toast(r.error||"No se pudo restaurar","bell","var(--red)"); return; }
+    Sheets.close();
+    UI.toast("Datos restaurados","check","var(--green)");
+  };
+}
 function bellSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 004 0"/></svg>';}
 function commentSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-11.5 7.2L4 20l1-4.5A8 8 0 1121 12z"/></svg>';}
 function noPhotoThumb(){return '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--label-3)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5"/></svg></div>';}
@@ -4254,7 +4387,7 @@ document.addEventListener("visibilitychange", ()=>{
 });
 
 // exponer para depuración
-window.RachasApp = { Store, Router };
+window.RachasApp = { Store, Router, Transfer:{ makeTransferCode, restoreFromCode } };
 })();
 </script>
 </body>
