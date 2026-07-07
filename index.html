@@ -77,13 +77,19 @@
   --safe-bottom:env(safe-area-inset-bottom,0px);
   /* Corrección del viewport encogido (bug de WebKit en PWA instalada con
      barra de estado translúcida): el layout viewport mide (pantalla − barra
-     de estado) pero el área PINTABLE llega hasta el borde inferior real —
-     prueba: env(safe-area-inset-bottom) sí se entrega (34px). Los elementos
-     anclados abajo (tab bar, hojas, FAB…) restan esta corrección a su
-     bottom para asentarse en el borde físico. La fija el JS (updateDiag)
-     midiendo pantalla − ventana SOLO en modo instalado; vale 0px cuando el
-     sistema está sano, dejando todo exactamente igual que siempre. */
+     de estado) pero el área PINTABLE de la ventana cubre la pantalla entera.
+     El viewport encogido puede quedar pegado ARRIBA (hueco abajo) o pegado
+     ABAJO (hueco arriba) según el arranque; el JS (updateDiag) detecta de
+     qué lado está el hueco con el inset superior (env(safe-area-inset-top)
+     ~47px = viewport pegado arriba, solapado por la barra de estado → hueco
+     abajo; 0px = viewport bajo la barra de estado → hueco arriba) y fija UNA
+     de las dos correcciones. Con el sistema sano ambas valen 0px.
+     --vp-gap: hueco abajo → los elementos anclados abajo lo restan de su
+       bottom para asentarse en el borde físico inferior.
+     --vp-gap-top: hueco arriba → el fondo se extiende hacia arriba para
+       cubrir hasta el borde físico superior (zona de la hora/batería). */
   --vp-gap:0px;
+  --vp-gap-top:0px;
   --ease:cubic-bezier(0.32,0.72,0,1);            /* curva tipo iOS spring */
   --ease-out:cubic-bezier(0.22,1,0.36,1);
 }
@@ -113,7 +119,7 @@ img{display:block;}
 /* Fondo ambiental: blobs de color difusos detrás del cristal. Llega hasta el
    borde superior de la pantalla (bajo la hora/batería), como una app nativa:
    la app corre a pantalla completa real con la barra de estado translúcida. */
-.ambient{position:fixed;inset:0;bottom:calc(0px - var(--vp-gap));z-index:0;overflow:hidden;pointer-events:none;}
+.ambient{position:fixed;inset:0;top:calc(0px - var(--vp-gap-top));bottom:calc(0px - var(--vp-gap));z-index:0;overflow:hidden;pointer-events:none;}
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
   filter:blur(80px);opacity:0.5;
@@ -894,7 +900,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v81";
+const APP_VERSION = "v82";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4278,26 +4284,38 @@ function updateDiag(){
     ["standalone","fullscreen","minimal-ui"].forEach(m=>{ if(matchMedia(`(display-mode: ${m})`).matches) mode=m; });
     if(mode==="navegador" && navigator.standalone) mode="standalone";
   }catch(e){}
-  let sb="";
+  // insets reales entregados por iOS (arriba y abajo)
+  let insTop=0, insBottom=0;
   try{
     const probe=document.createElement("div");
-    probe.style.cssText="position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)";
+    probe.style.cssText="position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)";
     document.body.appendChild(probe);
-    sb=" · inf "+Math.round(parseFloat(getComputedStyle(probe).paddingBottom)||0)+"px";
+    const cs=getComputedStyle(probe);
+    insTop=Math.round(parseFloat(cs.paddingTop)||0);
+    insBottom=Math.round(parseFloat(cs.paddingBottom)||0);
     probe.remove();
   }catch(e){}
   // CORRECCIÓN DEL VIEWPORT ENCOGIDO: en modo instalado, si la ventana mide
   // menos que la pantalla (bug de WebKit: layout viewport = pantalla − barra
-  // de estado, pese a que el área pintable llega al borde real — prueba: el
-  // inset inferior sí se entrega), se compensa esa diferencia en los
-  // elementos anclados abajo vía --vp-gap. Con el sistema sano vale 0px.
-  let gap=0;
+  // de estado, pese a que la ventana pintable cubre la pantalla entera), se
+  // detecta DE QUÉ LADO quedó el hueco y se compensa solo ese lado:
+  // - inset superior > 0 → el viewport está pegado arriba (la barra de estado
+  //   lo solapa) → el hueco está ABAJO → --vp-gap (ancla el tab bar, hojas y
+  //   FAB al borde físico inferior).
+  // - inset superior = 0 → el viewport quedó bajo la barra de estado → el
+  //   hueco está ARRIBA → --vp-gap-top (extiende el fondo hasta el borde
+  //   físico superior; el contenido ya empieza bajo la hora, como una app
+  //   nativa con barra sólida).
+  // Con el sistema sano (ventana = pantalla) ambas correcciones son 0px.
+  let gapB=0, gapT=0;
   try{
+    try{ window.scrollTo(0,0); }catch(_){} // re-ancla si el sistema desplazó la página
     if(mode!=="navegador"){
       const d=screen.height - window.innerHeight;
-      if(d>0 && d<=70) gap=d; // solo magnitudes de barra de estado (defensivo)
+      if(d>0 && d<=70){ if(insTop>0) gapB=d; else gapT=d; } // solo magnitudes de barra de estado
     }
-    document.documentElement.style.setProperty("--vp-gap", gap+"px");
+    document.documentElement.style.setProperty("--vp-gap", gapB+"px");
+    document.documentElement.style.setProperty("--vp-gap-top", gapT+"px");
   }catch(e){}
   // Medidas de unidades de viewport (diagnóstico): qué "ve" cada unidad CSS.
   let units="";
@@ -4310,7 +4328,7 @@ function updateDiag(){
     });
     units=" · vh"+m.vh+" dvh"+m.dvh+" lvh"+m.lvh;
   }catch(e){}
-  if(av) av.textContent=APP_VERSION+" · "+mode+sb+" · "+window.innerHeight+"/"+screen.height+units+(gap?" · corr "+gap+"px":"");
+  if(av) av.textContent=APP_VERSION+" · "+mode+" · sup "+insTop+" inf "+insBottom+" · "+window.innerHeight+"/"+screen.height+units+((gapB||gapT)?" · corr B"+gapB+"/T"+gapT:"");
 }
 function boot(){
   updateDiag();
