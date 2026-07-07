@@ -907,7 +907,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v91";
+const APP_VERSION = "v92";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3994,6 +3994,9 @@ async function makeTransferCode(){
   const s=Store.get();
   const payload={ v:1, uid:Cloud.myId(), at:t.access_token, rt:t.refresh_token,
     st:{ name:s.profile.name, tasks:s.tasks, penalties:s.penalties||0, deletedShared:s.deletedShared||[],
+         // La lista de amigos viaja en el código (además de re-bajarse de la
+         // nube al restaurar): así no se pierde aunque la sincronización falle.
+         friends:s.friends||[],
          // sin photoId: las fotos locales no viajan en el código; se re-enlazan
          // desde la nube (photo_url) al restaurar.
          history:(s.history||[]).map(h=>{ const {photoId, ...rest}=h; return rest; }) } };
@@ -4030,7 +4033,10 @@ async function restoreFromCode(code){
     const cloudIds=new Set(((prof&&prof.history)||[]).map(c=>c.id));
     s.cloud = { syncedCompletions: hist.filter(h=>cloudIds.has(h.id)).map(h=>h.id),
       avatarUrl:(prof&&prof.avatar)||null, avatarSrc:null };
-    s.notifs=[]; s.notifSeen=[]; s.friends=[]; // amigos y avisos se re-descargan de la cuenta
+    // amigos: se restauran del código (si lo trae) y luego syncFriends los
+    // refresca/reconcilia desde la nube; así no desaparecen si la sync falla.
+    s.friends = Array.isArray(st.friends) ? st.friends : [];
+    s.notifs=[]; s.notifSeen=[]; // los avisos se re-descargan de la cuenta
   });
   // avatar: re-descargarlo de la nube para verlo también sin conexión
   if(prof && prof.avatar){
