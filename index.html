@@ -33,7 +33,13 @@
   --mat-thin:rgba(40,40,44,0.55);
   --mat:rgba(34,34,38,0.72);
   --mat-thick:rgba(28,28,32,0.86);
-  --mat-bar:rgba(18,18,20,0.7);
+  /* Material de las barras (tab bar / navbar). Antes era rgba(18,18,20,0.7):
+     sobre el fondo negro puro quedaba a ~13/255 de brillo — indistinguible
+     del negro absoluto — y la zona de seguridad bajo los iconos (los ~34pt
+     del home indicator) se veía como una "franja negra que corta la app".
+     Un chrome un poco más claro (como el material de barra nativo de iOS en
+     oscuro) hace que esa zona se lea como parte de la barra. */
+  --mat-bar:rgba(38,38,42,0.82);
   --card:rgba(44,44,48,0.55);
   --card-2:rgba(58,58,62,0.5);
 
@@ -868,7 +874,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v75";
+const APP_VERSION = "v76";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4109,10 +4115,13 @@ function autoEnablePush(){
   document.addEventListener("click",ask,{once:true});
 }
 function boot(){
-  // Versión + modo de pantalla real. El modo delata la causa de la franja
-  // negra bajo la barra: "fullscreen" = el ícono se instaló con el manifest
-  // antiguo e iOS reserva esa franja FUERA de la app (solo se cura borrando
-  // el ícono y volviéndolo a añadir); "standalone" = todo correcto.
+  // Versión + diagnóstico de pantalla: modo real (standalone/fullscreen),
+  // inset inferior aplicado (env(safe-area-inset-bottom), en px) y cobertura
+  // del viewport (alto de la ventana / alto de la pantalla). Con esto se
+  // distingue al instante cualquier causa de "franja negra" inferior:
+  // fullscreen = ícono con manifest antiguo; inset 0 en un iPhone con home
+  // indicator = viewport-fit sin aplicar; ventana < pantalla = webview
+  // recortado por el sistema.
   const av=document.getElementById("appVersion");
   if(av){
     let mode="navegador";
@@ -4120,7 +4129,15 @@ function boot(){
       ["standalone","fullscreen","minimal-ui"].forEach(m=>{ if(matchMedia(`(display-mode: ${m})`).matches) mode=m; });
       if(mode==="navegador" && navigator.standalone) mode="standalone";
     }catch(e){}
-    av.textContent=APP_VERSION+" · "+mode;
+    let sb="";
+    try{
+      const probe=document.createElement("div");
+      probe.style.cssText="position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)";
+      document.body.appendChild(probe);
+      sb=" · inf "+Math.round(parseFloat(getComputedStyle(probe).paddingBottom)||0)+"px";
+      probe.remove();
+    }catch(e){}
+    av.textContent=APP_VERSION+" · "+mode+sb+" · "+window.innerHeight+"/"+screen.height;
   }
   Store.load();
   Generator.init();
