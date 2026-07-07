@@ -9,7 +9,14 @@
 <meta name="theme-color" content="#000000" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<!-- OJO: NO usar "black-translucent". Con él, iOS (bug de WebKit) ancla el
+     webview arriba pero lo corta a (pantalla − barra de estado): quedaba una
+     franja negra del sistema de 47pt bajo la barra de pestañas, imposible de
+     tapar con CSS (diagnóstico real: innerHeight 797 en pantalla de 844, con
+     env(safe-area-inset-bottom)=0). Con "black" la barra de estado es negra
+     sólida (igual que el fondo de la app: se ve idéntico) y el webview llega
+     hasta el borde inferior de la pantalla, con su inset correcto. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
 <meta name="apple-mobile-web-app-title" content="Rachas" />
 <link rel="manifest" href="manifest.json" />
 <!-- Favicon: icono de la pestaña del navegador y de la dirección https -->
@@ -463,9 +470,10 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .cal-day.has{cursor:pointer;}
 .cal-day.has::after{content:"";position:absolute;bottom:5px;width:5px;height:5px;border-radius:50%;
   background:var(--green);box-shadow:0 0 6px var(--green);}
-.cal-day.has.lvl3{background:rgba(48,209,88,0.28);}
-.cal-day.has.lvl2{background:rgba(48,209,88,0.18);}
-.cal-day.has.lvl1{background:rgba(48,209,88,0.10);}
+/* Verde UNIFORME en todos los días con actividad (antes la intensidad
+   variaba con el nº de tareas del día y parecía que unos días se veían
+   más apagados que otros). Mismo tono en tu calendario y el de amigos. */
+.cal-day.has{background:rgba(48,209,88,0.18);}
 .cal-day.has:active{transform:scale(0.88);}
 
 /* Amigos */
@@ -874,7 +882,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v76";
+const APP_VERSION = "v77";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2881,8 +2889,7 @@ const Profile = (() => {
     for(let d=1;d<=days;d++){
       const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const c=counts[key]||0;
-      const lvl = c>=3?"lvl3":c===2?"lvl2":c===1?"lvl1":"";
-      const cls=["cal-day"]; if(key===todayK)cls.push("today"); if(c){cls.push("has",lvl);}
+      const cls=["cal-day"]; if(key===todayK)cls.push("today"); if(c)cls.push("has");
       const style = d===1 && lead>0 ? ` style="grid-column-start:${lead+1}"` : "";
       cells.push(`<div class="${cls.join(' ')}"${style} ${c?`data-day="${key}"`:""}>${d}</div>`);
     }
@@ -3612,7 +3619,7 @@ const Friends = (() => {
       for(let d=1;d<=days;d++){
         const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const has=dateSet.has(key);
-        const cls=["cal-day"]; if(key===todayK)cls.push("today"); if(has)cls.push("has","lvl2");
+        const cls=["cal-day"]; if(key===todayK)cls.push("today"); if(has)cls.push("has");
         const st = d===1 && lead>0 ? ` style="grid-column-start:${lead+1}"` : "";
         cells.push(`<div class="${cls.join(' ')}"${st} ${has?`data-fday="${key}"`:""}>${d}</div>`);
       }
