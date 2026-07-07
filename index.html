@@ -9,14 +9,15 @@
 <meta name="theme-color" content="#000000" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
-<!-- Pantalla completa real: la app se extiende bajo la barra de estado.
-     IMPORTANTE: este modo se rompe si la página se recarga sola — un bug de
-     iOS encoge el webview la altura de la barra de estado (47pt) tras un
-     location.reload() en una PWA instalada, dejando una franja negra del
-     sistema (diagnóstico real: innerHeight 797 en pantalla de 844). Por eso
-     esta app NO usa recargas automáticas (ver el registro del service worker
-     y el manejador de pageshow: actualizan/reparan SIN reload). -->
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<!-- CONCLUSIÓN (probada empíricamente en el dispositivo): con
+     "black-translucent" el layout viewport de iOS queda encogido a
+     (pantalla − barra de estado) y esa franja de 47pt es IMPINTABLE — se
+     intentó dibujar dentro (bajando la tab bar 47px) y iOS recortó el
+     dibujo; la franja solo cambia de lado (arriba/abajo) según el arranque.
+     Con "black" el viewport queda alineado con la ventana (cero franjas
+     dentro de la app) y la barra de estado es negra sólida del sistema:
+     sobre una app de fondo negro se ve exactamente como una app nativa. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
 <meta name="apple-mobile-web-app-title" content="Rachas" />
 <link rel="manifest" href="manifest.json" />
 <!-- Favicon: icono de la pestaña del navegador y de la dirección https -->
@@ -75,21 +76,6 @@
 
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
-  /* Corrección del viewport encogido (bug de WebKit en PWA instalada con
-     barra de estado translúcida): el layout viewport mide (pantalla − barra
-     de estado) pero el área PINTABLE de la ventana cubre la pantalla entera.
-     El viewport encogido puede quedar pegado ARRIBA (hueco abajo) o pegado
-     ABAJO (hueco arriba) según el arranque; el JS (updateDiag) detecta de
-     qué lado está el hueco con el inset superior (env(safe-area-inset-top)
-     ~47px = viewport pegado arriba, solapado por la barra de estado → hueco
-     abajo; 0px = viewport bajo la barra de estado → hueco arriba) y fija UNA
-     de las dos correcciones. Con el sistema sano ambas valen 0px.
-     --vp-gap: hueco abajo → los elementos anclados abajo lo restan de su
-       bottom para asentarse en el borde físico inferior.
-     --vp-gap-top: hueco arriba → el fondo se extiende hacia arriba para
-       cubrir hasta el borde físico superior (zona de la hora/batería). */
-  --vp-gap:0px;
-  --vp-gap-top:0px;
   --ease:cubic-bezier(0.32,0.72,0,1);            /* curva tipo iOS spring */
   --ease-out:cubic-bezier(0.22,1,0.36,1);
 }
@@ -119,7 +105,12 @@ img{display:block;}
 /* Fondo ambiental: blobs de color difusos detrás del cristal. Llega hasta el
    borde superior de la pantalla (bajo la hora/batería), como una app nativa:
    la app corre a pantalla completa real con la barra de estado translúcida. */
-.ambient{position:fixed;inset:0;top:calc(0px - var(--vp-gap-top));bottom:calc(0px - var(--vp-gap));z-index:0;overflow:hidden;pointer-events:none;}
+.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;
+  /* el brillo se funde a negro puro arriba: la barra de estado del sistema es
+     negra sólida y así la transición barra→app es invisible, como el área del
+     notch de una app nativa oscura */
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 130px);
+  mask-image:linear-gradient(to bottom,transparent 0,#000 130px);}
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
   filter:blur(80px);opacity:0.5;
@@ -142,7 +133,7 @@ img{display:block;}
   -webkit-overflow-scrolling:touch;
   padding:0 16px;
   padding-top:calc(var(--safe-top) + 22px);
-  padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 28px - var(--vp-gap));
+  padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 28px);
   opacity:0;transform:translateY(8px) scale(0.992);
   transition:opacity .34s var(--ease-out), transform .34s var(--ease-out);
   pointer-events:none;
@@ -182,7 +173,7 @@ img{display:block;}
    TAB BAR
    ========================================================================= */
 .tabbar{
-  position:fixed;left:0;right:0;bottom:calc(0px - var(--vp-gap));z-index:50;
+  position:fixed;left:0;right:0;bottom:0;z-index:50;
   height:calc(var(--tabbar-h) + var(--safe-bottom));
   padding-bottom:var(--safe-bottom);
   display:flex;align-items:stretch;
@@ -392,7 +383,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .list-head{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 14px;}
 
 /* Botón flotante para crear */
-.fab{position:fixed;right:18px;bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 16px - var(--vp-gap));z-index:45;
+.fab{position:fixed;right:18px;bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 16px);z-index:45;
   width:56px;height:56px;border-radius:50%;background:var(--blue);
   display:grid;place-items:center;box-shadow:0 10px 28px rgba(10,132,255,0.45);
   transition:transform .15s var(--ease-out);opacity:0;pointer-events:none;transform:scale(0.6);}
@@ -559,13 +550,13 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 /* =========================================================================
    SHEETS / MODALES
    ========================================================================= */
-.scrim{position:fixed;inset:0;bottom:calc(0px - var(--vp-gap));z-index:90;background:rgba(0,0,0,0.5);
+.scrim{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.5);
   -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);}
 .scrim.show{opacity:1;pointer-events:auto;}
 
 .sheet{
-  position:fixed;left:0;right:0;bottom:calc(0px - var(--vp-gap));z-index:100;
+  position:fixed;left:0;right:0;bottom:0;z-index:100;
   max-height:min(82vh, calc(100vh - var(--safe-top) - 16px));display:flex;flex-direction:column;
   background:var(--mat-thick);
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
@@ -626,7 +617,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .gal-info .m .pts{color:var(--yellow);font-weight:600;}
 
 /* Lightbox */
-.lightbox{position:fixed;inset:0;bottom:calc(0px - var(--vp-gap));z-index:200;background:rgba(0,0,0,0.94);
+.lightbox{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.94);
   display:flex;align-items:flex-start;justify-content:center;
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);}
 .lightbox.show{opacity:1;pointer-events:auto;}
@@ -678,7 +669,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   100%{opacity:0;transform:translate(-50%,-130%) scale(0.95);}
 }
 
-.rankup{position:fixed;inset:0;bottom:calc(0px - var(--vp-gap));z-index:320;display:flex;flex-direction:column;align-items:center;justify-content:center;
+.rankup{position:fixed;inset:0;z-index:320;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:radial-gradient(circle at 50% 40%,rgba(94,92,230,0.4),rgba(0,0,0,0.85) 70%);
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
   opacity:0;pointer-events:none;transition:opacity .4s var(--ease-out);text-align:center;padding:24px;}
@@ -900,7 +891,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v82";
+const APP_VERSION = "v83";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4295,28 +4286,11 @@ function updateDiag(){
     insBottom=Math.round(parseFloat(cs.paddingBottom)||0);
     probe.remove();
   }catch(e){}
-  // CORRECCIÓN DEL VIEWPORT ENCOGIDO: en modo instalado, si la ventana mide
-  // menos que la pantalla (bug de WebKit: layout viewport = pantalla − barra
-  // de estado, pese a que la ventana pintable cubre la pantalla entera), se
-  // detecta DE QUÉ LADO quedó el hueco y se compensa solo ese lado:
-  // - inset superior > 0 → el viewport está pegado arriba (la barra de estado
-  //   lo solapa) → el hueco está ABAJO → --vp-gap (ancla el tab bar, hojas y
-  //   FAB al borde físico inferior).
-  // - inset superior = 0 → el viewport quedó bajo la barra de estado → el
-  //   hueco está ARRIBA → --vp-gap-top (extiende el fondo hasta el borde
-  //   físico superior; el contenido ya empieza bajo la hora, como una app
-  //   nativa con barra sólida).
-  // Con el sistema sano (ventana = pantalla) ambas correcciones son 0px.
-  let gapB=0, gapT=0;
-  try{
-    try{ window.scrollTo(0,0); }catch(_){} // re-ancla si el sistema desplazó la página
-    if(mode!=="navegador"){
-      const d=screen.height - window.innerHeight;
-      if(d>0 && d<=70){ if(insTop>0) gapB=d; else gapT=d; } // solo magnitudes de barra de estado
-    }
-    document.documentElement.style.setProperty("--vp-gap", gapB+"px");
-    document.documentElement.style.setProperty("--vp-gap-top", gapT+"px");
-  }catch(e){}
+  // Nota histórica: aquí hubo una "corrección del viewport encogido" para el
+  // modo translúcido. Se eliminó tras demostrar empíricamente que la franja
+  // de 47pt del viewport encogido es IMPINTABLE (iOS recorta cualquier dibujo
+  // fuera del layout viewport). Con la barra de estado "black", el viewport
+  // queda alineado con la ventana y no hay nada que corregir.
   // Medidas de unidades de viewport (diagnóstico): qué "ve" cada unidad CSS.
   let units="";
   try{
@@ -4328,7 +4302,7 @@ function updateDiag(){
     });
     units=" · vh"+m.vh+" dvh"+m.dvh+" lvh"+m.lvh;
   }catch(e){}
-  if(av) av.textContent=APP_VERSION+" · "+mode+" · sup "+insTop+" inf "+insBottom+" · "+window.innerHeight+"/"+screen.height+units+((gapB||gapT)?" · corr B"+gapB+"/T"+gapT:"");
+  if(av) av.textContent=APP_VERSION+" · "+mode+" · sup "+insTop+" inf "+insBottom+" · "+window.innerHeight+"/"+screen.height+units;
 }
 function boot(){
   updateDiag();
