@@ -127,7 +127,7 @@ img{display:block;}
   overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   padding:0 16px;
-  padding-top:calc(var(--safe-top) + 34px);
+  padding-top:calc(var(--safe-top) + 28px);
   padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 28px);
   opacity:0;transform:translateY(8px) scale(0.992);
   transition:opacity .34s var(--ease-out), transform .34s var(--ease-out);
@@ -149,11 +149,13 @@ img{display:block;}
      centro cae en ~safe-top+52; con este alto y align-items:center el botón
      centra ahí mismo. El degradado usa medidas en px (no %) para que su
      blend quede confinado al borde superior aunque la barra sea alta. */
-  height:calc(var(--safe-top) + 128px);
+  height:calc(var(--safe-top) + 116px);
   padding:var(--safe-top) 16px 0;
   display:flex;align-items:center;justify-content:flex-end;gap:10px;
   pointer-events:none; /* el degradado no intercepta toques; los botones sí */
-  background:linear-gradient(to bottom, var(--bg) 0, rgba(0,0,0,0.55) 20px, rgba(0,0,0,0) 76px);
+  /* degradado tenue y corto: ya no hay franja negra que ocultar; solo da un
+     leve realce para que el título junto al botón se lea al hacer scroll */
+  background:linear-gradient(to bottom, rgba(0,0,0,0.32) 0, rgba(0,0,0,0) 50px);
 }
 .tb-title{font-size:17px;font-weight:700;letter-spacing:-0.02em;color:var(--label);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -173,10 +175,10 @@ img{display:block;}
 /* Título grande iOS */
 .large-title{
   font-size:34px;font-weight:800;letter-spacing:-0.03em;
-  margin:6px 0 10px;padding-top:6px;line-height:1.05;
+  margin:6px 0 10px -3px;padding-top:6px;line-height:1.05;
   transition:transform .3s var(--ease-out), opacity .3s;
 }
-.subtitle{color:var(--label-2);font-size:15px;margin:0 0 18px;font-weight:500;}
+.subtitle{color:var(--label-2);font-size:15px;margin:0 0 18px -3px;font-weight:500;}
 
 .section-title{font-size:20px;font-weight:700;letter-spacing:-0.02em;margin:26px 4px 12px;}
 .section-title:first-of-type{margin-top:18px;}
@@ -898,7 +900,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v86";
+const APP_VERSION = "v87";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
