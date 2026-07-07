@@ -907,7 +907,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v90";
+const APP_VERSION = "v91";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2991,6 +2991,9 @@ const Cloud = (() => {
   function configured(){ return !!sdk() && typeof SUPABASE_URL==="string" && SUPABASE_URL.startsWith("http"); }
   function enabled(){ return configured(); } // la nube es el modo único: activa si el SDK está disponible
 
+  const UID_KEY = "rachas_uid"; // recuerda la cuenta para no crear una nueva por error
+  function knownUid(){ try{ return localStorage.getItem(UID_KEY); }catch(e){ return null; } }
+  function rememberUid(id){ if(id){ try{ localStorage.setItem(UID_KEY, id); }catch(e){} } }
   async function init(){
     if(ready) return uid;
     if(!configured()) return null;
@@ -2999,8 +3002,27 @@ const Cloud = (() => {
       try{
         client = sdk().createClient(SUPABASE_URL, SUPABASE_ANON, { auth:{ persistSession:true, autoRefreshToken:true } });
         let { data:{ session } } = await client.auth.getSession();
-        if(!session){ const { data, error } = await client.auth.signInAnonymously(); if(error) throw error; session=data.session; }
-        uid = session && session.user ? session.user.id : null; ready=!!uid; return uid;
+        if(!session){
+          // CLAVE: si ya teníamos una cuenta (uid guardado) pero ahora mismo no
+          // hay sesión, NO crear una cuenta anónima nueva — eso "abandonaría" la
+          // cuenta vieja y perdería amigos/calendario (esto pasó tras transferir
+          // datos). Se reintenta unas veces (el SDK puede estar restaurando la
+          // sesión aún); si sigue sin sesión, se deja la nube DESCONECTADA (los
+          // datos locales se conservan y se reconecta en el próximo arranque),
+          // en vez de arrancar una cuenta nueva vacía.
+          if(knownUid()){
+            for(let i=0;i<3 && !session;i++){
+              await new Promise(r=>setTimeout(r,700));
+              try{ session=(await client.auth.getSession()).data.session; }catch(e){}
+            }
+            if(!session){ ready=false; return null; }
+          } else {
+            const { data, error } = await client.auth.signInAnonymously(); if(error) throw error; session=data.session;
+          }
+        }
+        uid = session && session.user ? session.user.id : null; ready=!!uid;
+        rememberUid(uid);
+        return uid;
       }catch(e){ console.warn("Cloud init:", e && e.message); client=null; return null; }
       finally{ initing=null; }
     })();
@@ -3422,6 +3444,7 @@ const Cloud = (() => {
       const { data, error } = await client.auth.refreshSession({ refresh_token:tokens.refresh_token });
       if(error || !data || !data.session){ console.warn("restoreSession:", error && error.message); return false; }
       uid = data.session.user.id; ready = true;
+      rememberUid(uid); // recuerda la cuenta restaurada (para no crear una nueva por error)
       return true;
     }catch(e){ console.warn("restoreSession:", e && e.message); return false; }
   }
