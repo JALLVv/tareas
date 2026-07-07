@@ -101,8 +101,15 @@ input,textarea{user-select:text;-webkit-user-select:text;font-family:inherit;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
 img{display:block;}
 
-/* Fondo ambiental: blobs de color difusos detrás del cristal */
-.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+/* Fondo ambiental: blobs de color difusos detrás del cristal.
+   El brillo se desvanece a negro puro en el borde superior: con el estilo de
+   barra de estado "black" (necesario por el bug de WebKit de la franja
+   inferior), iOS pinta la zona de la hora/batería en negro sólido FUERA de
+   la app; si el brillo llegara hasta arriba se notaría el corte entre esa
+   barra y la app. Con el degradado, ambas se funden sin costura. */
+.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 130px);
+  mask-image:linear-gradient(to bottom,transparent 0,#000 130px);}
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
   filter:blur(80px);opacity:0.5;
@@ -883,7 +890,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v78";
+const APP_VERSION = "v79";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
