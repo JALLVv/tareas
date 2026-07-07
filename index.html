@@ -907,7 +907,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v92";
+const APP_VERSION = "v93";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3092,11 +3092,12 @@ const Cloud = (() => {
     if(!partnerId && !partnerName) return;
     try{ await client.from('completions').update({ partner_id:partnerId||null, partner_name:partnerName||null }).eq('id', id).eq('user_id', uid); }catch(e){}
   }
-  // sube al servidor las completadas que aún no se han sincronizado (máx 60 recientes)
-  async function syncBacklog(){
+  // sube al servidor las completadas que aún no se han sincronizado (por
+  // defecto máx 60 recientes; forceResync pide un tope alto para subir TODO)
+  async function syncBacklog(limit){
     if(!enabled() || !await init() || !client) return;
     const s=Store.get(); const done=(s.cloud&&s.cloud.syncedCompletions)||[];
-    const pending=s.history.filter(h=>!done.includes(h.id)).slice(0,60);
+    const pending=s.history.filter(h=>!done.includes(h.id)).slice(0, limit||60);
     for(const h of pending){
       if(h.shared && h.photoUrl && !h.photoId){
         // completada compartida recibida del compañero: la foto ya está en la nube
@@ -3147,7 +3148,7 @@ const Cloud = (() => {
   async function forceResync(){
     if(!enabled() || !await init() || !client) return false;
     Store.update(s=>{ if(s.cloud){ s.cloud.syncedCompletions=[]; s.cloud.avatarSrc=null; } });
-    await pushProfile(); await syncBacklog(); await reconcile();
+    await pushProfile(); await syncBacklog(2000); await reconcile(); // sube TODO el historial
     return true;
   }
 
@@ -4067,8 +4068,17 @@ function openTransferSheet(){
       <div class="field-block" style="border:0.5px solid var(--hairline);border-radius:14px;"><textarea class="field" id="tfInput" rows="3" placeholder="Pega aquí el código"></textarea></div>
       <button class="btn" id="tfRestore" style="margin-top:12px;">Restaurar mis datos</button>
       <div class="hint">La cuenta de la instalación vieja pasa a esta: tus amigos te siguen viendo igual.</div>
+      <div class="lbl-sm" style="margin-top:22px;">¿Tus amigos no ven todo tu calendario?</div>
+      <button class="btn secondary" id="tfResync">Volver a subir todo a la nube</button>
+      <div class="hint">Re-sube TODO tu historial a la nube, para que tus amigos vean tu calendario completo (no solo lo reciente). Útil si tras una transferencia algo quedó a medias.</div>
     </div>`);
   $("#tfClose").onclick=Sheets.close;
+  $("#tfResync").onclick=async ()=>{
+    haptic(15); const b=$("#tfResync"); b.disabled=true; b.textContent="Subiendo todo…";
+    const ok=await Cloud.forceResync();
+    b.disabled=false; b.textContent="Volver a subir todo a la nube";
+    UI.toast(ok?"Todo re-subido a la nube":"No se pudo (revisa tu conexión)","check",ok?"var(--green)":"var(--red)");
+  };
   $("#tfMake").onclick=async ()=>{
     haptic(); const b=$("#tfMake"); b.disabled=true; b.textContent="Creando…";
     const code=await makeTransferCode();
