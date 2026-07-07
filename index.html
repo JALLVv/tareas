@@ -105,12 +105,7 @@ img{display:block;}
 /* Fondo ambiental: blobs de color difusos detrás del cristal. Llega hasta el
    borde superior de la pantalla (bajo la hora/batería), como una app nativa:
    la app corre a pantalla completa real con la barra de estado translúcida. */
-.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;
-  /* el brillo se funde a negro puro arriba: la barra de estado del sistema es
-     negra sólida y así la transición barra→app es invisible, como el área del
-     notch de una app nativa oscura */
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 130px);
-  mask-image:linear-gradient(to bottom,transparent 0,#000 130px);}
+.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
   filter:blur(80px);opacity:0.5;
@@ -141,22 +136,34 @@ img{display:block;}
 }
 .view.active{opacity:1;transform:none;pointer-events:auto;visibility:visible;}
 
-/* Barra de navegación compacta (aparece al hacer scroll) */
-.navbar{
+/* Barra superior: el botón de la sección (notificaciones/amigos) siempre
+   visible arriba a la derecha, y el nombre de la sección aparece a su lado al
+   hacer scroll. El fondo es un degradado suave (opaco arriba → transparente)
+   que funde la barra de estado del sistema (negra) con la app, SIN una banda
+   dura ni un borde: reemplaza a la antigua .navbar (que sí se veía como una
+   franja oscura bajo el reloj). */
+.topbar{
   position:fixed;top:0;left:0;right:0;z-index:40;
-  height:calc(var(--safe-top) + 46px);
-  padding-top:var(--safe-top);
-  display:flex;align-items:center;justify-content:center;
-  background:var(--mat-bar);
-  -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
-  border-bottom:0.5px solid transparent;
-  opacity:0;transform:translateY(-4px);pointer-events:none;
-  transition:opacity .25s var(--ease-out), transform .25s var(--ease-out), border-color .25s;
+  height:calc(var(--safe-top) + 54px);
+  padding:var(--safe-top) 16px 0;
+  display:flex;align-items:center;justify-content:flex-end;gap:10px;
+  pointer-events:none; /* el degradado no intercepta toques; los botones sí */
+  background:linear-gradient(to bottom, var(--bg) 0%, rgba(0,0,0,0.5) 40%, transparent 100%);
 }
-.navbar.show{opacity:1;transform:none;border-bottom-color:var(--hairline);}
-.navbar .nav-title{font-size:17px;font-weight:600;letter-spacing:-0.02em;}
-.navbar .nav-action{position:absolute;right:16px;top:50%;transform:translateY(calc(-50% + var(--safe-top)/2));
-  color:var(--blue);font-size:17px;font-weight:400;}
+.tb-title{font-size:17px;font-weight:700;letter-spacing:-0.02em;color:var(--label);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  opacity:0;transform:translateY(-4px);
+  transition:opacity .25s var(--ease-out), transform .25s var(--ease-out);}
+.topbar.scrolled .tb-title{opacity:1;transform:none;}
+.tb-btn{
+  pointer-events:auto;flex:0 0 auto;position:relative;
+  width:42px;height:42px;border-radius:50%;background:var(--fill-2);
+  display:grid;place-items:center;
+  -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+  transition:transform .12s var(--ease-out), background .2s;
+}
+.tb-btn:active{transform:scale(0.9);}
+.tb-btn svg{width:23px;height:23px;color:var(--blue);}
 
 /* Título grande iOS */
 .large-title{
@@ -485,11 +492,6 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .cal-day.has:active{transform:scale(0.88);}
 
 /* Amigos */
-.friends-toggle{position:absolute;top:calc(var(--safe-top) + 20px);right:16px;z-index:5;
-  width:42px;height:42px;border-radius:50%;background:var(--fill-2);display:grid;place-items:center;
-  -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:transform .12s var(--ease-out), background .2s;}
-.friends-toggle:active{transform:scale(0.9);}
-.friends-toggle svg{width:23px;height:23px;color:var(--blue);}
 .notif-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;
   background:var(--red);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--bg);}
 .notif-item{align-items:center;}
@@ -728,10 +730,17 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 <body>
 <div class="ambient"></div>
 
-<!-- Barra de navegación compacta -->
-<div class="navbar" id="navbar">
-  <span class="nav-title" id="navTitle">Generador</span>
-  <span class="nav-action" id="navAction"></span>
+<!-- Barra superior: nombre de la sección (aparece al hacer scroll) + botón de
+     la sección (notificaciones en Tareas, amigos en Perfil). -->
+<div class="topbar" id="topbar">
+  <span class="tb-title" id="tbTitle"></span>
+  <button class="tb-btn" id="notifBtn" aria-label="Notificaciones" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 004 0"/></svg>
+    <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+  </button>
+  <button class="tb-btn" id="friendsBtn" aria-label="Amigos" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0111 0M16.5 6.2a3 3 0 010 5.6M17.5 13.3a5.5 5.5 0 013.2 4.7"/></svg>
+  </button>
 </div>
 
 <div id="app">
@@ -760,10 +769,6 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   <!-- ===================== TAREAS ===================== -->
   <section class="view active" id="view-tasks" data-title="Tareas">
     <h1 class="large-title">Tareas</h1>
-    <button class="friends-toggle" id="notifBtn" aria-label="Notificaciones">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 004 0"/></svg>
-      <span class="notif-badge" id="notifBadge" style="display:none">0</span>
-    </button>
     <p class="subtitle">Tus retos de hoy. Completa para sumar puntos.</p>
 
     <div class="segmented" id="taskFilter" style="margin-top:6px;">
@@ -777,9 +782,6 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   <!-- ===================== PERFIL ===================== -->
   <section class="view" id="view-profile" data-title="Perfil">
     <h1 class="large-title">Perfil</h1>
-    <button class="friends-toggle" id="friendsBtn" aria-label="Amigos">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0111 0M16.5 6.2a3 3 0 010 5.6M17.5 13.3a5.5 5.5 0 013.2 4.7"/></svg>
-    </button>
 
     <div class="profile-head">
       <div class="avatar" id="avatar" role="button">
@@ -891,7 +893,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v83";
+const APP_VERSION = "v84";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4138,36 +4140,33 @@ const Router = (() => {
     Object.entries(views).forEach(([k,sel])=> $(sel).classList.toggle("active",k===name));
     $$(".tab").forEach(t=> t.classList.toggle("active", t.getAttribute("data-view")===name));
     $("#fab").classList.toggle("show", name==="tasks");
-    updateNavbar();
+    updateTopbar();
     if(name==="tasks") Tasks.render();
     if(name==="profile") Profile.render();
     scrollTop();
   }
-  function scrollTop(){ const v=$(views[cur]); if(v) v.scrollTop=0; updateNavbar(); }
+  function scrollTop(){ const v=$(views[cur]); if(v) v.scrollTop=0; updateTopbar(); }
 
-  function updateNavbar(){
+  function updateTopbar(){
     const v=$(views[cur]);
-    const title=v.getAttribute("data-title");
-    $("#navTitle").textContent=title;
-    // sincronizar también la VISIBILIDAD de la barra compacta con el scroll de
-    // la vista actual. Antes solo se actualizaba con el evento de scroll: al
-    // cambiar de sección (la nueva empieza en scroll 0, sin evento) la franja
-    // del título de la sección anterior se quedaba pegada tapando el contenido.
-    $("#navbar").classList.toggle("show", v.scrollTop>30);
-    // ya no hay acción de navbar: editar/eliminar se abre tocando la tarea
-    const act=$("#navAction");
-    act.style.display="none"; act.onclick=null;
+    // nombre de la sección (aparece a la izquierda del botón al hacer scroll)
+    $("#tbTitle").textContent = v.getAttribute("data-title");
+    // botón de la sección: notificaciones en Tareas, amigos en Perfil, ninguno
+    // en Generador. Solo se muestra el que corresponde a la sección activa.
+    $("#notifBtn").style.display   = cur==="tasks"   ? "grid" : "none";
+    $("#friendsBtn").style.display = cur==="profile" ? "grid" : "none";
+    // el nombre aparece al hacer scroll; al cambiar de sección la vista nueva
+    // empieza arriba, así que se sincroniza aquí para que no quede "pegado".
+    $("#topbar").classList.toggle("scrolled", v.scrollTop>30);
   }
   function onScroll(){
-    const v=$(views[cur]);
-    const show = v.scrollTop>30;
-    $("#navbar").classList.toggle("show",show);
+    $("#topbar").classList.toggle("scrolled", $(views[cur]).scrollTop>30);
   }
   function init(){
     $$(".tab").forEach(t=> t.onclick=()=> go(t.getAttribute("data-view")) );
     Object.values(views).forEach(sel=> $(sel).addEventListener("scroll", onScroll, {passive:true}));
     $("#fab").classList.toggle("show", cur==="tasks");
-    updateNavbar();
+    updateTopbar();
   }
   return { init, go };
 })();
