@@ -76,7 +76,7 @@
   --teal:#64D2FF; --mint:#66D4CF; --cyan:#5AC8FA; --brown:#AC8E68;
 
   --radius:22px; --radius-lg:30px; --radius-sm:14px;
-  --blur:saturate(180%) blur(28px);
+  --blur:saturate(105%) blur(22px);
   --tabbar-h:54px;
 
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","SF Pro",system-ui,"Segoe UI",Roboto,Helvetica,Arial,"Apple Color Emoji",sans-serif;
@@ -120,13 +120,15 @@ img{display:block;}
    no quede ningún borde negro sin pintar. Corre a pantalla completa como una app
    nativa. */
 .ambient{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+/* Fondo mate, sin brillo/neón: tonos oscuros desaturados y muy tenues, solo para
+   dar una pizca de profundidad (no un halo de color). */
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
-  filter:blur(80px);opacity:0.5;
+  filter:blur(90px);opacity:0.28;
 }
-.ambient::before{background:radial-gradient(circle,#3a2a7a,transparent 70%);top:-25vw;left:-20vw;
+.ambient::before{background:radial-gradient(circle,#24243050,transparent 70%);top:-25vw;left:-20vw;
   animation:drift1 22s var(--ease) infinite alternate;}
-.ambient::after{background:radial-gradient(circle,#0a3a6a,transparent 70%);bottom:-25vw;right:-20vw;
+.ambient::after{background:radial-gradient(circle,#1e263650,transparent 70%);bottom:-25vw;right:-20vw;
   animation:drift2 26s var(--ease) infinite alternate;}
 @keyframes drift1{to{transform:translate(8vw,10vw) scale(1.15);}}
 @keyframes drift2{to{transform:translate(-8vw,-8vw) scale(1.1);}}
@@ -191,6 +193,7 @@ img{display:block;}
 }
 .tb-btn:active{transform:scale(0.9);}
 .tb-btn svg{width:23px;height:23px;color:var(--blue);}
+.tb-btn .emoji{font-size:20px;}
 
 /* Título grande iOS */
 .large-title{
@@ -227,6 +230,13 @@ img{display:block;}
 .tab.active{color:var(--blue);}
 .tab.active svg{transform:translateY(-1px) scale(1.04);}
 .tab:active{transform:scale(0.92);}
+/* Emojis como iconos: sin sombras ni brillos, tamaño y alineación consistentes.
+   Se neutraliza cualquier color/stroke heredado (son glifos a color propios). */
+.emoji{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+  font-style:normal;font-weight:400;line-height:1;display:inline-block;
+  text-shadow:none;filter:none;-webkit-text-stroke:0;}
+.tab .tab-ic{font-size:23px;transition:transform .25s var(--ease-out);}
+.tab.active .tab-ic{transform:translateY(-1px) scale(1.04);}
 
 /* =========================================================================
    COMPONENTES · cards, chips, segmented, switch, botones
@@ -253,7 +263,7 @@ img{display:block;}
   font-size:17px;font-weight:600;letter-spacing:-0.01em;
   background:var(--blue);color:#fff;
   transition:transform .12s var(--ease-out), filter .2s, opacity .2s;
-  box-shadow:0 6px 20px rgba(10,132,255,0.35);
+  box-shadow:none;
 }
 .btn:active{transform:scale(0.97);filter:brightness(0.92);}
 .btn.secondary{background:var(--fill);color:var(--label);box-shadow:none;
@@ -279,8 +289,7 @@ img{display:block;}
 .chip .ic{width:22px;height:22px;display:grid;place-items:center;}
 .chip .ic svg{width:18px;height:18px;}
 .chip:active{transform:scale(0.95);}
-.chip.sel{background:var(--accent,#0A84FF);border-color:transparent;color:#fff;
-  box-shadow:0 6px 18px color-mix(in srgb,var(--accent,#0A84FF) 45%,transparent);}
+.chip.sel{background:var(--accent,#0A84FF);border-color:transparent;color:#fff;box-shadow:none;}
 .chip.sel .ic svg{color:#fff !important;}
 
 /* Segmented control iOS */
@@ -294,8 +303,7 @@ img{display:block;}
   padding:9px 14px;border-radius:11px;font-size:14px;font-weight:600;
   color:var(--label);transition:transform .12s var(--ease-out), background .2s, box-shadow .2s;
 }
-.seg.sel{background:var(--blue);color:#fff;font-weight:700;
-  box-shadow:0 4px 14px color-mix(in srgb,var(--blue) 45%,transparent);}
+.seg.sel{background:var(--blue);color:#fff;font-weight:700;box-shadow:none;}
 .seg:active{transform:scale(0.95);}
 
 /* Switch iOS */
@@ -306,6 +314,19 @@ img{display:block;}
   background:#fff;box-shadow:0 3px 8px rgba(0,0,0,0.3);
   transition:transform .25s var(--ease-out);}
 .switch.on .knob{transform:translateX(20px);}
+
+/* Lista de Ajustes: icono (emoji) a la izquierda, info al centro, control a la
+   derecha (interruptor o chevron). Estilo iOS, colores mate. */
+.settings-list{display:flex;flex-direction:column;background:var(--card);border-radius:16px;
+  overflow:hidden;border:0.5px solid var(--hairline);margin-top:6px;}
+.settings-row{display:flex;align-items:center;gap:14px;padding:15px 16px;width:100%;text-align:left;background:transparent;}
+.settings-row + .settings-row{border-top:0.5px solid var(--hairline);}
+.settings-row .sr-ic{font-size:24px;width:30px;text-align:center;flex:0 0 auto;}
+.sr-info{flex:1;min-width:0;}
+.sr-t{font-size:16px;font-weight:600;color:var(--label);}
+.sr-s{font-size:12.5px;color:var(--label-3);margin-top:2px;line-height:1.35;}
+.sr-chev{color:var(--label-3);font-size:24px;font-weight:400;flex:0 0 auto;line-height:1;}
+.settings-row.tappable:active{background:var(--fill-2);}
 
 /* Inputs / formularios agrupados estilo iOS */
 .form-group{border-radius:var(--radius);overflow:hidden;background:var(--card);
@@ -361,9 +382,9 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .done-datebar .mini-btn{flex:0 0 auto;}
 .task-card{display:flex;align-items:center;gap:13px;padding:14px;animation:cardIn .4s var(--ease-out) backwards;}
 @keyframes cardIn{from{opacity:0;transform:translateY(10px) scale(0.98);}}
-.task-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;
-  box-shadow:inset 0 0.5px 0 rgba(255,255,255,0.2);}
+.task-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;}
 .task-icon svg{width:24px;height:24px;color:#fff;stroke-width:1.9;}
+.task-icon .emoji{font-size:22px;}
 .task-body{flex:1;min-width:0;}
 .task-title{font-size:15px;font-weight:600;letter-spacing:-0.01em;line-height:1.25;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -374,7 +395,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .tag.shared{color:var(--indigo);}
 .tag.today{color:var(--blue);font-weight:700;}
 /* Tarea urgente: burbuja roja, bien marcada */
-.task-card.urgent{background:rgba(255,69,58,0.32);box-shadow:inset 0 0 0 1.5px var(--red), 0 6px 18px rgba(255,69,58,0.30);}
+.task-card.urgent{background:rgba(255,69,58,0.32);box-shadow:inset 0 0 0 1.5px var(--red);}
 .task-card.urgent.done{background:rgba(255,69,58,0.14);box-shadow:inset 0 0 0 1px rgba(255,69,58,0.45);}
 .tag.pts{color:var(--yellow);font-weight:600;}
 .task-check{width:30px;height:30px;border-radius:50%;border:2px solid var(--label-3);flex:0 0 auto;padding:0;
@@ -406,7 +427,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .action-btn svg{width:20px;height:20px;color:var(--blue);flex:0 0 auto;}
 .action-btn.danger{color:var(--red);}
 .action-btn.danger svg{color:var(--red);}
-.btn.danger{background:var(--red);color:#fff;box-shadow:0 6px 20px rgba(255,69,58,0.32);}
+.btn.danger{background:var(--red);color:#fff;box-shadow:none;}
 .btn.danger.ghost{background:transparent;color:var(--red);box-shadow:none;}
 .btn.danger.ghost:active{background:rgba(255,69,58,0.10);}
 .photo-modal .ico.danger{background:rgba(255,69,58,0.16);}
@@ -422,11 +443,12 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 /* Botón flotante para crear */
 .fab{position:absolute;right:18px;bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 16px);z-index:45;
   width:56px;height:56px;border-radius:50%;background:var(--blue);
-  display:grid;place-items:center;box-shadow:0 10px 28px rgba(10,132,255,0.45);
+  display:grid;place-items:center;box-shadow:0 6px 16px rgba(0,0,0,0.4);
   transition:transform .15s var(--ease-out);opacity:0;pointer-events:none;transform:scale(0.6);}
 .fab.show{opacity:1;pointer-events:auto;transform:none;}
 .fab:active{transform:scale(0.9);}
 .fab svg{width:30px;height:30px;color:#fff;stroke-width:2.4;}
+.fab .emoji{font-size:26px;color:#fff;}
 
 /* =========================================================================
    PERFIL
@@ -434,7 +456,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .profile-head{display:flex;flex-direction:column;align-items:center;text-align:center;padding:8px 0 4px;}
 .avatar{width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,#5E5CE6,#0A84FF);
   display:grid;place-items:center;font-size:38px;font-weight:700;color:#fff;overflow:hidden;
-  box-shadow:0 10px 30px rgba(94,92,230,0.4), inset 0 1px 0 rgba(255,255,255,0.3);position:relative;}
+  box-shadow:0 4px 12px rgba(0,0,0,0.3);position:relative;}
 .avatar img{width:100%;height:100%;object-fit:cover;}
 .avatar .edit-badge{position:absolute;bottom:0;right:0;width:30px;height:30px;border-radius:50%;
   background:var(--mat-thick);border:2px solid #000;display:grid;place-items:center;}
@@ -452,7 +474,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .rank-row .next{font-size:13px;font-weight:600;color:var(--label-2);}
 .progress{height:12px;border-radius:8px;background:var(--fill);overflow:hidden;position:relative;}
 .progress .bar{height:100%;border-radius:8px;background:linear-gradient(90deg,#FFD60A,#FF9F0A);
-  width:0;transition:width 1s var(--ease-out);box-shadow:0 0 14px rgba(255,159,10,0.5);}
+  width:0;transition:width 1s var(--ease-out);}
 .rank-foot{display:flex;justify-content:space-between;margin-top:10px;font-size:12.5px;color:var(--label-2);font-weight:600;}
 
 .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:14px;}
@@ -465,7 +487,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .stat .v.grn{color:var(--green);}
 
 .streak-card{margin-top:14px;padding:18px 20px;display:flex;align-items:center;gap:16px;}
-.streak-flame{font-size:40px;filter:drop-shadow(0 0 12px rgba(255,120,20,0.6));}
+.streak-flame{font-size:40px;}
 .streak-info{flex:1;}
 .streak-info .big{font-size:22px;font-weight:800;}
 .streak-info .small{font-size:13px;color:var(--label-2);font-weight:600;margin-top:2px;}
@@ -514,7 +536,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .cal-day.today{color:var(--blue);font-weight:800;box-shadow:inset 0 0 0 1.6px var(--blue);}
 .cal-day.has{cursor:pointer;}
 .cal-day.has::after{content:"";position:absolute;bottom:5px;width:5px;height:5px;border-radius:50%;
-  background:var(--green);box-shadow:0 0 6px var(--green);}
+  background:var(--green);}
 /* Verde UNIFORME en todos los días con actividad (antes la intensidad
    variaba con el nº de tareas del día y parecía que unos días se veían
    más apagados que otros). Mismo tono en tu calendario y el de amigos. */
@@ -710,7 +732,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
    ========================================================================= */
 .points-pop{position:absolute;left:50%;top:42%;z-index:300;transform:translate(-50%,-50%);
   font-size:46px;font-weight:900;color:var(--yellow);pointer-events:none;
-  text-shadow:0 4px 24px rgba(255,214,10,0.6);letter-spacing:-0.03em;
+  letter-spacing:-0.03em;
   animation:ptsPop 1.2s var(--ease-out) forwards;}
 @keyframes ptsPop{
   0%{opacity:0;transform:translate(-50%,-30%) scale(0.4);}
@@ -728,7 +750,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   margin-bottom:18px;opacity:0;transform:translateY(10px);}
 .rankup.show .eyebrow{animation:riIn .5s .15s var(--ease-out) forwards;}
 .rankup .badge{width:130px;height:130px;border-radius:36px;display:grid;place-items:center;margin-bottom:24px;
-  background:linear-gradient(135deg,#FFD60A,#FF9F0A);box-shadow:0 16px 50px rgba(255,159,10,0.5);
+  background:linear-gradient(135deg,#FFD60A,#FF9F0A);box-shadow:0 8px 24px rgba(0,0,0,0.4);
   transform:scale(0) rotate(-30deg);}
 .rankup.show .badge{animation:riBadge .7s .2s var(--ease) forwards;}
 .rankup .badge svg{width:64px;height:64px;color:#fff;}
@@ -763,7 +785,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   transform:translateX(-50%) translateY(-150%);
   background:linear-gradient(135deg,rgba(255,69,58,0.95),rgba(255,159,10,0.95));
   border-radius:20px;padding:12px 22px;display:flex;align-items:center;gap:10px;
-  box-shadow:0 12px 40px rgba(255,100,20,0.5);transition:transform .5s var(--ease);}
+  box-shadow:0 8px 24px rgba(0,0,0,0.4);transition:transform .5s var(--ease);}
 .streak-banner.show{transform:translateX(-50%) translateY(0);}
 .streak-banner .fl{font-size:26px;}
 .streak-banner .tx{font-weight:800;font-size:16px;color:#fff;}
@@ -783,11 +805,14 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 <div class="topbar" id="topbar">
   <span class="tb-title" id="tbTitle"></span>
   <button class="tb-btn" id="notifBtn" aria-label="Notificaciones" style="display:none">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 004 0"/></svg>
+    <span class="emoji">🔔</span>
     <span class="notif-badge" id="notifBadge" style="display:none">0</span>
   </button>
   <button class="tb-btn" id="friendsBtn" aria-label="Amigos" style="display:none">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0111 0M16.5 6.2a3 3 0 010 5.6M17.5 13.3a5.5 5.5 0 013.2 4.7"/></svg>
+    <span class="emoji">👥</span>
+  </button>
+  <button class="tb-btn" id="settingsBtn" aria-label="Ajustes" style="display:none">
+    <span class="emoji">⚙️</span>
   </button>
 </div>
 
@@ -881,26 +906,25 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
       <div class="cal-dow-row" id="calDow"></div>
       <div class="cal-weeks" id="calGrid"></div>
     </div>
-    <button class="btn secondary" id="transferBtn" style="margin-top:14px;">Transferir datos a otra instalación</button>
     <div class="app-version" id="appVersion"></div>
   </section>
 </div>
 
 <!-- FAB crear tarea -->
-<button class="fab" id="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg></button>
+<button class="fab" id="fab"><span class="emoji">➕</span></button>
 
 <!-- Tab bar -->
 <nav class="tabbar">
   <button class="tab" data-view="gen">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 3l1.8 5.2L21 10l-5.2 1.8L14 17l-1.8-5.2L7 10l5.2-1.8zM6 3v3.4M4.3 4.7h3.4M6 18v3M4.5 19.5h3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="emoji tab-ic">✨</span>
     Generador
   </button>
   <button class="tab active" data-view="tasks">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10 6h10M10 12h10M10 18h10M4 6l1.3 1.3L8 4.6M4 12l1.3 1.3L8 10.6M4 18l1.3 1.3L8 16.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="emoji tab-ic">✅</span>
     Tareas
   </button>
   <button class="tab" data-view="profile">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1.4-3.8 4.3-5.6 7.5-5.6s6.1 1.8 7.5 5.6" stroke-linecap="round"/></svg>
+    <span class="emoji tab-ic">👤</span>
     Perfil
   </button>
 </nav>
@@ -941,34 +965,22 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v104";
+const APP_VERSION = "v105";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
    --------------------------------------------------------------------- */
 const Icons = (() => {
-  const s = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  // Iconos como EMOJIS (una sola fuente de verdad). Se envuelve en un <span> con
+  // la clase "emoji" para tamaño/alineación consistentes estilo iOS.
   const map = {
-    Deporte:s('<path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/>'),
-    Arte:s('<path d="M12 3a9 9 0 100 18c1 0 1.6-.9 1.2-1.9-.4-1 .2-2 1.3-2H17a4 4 0 004-4c0-5-4.5-8-9-8z"/><circle cx="8" cy="11" r=".6"/><circle cx="12" cy="8" r=".6"/><circle cx="16" cy="11" r=".6"/>'),
-    "Música":s('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'),
-    Lectura:s('<path d="M4 5.5A2.5 2.5 0 016.5 3H19v14H6.5A2.5 2.5 0 004 19.5zM4 19.5A2.5 2.5 0 016.5 17H19"/>'),
-    Productividad:s('<path d="M13 3L5 13h5l-1 8 9-11h-6z"/>'),
-    Estudio:s('<path d="M3 9l9-4 9 4-9 4z"/><path d="M7 11v5c0 1 2.2 2 5 2s5-1 5-2v-5"/>'),
-    Cocina:s('<path d="M6.5 13a4 4 0 01-1-7.9A4 4 0 0112 4.2a4 4 0 016.5 1A4 4 0 0117.5 13z"/><path d="M6.5 13v6a1 1 0 001 1h9a1 1 0 001-1v-6"/>'),
-    Limpieza:s('<path d="M12 3l1.3 4.2L17.5 8l-4.2 1.3L12 13.5l-1.3-4.2L6.5 8l4.2-.8zM18 14l.6 1.8 1.9.6-1.9.6-.6 1.8-.6-1.8-1.9-.6 1.9-.6z"/>'),
-    Creatividad:s('<path d="M9.5 18h5M10.5 21h3M12 3a6 6 0 00-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0012 3z"/>'),
-    Salud:s('<path d="M12 20s-7-4.3-9.2-8.3C1.1 8 3 4.6 6.3 4.6c1.9 0 3.1 1 3.7 2 .6-1 1.8-2 3.7-2 3.3 0 5.2 3.4 3.5 7.1"/><path d="M14 13h2l1-1.6 1.4 3.2 1.1-1.6H22"/>'),
-    Bienestar:s('<path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5.5 18.5c2-4 5-7 9-9"/>'),
-    Idiomas:s('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>'),
-    "Programación":s('<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>'),
-    "Fotografía":s('<path d="M4 8.5A1.5 1.5 0 015.5 7H8l1.5-2.2h5L16 7h2.5A1.5 1.5 0 0120 8.5V17a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17z"/><circle cx="12" cy="12.5" r="3.2"/>'),
-    Naturaleza:s('<path d="M12 21v-5M8 16a4 4 0 01-1-7.8A5 5 0 0117 8.2 4 4 0 0116 16z"/>'),
-    "Meditación":s('<circle cx="12" cy="5" r="2"/><path d="M12 8v5M4 20c2-4 5-5 8-5s6 1 8 5M8.5 13l3.5 1.8L15.5 13"/>'),
-    Escritura:s('<path d="M4 20l1-4L16 5l3 3L8 19zM14 7l3 3"/>'),
-    _default:s('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2"/>')
+    Deporte:"🏋️", Arte:"🎨", "Música":"🎵", Lectura:"📖", Productividad:"⚡",
+    Estudio:"📚", Cocina:"🍳", Limpieza:"🧽", Creatividad:"💡", Salud:"❤️",
+    Bienestar:"😌", Idiomas:"🗣️", "Programación":"💻", "Fotografía":"📷",
+    Naturaleza:"🌳", "Meditación":"🧘", Escritura:"✍️", _default:"⭐"
   };
-  return { get:(k)=> map[k] || map._default };
+  const emoji = (k)=> map[k] || map._default;
+  return { get:(k)=> `<span class="emoji">${emoji(k)}</span>`, raw:emoji };
 })();
 
 /* ---------------------------------------------------------------------
@@ -3022,7 +3034,7 @@ const Profile = (() => {
   function init(){
     $("#calPrev").onclick=()=>changeMonth(-1);
     $("#calNext").onclick=()=>changeMonth(1);
-    const tb=$("#transferBtn"); if(tb) tb.onclick=()=>{ haptic(); openTransferSheet(); };
+    const gb=$("#settingsBtn"); if(gb) gb.onclick=()=>{ haptic(); openSettingsSheet(); };
     $("#profileName").onclick=editName;
     $("#avatar").onclick=()=> $("#fileAvatar").click();
     $("#fileAvatar").onchange=e=>{ const f=e.target.files[0]; if(!f)return;
@@ -3444,6 +3456,9 @@ const Cloud = (() => {
   }
   async function ensurePush(){
     try{
+      // Respeta el interruptor de Ajustes: si el usuario apagó las notificaciones,
+      // no re-suscribimos por nuestra cuenta (aunque el permiso siga concedido).
+      if(localStorage.getItem("rachas_notif")==="off") return false;
       if(!enabled() || !await init() || !client) return false;
       if(!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
       if(Notification.permission==="denied") return false;
@@ -3487,6 +3502,19 @@ const Cloud = (() => {
       try{ await client.from('push_subscriptions').delete().eq('user_id', uid).neq('endpoint', sub.endpoint); }catch(_){}
       return true;
     }catch(e){ console.warn("ensurePush:", e && e.message); return false; }
+  }
+  // Apaga las notificaciones push de ESTE dispositivo: cancela la suscripción del
+  // navegador y borra su fila en Supabase, para que dejen de llegar avisos.
+  async function disablePush(){
+    try{
+      if(!("serviceWorker" in navigator)) return;
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.getSubscription();
+      if(sub){ const ep=sub.endpoint;
+        try{ await sub.unsubscribe(); }catch(_){}
+        try{ if(client) await client.from('push_subscriptions').delete().eq('endpoint', ep); }catch(_){}
+      }
+    }catch(e){ console.warn("disablePush:", e && e.message); }
   }
   // Envía una notificación de PRUEBA a tus propios dispositivos. Sirve para
   // diagnosticar el push: si llega, toda la cadena (Edge Function + claves +
@@ -3544,7 +3572,7 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
-    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, testPush, updatePartner,
+    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     fetchComments, addComment, deleteComment, exportSession, restoreSession };
 })();
@@ -4149,6 +4177,46 @@ async function restoreFromCode(code){
   Cloud.forceResync();
   return { ok:true };
 }
+function openSettingsSheet(){
+  const hasN = ("Notification" in window);
+  const denied = hasN && Notification.permission==="denied";
+  const notifOn = hasN && Notification.permission==="granted" && localStorage.getItem("rachas_notif")!=="off";
+  Sheets.show(`
+    <div class="grabber"></div>
+    <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Ajustes</span><span class="act" id="setClose">Cerrar</span></div>
+    <div class="sheet-body">
+      <div class="settings-list">
+        <div class="settings-row">
+          <span class="sr-ic emoji">🔔</span>
+          <div class="sr-info"><div class="sr-t">Notificaciones</div><div class="sr-s">${denied?'Bloqueadas en iOS · actívalas en Ajustes › esta app':'Avisos de amigos y recordatorios'}</div></div>
+          <div class="switch${notifOn?' on':''}" id="setNotif"><div class="knob"></div></div>
+        </div>
+        <button class="settings-row tappable" id="setTransfer">
+          <span class="sr-ic emoji">↔️</span>
+          <div class="sr-info"><div class="sr-t">Transferir datos</div><div class="sr-s">Mueve tu cuenta a otra instalación</div></div>
+          <span class="sr-chev">›</span>
+        </button>
+      </div>
+    </div>`);
+  $("#setClose").onclick=Sheets.close;
+  const sw=$("#setNotif");
+  sw.onclick=async ()=>{
+    haptic();
+    if(sw.classList.contains("on")){
+      // apagar
+      sw.classList.remove("on");
+      localStorage.setItem("rachas_notif","off");
+      await Cloud.disablePush();
+    } else {
+      if(denied){ UI.toast("Bloqueadas en Ajustes de iOS","bell","var(--red)"); return; }
+      localStorage.setItem("rachas_notif","on");
+      const ok=await Cloud.ensurePush();   // dispara el permiso push + suscribe
+      if(ok){ sw.classList.add("on"); UI.toast("Notificaciones activadas","check","var(--green)"); }
+      else { localStorage.setItem("rachas_notif","off"); UI.toast("No se pudieron activar","bell","var(--red)"); }
+    }
+  };
+  $("#setTransfer").onclick=()=>{ haptic(); openTransferSheet(); };
+}
 function openTransferSheet(){
   Sheets.show(`
     <div class="grabber"></div>
@@ -4295,6 +4363,7 @@ const Router = (() => {
     // en Generador. Solo se muestra el que corresponde a la sección activa.
     $("#notifBtn").style.display   = cur==="tasks"   ? "grid" : "none";
     $("#friendsBtn").style.display = cur==="profile" ? "grid" : "none";
+    $("#settingsBtn").style.display= cur==="profile" ? "grid" : "none";
     // el nombre aparece al hacer scroll; al cambiar de sección la vista nueva
     // empieza arriba, así que se sincroniza aquí para que no quede "pegado".
     $("#topbar").classList.toggle("scrolled", v.scrollTop>30);
@@ -4407,6 +4476,7 @@ function autoEnablePush(){
 // debería leerse "standalone · inf 34px · 844/844" (o equivalente en cada
 // iPhone); si la ventana baja de la altura de la pantalla DURANTE el uso,
 // algo (una recarga, una restauración del sistema) encogió el webview.
+let SAFE_TOP=0;   // inset superior real (barra de estado), lo mide updateDiag
 function updateDiag(){
   const av=document.getElementById("appVersion"); // si no existe, igual se aplica la corrección
   let mode="navegador";
@@ -4423,6 +4493,7 @@ function updateDiag(){
     const cs=getComputedStyle(probe);
     insTop=Math.round(parseFloat(cs.paddingTop)||0);
     insBottom=Math.round(parseFloat(cs.paddingBottom)||0);
+    SAFE_TOP=insTop;   // lo usa fitSheet para dejar hueco bajo la barra de estado
     probe.remove();
   }catch(e){}
   // Nota histórica: aquí hubo una "corrección del viewport encogido" para el
@@ -4470,7 +4541,13 @@ function fitSheet(){
   if(vv){ const raw=Math.round(full - vv.height - vv.offsetTop); if(raw>150) kb=raw; }
   if(kb>0) host.style.bottom=kb+"px";
   else     host.style.bottom="";
-  host.style.maxHeight=Math.round(h-12)+"px";
+  // Alto máximo: desde el borde superior del teclado (o el fondo real) hasta un
+  // poco por debajo de la barra de estado, dejando SIEMPRE un hueco arriba como
+  // una hoja iOS, para que el título/contenido NO queden cortados por el borde.
+  // La hoja igual se ajusta a su contenido si es más corta que este máximo.
+  const topGap=(SAFE_TOP||0)+26;
+  const avail=full - kb - topGap;
+  host.style.maxHeight=Math.max(240, Math.round(avail))+"px";
 }
 function boot(){
   updateDiag();
