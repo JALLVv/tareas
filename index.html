@@ -572,7 +572,12 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .scrim.show{opacity:1;pointer-events:auto;}
 
 .sheet{
-  position:fixed;left:0;right:0;bottom:0;z-index:100;
+  /* bottom = --sheet-lift (medido por JS): en iOS instalado los elementos
+     fijos anclados abajo se posicionan según el viewport "grande" (p.ej. 844),
+     pero el área visible es menor (p.ej. 797); sin corrección, bottom:0 cae por
+     debajo de lo visible y el botón inferior queda cortado. --sheet-lift sube
+     la hoja justo esa diferencia (0 en pantallas sanas). */
+  position:fixed;left:0;right:0;bottom:var(--sheet-lift,0px);z-index:100;
   /* dvh (viewport visible real), NO vh: en iOS instalado vh ve la pantalla
      completa (incluida la barra de estado) y una hoja alta se extendía por
      debajo del área visible y se cortaba abajo. dvh usa el alto realmente
@@ -917,7 +922,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v96";
+const APP_VERSION = "v97";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2098,6 +2103,7 @@ const Sheets = (() => {
   const scrim = $("#scrim"), host = $("#sheet");
   let onClose = null;
   function open(html, cls){
+    try{ updateDiag(); }catch(e){} // recalcula --sheet-lift por si el viewport cambió
     host.className = "sheet" + (cls?(" "+cls):"");
     host.innerHTML = html;
     scrim.classList.add("show");
@@ -4399,6 +4405,11 @@ function updateDiag(){
       document.body.appendChild(p); m[k]=Math.round(p.getBoundingClientRect().height); p.remove();
     });
     units=" · vh"+m.vh+" dvh"+m.dvh+" lvh"+m.lvh;
+    // --sheet-lift: cuánto sobra el viewport "grande" (donde ancla bottom:0)
+    // respecto al alto realmente visible (dvh). Sube la hoja esa diferencia
+    // para que su borde inferior quede dentro de lo visible. 0 si están al par.
+    const lift=Math.max(0, Math.min(80, (m.lvh||0) - (m.dvh||window.innerHeight)));
+    document.documentElement.style.setProperty("--sheet-lift", lift+"px");
   }catch(e){}
   if(av) av.textContent=APP_VERSION+" · "+mode+" · sup "+insTop+" inf "+insBottom+" · "+window.innerHeight+"/"+screen.height+units;
 }
