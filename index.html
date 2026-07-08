@@ -573,7 +573,12 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 
 .sheet{
   position:fixed;left:0;right:0;bottom:0;z-index:100;
-  max-height:min(82vh, calc(100vh - var(--safe-top) - 16px));display:flex;flex-direction:column;
+  /* dvh (viewport visible real), NO vh: en iOS instalado vh ve la pantalla
+     completa (incluida la barra de estado) y una hoja alta se extendía por
+     debajo del área visible y se cortaba abajo. dvh usa el alto realmente
+     visible. Se resta safe-bottom para que el contenido no quede tras el
+     indicador de inicio. */
+  max-height:min(86dvh, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 12px));display:flex;flex-direction:column;
   background:var(--mat-thick);
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
   border-radius:22px 22px 0 0;border-top:0.5px solid var(--sep);
@@ -907,7 +912,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v94";
+const APP_VERSION = "v95";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4092,7 +4097,10 @@ async function restoreFromCode(code){
   Store.load();          // recalcula puntos y racha desde el historial restaurado
   Tasks.render(); Profile.render();
   Friends.syncFriends(); Tasks.syncShared(); Notifs.refresh();
-  Cloud.pushProfile(); Cloud.ensurePush(); // suscripción push de ESTE dispositivo
+  Cloud.ensurePush(); // suscripción push de ESTE dispositivo
+  // Sube TODO automáticamente a la nube (perfil + historial completo) para que
+  // tus amigos vean el calendario entero — sin que el usuario haga nada.
+  Cloud.forceResync();
   return { ok:true };
 }
 function openTransferSheet(){
@@ -4109,18 +4117,9 @@ function openTransferSheet(){
       <div class="lbl-sm" style="margin-top:22px;">2 · En la instalación nueva</div>
       <div class="field-block" style="border:0.5px solid var(--hairline);border-radius:14px;"><textarea class="field" id="tfInput" rows="3" placeholder="Pega aquí el código"></textarea></div>
       <button class="btn" id="tfRestore" style="margin-top:12px;">Restaurar mis datos</button>
-      <div class="hint">La cuenta de la instalación vieja pasa a esta: tus amigos te siguen viendo igual.</div>
-      <div class="lbl-sm" style="margin-top:22px;">¿Tus amigos no ven todo tu calendario?</div>
-      <button class="btn secondary" id="tfResync">Volver a subir todo a la nube</button>
-      <div class="hint">Re-sube TODO tu historial a la nube, para que tus amigos vean tu calendario completo (no solo lo reciente). Útil si tras una transferencia algo quedó a medias.</div>
+      <div class="hint">La cuenta de la instalación vieja pasa a esta: tus amigos te siguen viendo igual. Todo tu calendario se sube solo a la nube (no hace falta hacer nada más).</div>
     </div>`);
   $("#tfClose").onclick=Sheets.close;
-  $("#tfResync").onclick=async ()=>{
-    haptic(15); const b=$("#tfResync"); b.disabled=true; b.textContent="Subiendo todo…";
-    const ok=await Cloud.forceResync();
-    b.disabled=false; b.textContent="Volver a subir todo a la nube";
-    UI.toast(ok?"Todo re-subido a la nube":"No se pudo (revisa tu conexión)","check",ok?"var(--green)":"var(--red)");
-  };
   $("#tfMake").onclick=async ()=>{
     haptic(); const b=$("#tfMake"); b.disabled=true; b.textContent="Creando…";
     const code=await makeTransferCode();
@@ -4432,7 +4431,7 @@ function boot(){
       // recupera enlaces de foto que falten en el calendario (p.ej. tras una
       // transferencia) ANTES de re-subir, para no pisarlos con null.
       Cloud.relinkPhotos().then(ok=>{ if(ok){ Tasks.render(); Profile.render(); } })
-        .then(()=>Cloud.syncBacklog()).then(()=>Cloud.reconcile());
+        .then(()=>Cloud.syncBacklog(500)).then(()=>Cloud.reconcile()); // sube el calendario completo solo
       Friends.syncFriends();
       Tasks.syncShared();   // reconcilia tareas compartidas
       Notifs.refresh();     // trae notificaciones + avisa en primer plano
