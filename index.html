@@ -9,15 +9,18 @@
 <meta name="theme-color" content="#000000" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
-<!-- CONCLUSIÓN (probada empíricamente en el dispositivo): con
-     "black-translucent" el layout viewport de iOS queda encogido a
-     (pantalla − barra de estado) y esa franja de 47pt es IMPINTABLE — se
-     intentó dibujar dentro (bajando la tab bar 47px) y iOS recortó el
-     dibujo; la franja solo cambia de lado (arriba/abajo) según el arranque.
-     Con "black" el viewport queda alineado con la ventana (cero franjas
-     dentro de la app) y la barra de estado es negra sólida del sistema:
-     sobre una app de fondo negro se ve exactamente como una app nativa. -->
-<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<!-- INMERSIVO (edge-to-edge, sin franjas): "black-translucent" hace que la
+     app corra a pantalla completa REAL y la barra de estado (hora/batería) sea
+     translúcida encima de la app, en vez de una banda negra sólida del sistema.
+     El intento anterior fallaba porque quedaba una franja de ~47pt SIN PINTAR
+     (negra) en el borde opuesto. La clave ahora: se pinta TODO el lienzo de la
+     pantalla con el fondo oscuro de la app (fondo en <html>, que el navegador
+     propaga a toda la superficie, + el ambiente dimensionado al viewport GRANDE
+     con lvh). Así cualquier resto de esos 47pt se funde de forma invisible en el
+     fondo oscuro de la app en lugar de verse como una banda negra. El contenido
+     usa las safe-area insets (safe-top/safe-bottom), así que baja bajo el reloj
+     y sube sobre el indicador de inicio sin quedar tapado. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Rachas" />
 <link rel="manifest" href="manifest.json" />
 <!-- Favicon: icono de la pestaña del navegador y de la dirección https -->
@@ -85,7 +88,11 @@
    exactamente el viewport SIEMPRE; un height explícito (100vh/100dvh/medido
    con JS) ANULA el bottom:0 y, si iOS lo mide mal en el arranque en frío
    (habitual en modo app instalada), deja una franja que corta la app abajo. */
-html{height:100%;}
+/* El fondo va en <html>: el navegador PROPAGA el fondo del elemento raíz a TODA
+   la superficie de la pantalla (incluida el área tras la barra de estado y
+   cualquier franja de la safe-area), así que nunca queda una banda negra sin
+   pintar. Es el mismo negro base de la app, para que todo se funda. */
+html{height:100%;background:var(--bg);}
 html,body{margin:0;padding:0;overflow:hidden;}
 body{
   font-family:var(--font);
@@ -102,10 +109,13 @@ input,textarea{user-select:text;-webkit-user-select:text;font-family:inherit;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
 img{display:block;}
 
-/* Fondo ambiental: blobs de color difusos detrás del cristal. Llega hasta el
-   borde superior de la pantalla (bajo la hora/batería), como una app nativa:
-   la app corre a pantalla completa real con la barra de estado translúcida. */
-.ambient{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+/* Fondo ambiental: blobs de color difusos detrás del cristal. Se dimensiona al
+   viewport GRANDE (100lvh = pantalla completa, 844 en el dispositivo) anclado
+   arriba, para cubrir TODO el alto real de la pantalla —incluida el área tras la
+   barra de estado translúcida y cualquier franja inferior de la safe-area— y que
+   no quede ningún borde negro sin pintar. Corre a pantalla completa como una app
+   nativa. */
+.ambient{position:fixed;top:0;left:0;right:0;height:100lvh;min-height:100vh;z-index:0;overflow:hidden;pointer-events:none;}
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
   filter:blur(80px);opacity:0.5;
@@ -153,13 +163,12 @@ img{display:block;}
   padding:var(--safe-top) 16px 0;
   display:flex;align-items:center;justify-content:flex-end;gap:10px;
   pointer-events:none; /* el degradado no intercepta toques; los botones sí */
-  /* Degradado NEGRO OPACO en el borde superior que se desvanece a
-     transparente: el contenido que sube al hacer scroll se funde por completo
-     en negro (igual que la barra de estado del sistema) antes de llegar al
-     borde, en vez de verse a medias y cortarse de golpe. Totalmente
-     transparente a los ~44px, justo antes del título grande, para no
-     oscurecerlo. */
-  background:linear-gradient(to bottom, var(--bg) 0, var(--bg) 10px, rgba(0,0,0,0) 44px);
+  /* Scrim SUAVE (no opaco) en el borde superior: da legibilidad al contenido
+     que sube al hacer scroll y a la hora/batería, pero SIN una banda negra dura
+     —deja ver el fondo ambiental translúcido tras el reloj, para el look
+     inmersivo edge-to-edge—. Se desvanece del todo a los ~56px, justo antes del
+     título grande, para no oscurecerlo. */
+  background:linear-gradient(to bottom, rgba(0,0,0,0.5) 0, rgba(0,0,0,0.28) 24px, rgba(0,0,0,0) 56px);
 }
 .tb-title{font-size:17px;font-weight:700;letter-spacing:-0.02em;color:var(--label);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -925,7 +934,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v99";
+const APP_VERSION = "v100";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4417,8 +4426,18 @@ function updateDiag(){
 // dejando el botón inferior visible. No mueve la hoja (bottom:0).
 function fitSheet(){
   const host=document.getElementById("sheet"); if(!host) return;
-  const h=(window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
-  if(h>260) host.style.maxHeight=Math.round(h-12)+"px";
+  const vv=window.visualViewport;
+  const h=(vv && vv.height) || window.innerHeight || 0;
+  if(h<=260) return;
+  // Teclado abierto: iOS encoge el visualViewport pero deja los elementos fijos
+  // anclados al viewport de layout (detrás del teclado). Calculamos cuánto tapa
+  // el teclado y elevamos el borde inferior de la hoja esa cantidad, para que el
+  // campo enfocado y los botones queden por ENCIMA del teclado, no tapados.
+  // Sin teclado, overlap=0 y la hoja queda pegada abajo como siempre.
+  let overlap=0;
+  if(vv){ overlap=Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)); }
+  host.style.bottom=overlap+"px";
+  host.style.maxHeight=Math.round(h-12)+"px";
 }
 function boot(){
   updateDiag();
