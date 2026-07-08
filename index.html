@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v108";
+const APP_VERSION = "v109";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1878,26 +1878,84 @@ function historyItemHtml(h, i){
     </div>
   </div>`;
 }
-// Carga las miniaturas (locales o por URL) y abre el visor (foto + comentarios)
-// al tocarlas. ownerId: dueño de la tarea (para avisarle al comentar).
+// Carga las miniaturas (locales o por URL). Al tocarlas:
+//  · en TUS tareas completadas (sin ownerId) se abre un menú con "Ver" y
+//    "Eliminar".
+//  · en el calendario de un amigo (con ownerId) se abre directamente el visor.
 function bindHistoryThumbs(listEl, items, ownerId){
+  const own = !ownerId;
   items.forEach(async (h,idx)=>{
     const thumb=listEl.querySelectorAll(".gal-thumb")[idx]; if(!thumb) return;
     const card=thumb.parentElement;
+    let src=null;
     if(h.photoId){ const data=await DB.get(h.photoId);
-      if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); card.classList.add("tappable"); card.onclick=()=>Lightbox.show(data, {...h, ownerId}); }
+      if(data){ const im=new Image(); im.src=data; thumb.appendChild(im); src=data; }
       else thumb.innerHTML=noPhotoThumb();
     } else {
       // URL conocida o, como último recurso, la "adivinada" desde el Storage de
       // esta cuenta (recupera fotos que perdieron su enlace tras transferir).
       const url = h.photoUrl || (Cloud.guessPhotoUrl && Cloud.guessPhotoUrl(h.id));
       if(url){
-        const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); card.classList.remove("tappable"); card.onclick=null; };
-        im.src=url; thumb.appendChild(im);
-        card.classList.add("tappable"); card.onclick=()=>Lightbox.show(url, {...h, ownerId});
+        const im=new Image(); im.onerror=()=>{ thumb.innerHTML=noPhotoThumb(); src=null; if(!own){ card.classList.remove("tappable"); card.onclick=null; } };
+        im.src=url; thumb.appendChild(im); src=url;
       } else thumb.innerHTML=noPhotoThumb();
     }
+    const view=()=> src ? Lightbox.show(src, {...h, ownerId}) : UI.toast("Esta tarea no tiene foto","check","var(--label-2)");
+    if(own){ card.classList.add("tappable"); card.onclick=()=>openCompletedActions(h, view); }
+    else if(src){ card.classList.add("tappable"); card.onclick=view; }
   });
+}
+// Menú de una tarea COMPLETADA: Ver (visor de foto) · Eliminar (con confirmación).
+function openCompletedActions(h, view){
+  Sheets.show(`
+    <div class="grabber"></div>
+    <div class="sheet-head"><span class="act cancel" id="caCancel">Cancelar</span><span class="title">Tarea completada</span><span class="act" style="opacity:0">•</span></div>
+    <div class="sheet-body">
+      <div class="ta-name">${esc(h.title)}</div>
+      <div class="action-list">
+        <button class="action-btn" id="caView">${eyeSvg()} Ver</button>
+        <button class="action-btn danger" id="caDel">${trashSvg()} Eliminar</button>
+      </div>
+    </div>`);
+  $("#caCancel").onclick=Sheets.close;
+  $("#caView").onclick=()=>{ haptic(); Sheets.close(); setTimeout(()=>{ try{ view(); }catch(e){} }, 80); };
+  $("#caDel").onclick=()=>{ haptic(); confirmDeleteCompletion(h); };
+}
+function confirmDeleteCompletion(h){
+  Sheets.show(`
+    <div class="grabber"></div>
+    <div class="sheet-head"><span class="act cancel" id="cdcCancel">Cancelar</span><span class="title">Eliminar</span><span class="act" style="opacity:0">•</span></div>
+    <div class="sheet-body photo-modal">
+      <p style="margin-top:4px">¿Eliminar esta tarea completada? Se restan sus puntos y se borra su foto. No se puede deshacer.</p>
+      <button class="btn danger" id="cdcDel">Eliminar</button>
+    </div>`);
+  $("#cdcCancel").onclick=Sheets.close;
+  $("#cdcDel").onclick=()=>{ haptic(15); deleteCompletion(h); Sheets.close();
+    if(typeof Tasks!=="undefined" && Tasks.render) Tasks.render();
+    if(UI && UI.renderProfile) UI.renderProfile();
+    UI.toast("Tarea completada eliminada","check","var(--red)"); };
+}
+// Borra una completación del historial: resta sus puntos, borra su foto (local y
+// nube), reabre la tarea para poder rehacerla y recalcula la racha.
+function deleteCompletion(h){
+  const photoId=h.photoId;
+  Store.update(s=>{
+    const idx=(s.history||[]).findIndex(x=>x.id===h.id);
+    if(idx<0) return;
+    const entry=s.history[idx];
+    s.points=Math.max(0,(s.points||0)-(entry.points||0));
+    s.history.splice(idx,1);
+    // si la tarea sigue existiendo, permitir rehacerla ese día
+    const t=(s.tasks||[]).find(x=>x.id===entry.taskId);
+    if(t){ const ty=t.recurrence && t.recurrence.type;
+      if(ty && ty!=="once" && ty!=="date"){ if(t.lastDone===entry.date) t.lastDone=null; }
+      else { if(entry.date===dateKey()) t.done=false; }
+    }
+    const st=streakFromHistory(s.history);
+    s.streak.current=st.current; s.streak.lastDate=st.lastDate; s.streak.best=st.best;
+  });
+  if(photoId) DB.del(photoId);
+  if(Cloud.enabled && Cloud.enabled()){ Cloud.pushProfile && Cloud.pushProfile(); Cloud.reconcile && Cloud.reconcile(); }
 }
 
 /* ---------------------------------------------------------------------
@@ -2978,6 +3036,7 @@ function camSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 function chevronSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';}
 function trashSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>';}
 function editSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 00-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg>';}
+function eyeSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';}
 function imgSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M5 18l5-4 3 2.5L16 13l3 3"/></svg>';}
 
 /* Comprime/redimensiona la foto para no agotar el almacenamiento */
