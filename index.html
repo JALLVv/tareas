@@ -83,33 +83,20 @@
 
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
-  /* Hueco entre el viewport DINÁMICO (dvh, área de layout donde iOS ancla los
-     elementos fijos) y el viewport GRANDE (lvh, pantalla completa real). En modo
-     translúcido, iOS deja ese hueco (~47px en el dispositivo) SIN cubrir en el
-     borde inferior: los elementos con bottom:0 se anclan al borde de dvh, no al
-     de la pantalla, y bajo ellos queda una franja negra. Empujamos esos
-     elementos hacia abajo justo ese hueco para que lleguen al fondo REAL de la
-     pantalla. En pantallas sin hueco (dvh==lvh) vale 0 y todo queda igual. */
-  --vp-gap:0px;
   --ease:cubic-bezier(0.32,0.72,0,1);            /* curva tipo iOS spring */
   --ease-out:cubic-bezier(0.22,1,0.36,1);
 }
-/* Solo donde el navegador soporta lvh/dvh (iOS 15.4+) calculamos el hueco real.
-   En los demás, --vp-gap se queda en 0px y el layout es el de siempre. */
-@supports (height:1lvh){
-  :root{ --vp-gap:calc(100lvh - 100dvh); }
-}
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-/* IMPORTANTE: el body NO lleva height. Con position:fixed + inset:0 ya cubre
-   exactamente el viewport SIEMPRE; un height explícito (100vh/100dvh/medido
-   con JS) ANULA el bottom:0 y, si iOS lo mide mal en el arranque en frío
-   (habitual en modo app instalada), deja una franja que corta la app abajo. */
-/* El fondo va en <html>: el navegador PROPAGA el fondo del elemento raíz a TODA
-   la superficie de la pantalla (incluida el área tras la barra de estado y
-   cualquier franja de la safe-area), así que nunca queda una banda negra sin
-   pintar. Es el mismo negro base de la app, para que todo se funda. */
-html{height:100%;background:var(--bg);}
+/* PANTALLA COMPLETA REAL: la app llena el viewport GRANDE (100lvh = alto real de
+   la pantalla, 844), NO el reducido (100%/inset:0 de un body position:fixed = el
+   viewport de LAYOUT, 797 en modo translúcido). iOS RECORTA los elementos
+   position:fixed a ese viewport de layout, dejando 47px negros abajo; por eso el
+   shell NO es fixed: es un contenedor normal de alto 100lvh y el "cromo" (barra,
+   hoja, fab) va con position:ABSOLUTE dentro de él, que sí llega al fondo real.
+   El fondo va también en <html> (el navegador lo propaga a toda la superficie),
+   como respaldo para que jamás quede una banda sin pintar. */
+html{height:100vh;height:100lvh;background:var(--bg);}
 html,body{margin:0;padding:0;overflow:hidden;}
 body{
   font-family:var(--font);
@@ -119,7 +106,7 @@ body{
   text-rendering:optimizeLegibility;
   letter-spacing:-0.01em;
   overscroll-behavior:none;
-  position:fixed; inset:0;
+  position:relative; width:100%; height:100vh; height:100lvh;
   user-select:none; -webkit-user-select:none;
 }
 input,textarea{user-select:text;-webkit-user-select:text;font-family:inherit;}
@@ -132,7 +119,7 @@ img{display:block;}
    barra de estado translúcida y cualquier franja inferior de la safe-area— y que
    no quede ningún borde negro sin pintar. Corre a pantalla completa como una app
    nativa. */
-.ambient{position:fixed;top:0;left:0;right:0;height:100lvh;min-height:100vh;z-index:0;overflow:hidden;pointer-events:none;}
+.ambient{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
 .ambient::before,.ambient::after{
   content:"";position:absolute;width:80vw;height:80vw;border-radius:50%;
   filter:blur(80px);opacity:0.5;
@@ -170,7 +157,7 @@ img{display:block;}
    dura ni un borde: reemplaza a la antigua .navbar (que sí se veía como una
    franja oscura bajo el reloj). */
 .topbar{
-  position:fixed;top:0;left:0;right:0;z-index:40;
+  position:absolute;top:0;left:0;right:0;z-index:40;
   /* alto pensado para que el botón (centrado) quede a la altura del título
      grande de la sección: el título arranca en ~safe-top+34 y mide ~36px, su
      centro cae en ~safe-top+52; con este alto y align-items:center el botón
@@ -220,12 +207,12 @@ img{display:block;}
    TAB BAR
    ========================================================================= */
 .tabbar{
-  /* bottom negativo (= −hueco): baja la barra hasta el borde INFERIOR real de la
-     pantalla y cubre la franja de la safe-area con su propio material, sin dejar
-     negro debajo. En pantallas sin hueco, --vp-gap=0 y queda en bottom:0. */
-  position:fixed;left:0;right:0;bottom:calc(-1 * var(--vp-gap));z-index:50;
-  height:calc(var(--tabbar-h) + var(--safe-bottom) + var(--vp-gap));
-  padding-bottom:calc(var(--safe-bottom) + var(--vp-gap));
+  /* absolute dentro del shell de alto real (100lvh): bottom:0 = fondo REAL de la
+     pantalla, así la barra cubre la safe-area del indicador de inicio con su
+     propio material, sin franja negra debajo. */
+  position:absolute;left:0;right:0;bottom:0;z-index:50;
+  height:calc(var(--tabbar-h) + var(--safe-bottom));
+  padding-bottom:var(--safe-bottom);
   display:flex;align-items:stretch;
   background:var(--mat-bar);
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
@@ -433,7 +420,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .list-head{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 14px;}
 
 /* Botón flotante para crear */
-.fab{position:fixed;right:18px;bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 16px);z-index:45;
+.fab{position:absolute;right:18px;bottom:calc(var(--tabbar-h) + var(--safe-bottom) + 16px);z-index:45;
   width:56px;height:56px;border-radius:50%;background:var(--blue);
   display:grid;place-items:center;box-shadow:0 10px 28px rgba(10,132,255,0.45);
   transition:transform .15s var(--ease-out);opacity:0;pointer-events:none;transform:scale(0.6);}
@@ -595,7 +582,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 /* =========================================================================
    SHEETS / MODALES
    ========================================================================= */
-.scrim{position:fixed;top:0;left:0;right:0;bottom:calc(-1 * var(--vp-gap));z-index:90;background:rgba(0,0,0,0.5);
+.scrim{position:absolute;inset:0;z-index:90;background:rgba(0,0,0,0.5);
   -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);}
 .scrim.show{opacity:1;pointer-events:auto;}
@@ -605,7 +592,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
      (el rectángulo REALMENTE visible), para que la hoja quede dentro de lo
      visible aunque iOS ancle los elementos fijos a un viewport más grande.
      Estos valores CSS son solo el respaldo inicial. */
-  position:fixed;left:0;right:0;bottom:calc(-1 * var(--vp-gap));z-index:100;
+  position:absolute;left:0;right:0;bottom:0;z-index:100;
   /* dvh (viewport visible real), NO vh: en iOS instalado vh ve la pantalla
      completa (incluida la barra de estado) y una hoja alta se extendía por
      debajo del área visible y se cortaba abajo. dvh usa el alto realmente
@@ -680,7 +667,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .gal-info .m .pts{color:var(--yellow);font-weight:600;}
 
 /* Lightbox */
-.lightbox{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.94);
+.lightbox{position:absolute;inset:0;z-index:200;background:rgba(0,0,0,0.94);
   display:flex;align-items:flex-start;justify-content:center;
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);}
 .lightbox.show{opacity:1;pointer-events:auto;}
@@ -721,7 +708,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 /* =========================================================================
    OVERLAYS DE GAMIFICACIÓN · puntos, rango, racha
    ========================================================================= */
-.points-pop{position:fixed;left:50%;top:42%;z-index:300;transform:translate(-50%,-50%);
+.points-pop{position:absolute;left:50%;top:42%;z-index:300;transform:translate(-50%,-50%);
   font-size:46px;font-weight:900;color:var(--yellow);pointer-events:none;
   text-shadow:0 4px 24px rgba(255,214,10,0.6);letter-spacing:-0.03em;
   animation:ptsPop 1.2s var(--ease-out) forwards;}
@@ -732,7 +719,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   100%{opacity:0;transform:translate(-50%,-130%) scale(0.95);}
 }
 
-.rankup{position:fixed;inset:0;z-index:320;display:flex;flex-direction:column;align-items:center;justify-content:center;
+.rankup{position:absolute;inset:0;z-index:320;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:radial-gradient(circle at 50% 40%,rgba(94,92,230,0.4),rgba(0,0,0,0.85) 70%);
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
   opacity:0;pointer-events:none;transition:opacity .4s var(--ease-out);text-align:center;padding:24px;}
@@ -757,12 +744,12 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 @keyframes riBadge{0%{transform:scale(0) rotate(-30deg);}60%{transform:scale(1.12) rotate(8deg);}100%{transform:scale(1) rotate(0);}}
 
 /* Confeti */
-.confetti{position:fixed;inset:0;z-index:319;pointer-events:none;overflow:hidden;}
+.confetti{position:absolute;inset:0;z-index:319;pointer-events:none;overflow:hidden;}
 .conf{position:absolute;width:9px;height:14px;border-radius:2px;top:-20px;animation:fall linear forwards;}
 @keyframes fall{to{transform:translateY(105vh) rotate(720deg);opacity:0.9;}}
 
 /* Toast */
-.toast{position:fixed;left:50%;top:calc(var(--safe-top) + 14px);z-index:330;
+.toast{position:absolute;left:50%;top:calc(var(--safe-top) + 14px);z-index:330;
   transform:translateX(-50%) translateY(-120%);
   background:var(--mat-thick);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
   border:0.5px solid var(--sep);border-radius:18px;padding:12px 20px;display:flex;align-items:center;gap:10px;
@@ -772,7 +759,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .toast svg{width:20px;height:20px;flex:0 0 auto;}
 
 /* Streak banner mini */
-.streak-banner{position:fixed;left:50%;top:calc(var(--safe-top) + 14px);z-index:331;
+.streak-banner{position:absolute;left:50%;top:calc(var(--safe-top) + 14px);z-index:331;
   transform:translateX(-50%) translateY(-150%);
   background:linear-gradient(135deg,rgba(255,69,58,0.95),rgba(255,159,10,0.95));
   border-radius:20px;padding:12px 22px;display:flex;align-items:center;gap:10px;
@@ -954,7 +941,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v103";
+const APP_VERSION = "v104";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4470,16 +4457,17 @@ function fitSheet(){
   const vv=window.visualViewport;
   const h=(vv && vv.height) || window.innerHeight || 0;
   if(h<=260) return;
-  // Teclado abierto: iOS encoge el visualViewport pero deja los elementos fijos
-  // anclados al viewport de layout (detrás del teclado). Elevamos el borde
-  // inferior de la hoja lo que tape el teclado, para que el campo y los botones
-  // queden por ENCIMA del teclado. CLAVE: solo un solapamiento GRANDE (>150px)
-  // es un teclado real; en modo translúcido innerHeight y visualViewport ya
-  // difieren ~47px (safe-area) SIN teclado, y tomar eso por teclado subía la
-  // hoja de más (flotando arriba). Sin teclado dejamos el bottom del CSS
-  // (−vp-gap, que ancla la hoja al fondo REAL de la pantalla).
+  // Teclado abierto: iOS encoge el visualViewport. Elevamos el borde inferior de
+  // la hoja lo que tape el teclado, para que el campo y los botones queden por
+  // ENCIMA del teclado. Medimos contra el alto REAL del shell (body = 100lvh =
+  // 844), no contra window.innerHeight (797 en modo translúcido), para que el
+  // levantamiento coincida con la altura real del teclado. CLAVE: solo un
+  // solapamiento GRANDE (>150px) es un teclado real; la diferencia ~47px de la
+  // safe-area SIN teclado no debe mover la hoja. Sin teclado dejamos el bottom
+  // del CSS (0 = fondo real de la pantalla).
+  const full=(document.body && document.body.offsetHeight) || window.innerHeight || 0;
   let kb=0;
-  if(vv){ const raw=Math.round(window.innerHeight - vv.height - vv.offsetTop); if(raw>150) kb=raw; }
+  if(vv){ const raw=Math.round(full - vv.height - vv.offsetTop); if(raw>150) kb=raw; }
   if(kb>0) host.style.bottom=kb+"px";
   else     host.style.bottom="";
   host.style.maxHeight=Math.round(h-12)+"px";
