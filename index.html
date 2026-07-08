@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<!-- height=device-height fuerza el viewport de LAYOUT al alto real de la
+     pantalla (844), no al reducido (797) que iOS daba y que dejaba 47px sin
+     cubrir abajo (los elementos position:fixed se recortan al viewport de
+     layout, así que solo ampliando ESTE se llena la pantalla de verdad). -->
+<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Rachas · Tareas</title>
 
 <!-- PWA / iOS -->
@@ -950,7 +954,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v102";
+const APP_VERSION = "v103";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
