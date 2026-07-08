@@ -332,25 +332,30 @@ img{display:block;}
    horizontal. Select nativo estilizado como pastilla mate. */
 .dd-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 4px;-webkit-overflow-scrolling:touch;}
 .dd-row::-webkit-scrollbar{display:none;}
-.dd{position:relative;flex:0 0 auto;}
+.dd{position:relative;flex:0 0 auto;display:inline-flex;}
 .dd select{
   appearance:none;-webkit-appearance:none;
   background:var(--fill);color:var(--label);border:none;border-radius:13px;
-  padding:11px 32px 11px 14px;font-size:14.5px;font-weight:600;font-family:inherit;
-  white-space:nowrap;max-width:62vw;text-overflow:ellipsis;}
+  padding:10px 30px 10px 13px;font-size:14.5px;font-weight:600;font-family:inherit;
+  white-space:nowrap;width:auto;max-width:70vw;}
 .dd select:active{background:var(--fill-2);}
-.dd-chev{position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;
+.dd-chev{position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;
   color:var(--label-2);font-size:11px;}
+
+/* Generador: campos verticales con subtítulo encima del desplegable. */
+.gen-field{margin-top:14px;}
+.gen-field .gen-label{font-size:13px;font-weight:600;color:var(--label-2);margin:0 2px 7px;}
+.gen-field .dd{display:inline-flex;}
 
 /* Campos de escritura SIN borde: texto grande, placeholder tenue. */
 .big-input{width:100%;background:transparent;border:none;outline:none;resize:none;
-  color:var(--label);font-family:inherit;letter-spacing:-0.02em;padding:6px 2px;}
+  color:var(--label);font-family:inherit;letter-spacing:-0.02em;padding:4px 2px;}
 .big-input::placeholder{color:var(--label-4);}
 .big-title{font-size:26px;font-weight:800;line-height:1.15;margin-top:10px;}
-.big-desc{font-size:18px;font-weight:500;line-height:1.35;margin-top:2px;}
+.big-desc{font-size:18px;font-weight:500;line-height:1.3;margin-top:0;}
 
 /* Interruptores con emoji (Urgente / Recordatorio) */
-.tg-list{margin-top:14px;background:var(--card);border-radius:16px;border:0.5px solid var(--hairline);overflow:hidden;}
+.tg-list{margin-top:6px;background:var(--card);border-radius:16px;border:0.5px solid var(--hairline);overflow:hidden;}
 .tg-row{display:flex;align-items:center;gap:12px;padding:13px 16px;}
 .tg-row + .tg-row{border-top:0.5px solid var(--hairline);}
 .tg-ic{font-size:20px;width:26px;text-align:center;flex:0 0 auto;}
@@ -853,12 +858,20 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
     <h1 class="large-title">Generador</h1>
     <p class="subtitle">Crea una tarea a tu medida y gana el doble de puntos.</p>
 
-    <div class="dd-row" id="genDD" style="margin-top:6px;">
+    <div class="gen-field">
+      <div class="gen-label">Categoría</div>
       <div class="dd"><select id="genCat" aria-label="Categoría"></select><span class="dd-chev">▾</span></div>
+    </div>
+    <div class="gen-field">
+      <div class="gen-label">Personas</div>
+      <div class="dd"><select id="genPeople" aria-label="Personas"></select><span class="dd-chev">▾</span></div>
+    </div>
+    <div class="gen-field">
+      <div class="gen-label">Duración</div>
       <div class="dd"><select id="genDur" aria-label="Duración"></select><span class="dd-chev">▾</span></div>
     </div>
 
-    <button class="btn" id="genBtn" style="margin-top:18px;">
+    <button class="btn" id="genBtn" style="margin-top:20px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 4l1.6 4.4L20 10l-4.4 1.6L14 16l-1.6-4.4L8 10l4.4-1.6zM6 4v3M4.5 5.5h3M6 17v3M4.5 18.5h3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Generar tarea
     </button>
@@ -943,15 +956,15 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 <!-- Tab bar -->
 <nav class="tabbar">
   <button class="tab" data-view="gen">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.9 4.9 4.9 1.9-4.9 1.9L12 17.1l-1.9-4.9L5.2 10.3l4.9-1.9zM18.5 3.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7zM5 15l.6 1.5 1.5.6-1.5.6L5 19.7l-.6-1.5L2.9 17.6l1.5-.6z"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5l9-9"/><path d="M12.3 6.2l1.8 1.8"/><path d="M16.5 3.2l.85 2.3 2.3.85-2.3.85-.85 2.3-.85-2.3L13.4 6.35l2.25-.85z"/><path d="M6.4 4.2l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4L4.5 6.1l1.4-.5z"/></svg>
     Generador
   </button>
   <button class="tab active" data-view="tasks">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h11M4.5 12h11M4.5 17.5h7"/><path d="M18.5 15.5l1.7 1.7 3-3.4"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h11M4.5 12h11M4.5 17.5h7"/><path d="M18.5 15.6l1.7 1.7 3-3.4"/></svg>
     Tareas
   </button>
   <button class="tab" data-view="profile">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0114.4 0"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.7"/><path d="M5.5 19.6a6.6 6.6 0 0113 0"/></svg>
     Perfil
   </button>
 </nav>
@@ -992,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v106";
+const APP_VERSION = "v107";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2009,6 +2022,11 @@ const Generator = (() => {
       catSel.innerHTML = CATEGORIES.map(c=>`<option value="${esc(c.name)}"${c.name===selCat?" selected":""}>${Icons.raw(c.name)}  ${esc(c.name)}</option>`).join("");
       catSel.onchange=()=>{ selCat=catSel.value; haptic(); clearOutput(); };
     }
+    const pplSel=$("#genPeople");
+    if(pplSel){
+      pplSel.innerHTML = PEOPLE.map(p=>`<option value="${p.k}"${p.k===selPeople?" selected":""}>${esc(peopleShort(p.k))}</option>`).join("");
+      pplSel.onchange=()=>{ selPeople=+pplSel.value; haptic(); clearOutput(); };
+    }
     const durSel=$("#genDur");
     if(durSel){
       durSel.innerHTML = DURATIONS.map(m=>`<option value="${m}"${m===selDur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("");
@@ -2151,9 +2169,10 @@ const Sheets = (() => {
   });
   function open(html, cls){
     delete host.dataset.closing;
-    try{ fitSheet(); }catch(e){} // ajusta el alto de la hoja al área visible
+    host.style.transition="";           // restaura la transición de ENTRADA del CSS
     host.className = "sheet" + (cls?(" "+cls):"");
-    host.innerHTML = html;
+    host.innerHTML = html;               // opciones ya vienen en el HTML (sin reflow)
+    try{ fitSheet(); }catch(e){}         // fija alto ANTES de mostrar, ya con contenido
     scrim.classList.add("show");
     requestAnimationFrame(()=> host.classList.add("show"));
     haptic();
@@ -2178,11 +2197,13 @@ const Sheets = (() => {
     // cierra el teclado (blur) para que su desaparición no la empuje.
     host.dataset.closing = "1";
     const a=document.activeElement; if(a && a.blur) a.blur();
+    // Salida rápida y directa (ease-IN corto): antes la curva de entrada dejaba
+    // una cola lenta y parecía que la hoja "se quedaba" abajo un segundo.
+    host.style.transition = "transform .26s cubic-bezier(0.4,0,1,1)";
     host.classList.remove("show");
     scrim.classList.remove("show");
-    if (onClose){ const f=onClose; onClose=null; setTimeout(f,300); }
-    // al acabar la animación de salida, limpia estado y estilos en línea
-    setTimeout(()=>{ delete host.dataset.closing; host.style.bottom=""; host.style.maxHeight=""; }, 480);
+    if (onClose){ const f=onClose; onClose=null; setTimeout(f,280); }
+    setTimeout(()=>{ delete host.dataset.closing; host.style.bottom=""; host.style.maxHeight=""; host.style.transition=""; }, 300);
   }
   // Abre si está cerrado; si ya hay una hoja abierta, solo cambia el contenido
   // (swap). Así, navegar dentro de una hoja (aceptar un aviso, pasar de las
@@ -2646,6 +2667,7 @@ const Tasks = (() => {
       });
       // borrar de IndexedDB las fotos de esas completadas
       photoIds.forEach(id=> DB.del(id));
+      if(Cloud.enabled && Cloud.enabled()) Cloud.deleteReminder(task.id); // quita su recordatorio en la nube
       Sheets.close(); render();
       if (UI.renderProfile) UI.renderProfile();
       if (Cloud.enabled()){ Cloud.pushProfile(); Cloud.reconcile(); } // refleja la eliminación en la nube
@@ -2682,9 +2704,18 @@ const Tasks = (() => {
 
     const body = `
       <div class="dd-row" id="ctDD">
-        <div class="dd"><select id="ctCat" aria-label="Categoría"></select><span class="dd-chev">▾</span></div>
-        <div class="dd"><select id="ctDur" aria-label="Tiempo estimado"></select><span class="dd-chev">▾</span></div>
-        <div class="dd"><select id="ctRecur" aria-label="Repetición"></select><span class="dd-chev">▾</span></div>
+        <div class="dd"><select id="ctCat" aria-label="Categoría">
+          <option value="" disabled${editing?"":" selected"}>Categoría</option>
+          ${CATEGORIES.map(c=>`<option value="${esc(c.name)}"${editing&&c.name===cat?" selected":""}>${Icons.raw(c.name)}  ${esc(c.name)}</option>`).join("")}
+        </select><span class="dd-chev">▾</span></div>
+        <div class="dd"><select id="ctDur" aria-label="Tiempo">
+          <option value="" disabled${editing?"":" selected"}>Tiempo</option>
+          ${DURATIONS.map(m=>`<option value="${m}"${editing&&m===dur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("")}
+        </select><span class="dd-chev">▾</span></div>
+        <div class="dd"><select id="ctRecur" aria-label="Repetición">
+          <option value="" disabled${editing?"":" selected"}>Repetición</option>
+          ${RECUR.map(r=>`<option value="${r.k}"${editing&&r.k===recur?" selected":""}>🔁  ${esc(r.l)}</option>`).join("")}
+        </select><span class="dd-chev">▾</span></div>
       </div>
       <input class="big-input big-title" id="ctTitle" placeholder="Título" maxlength="120" value="${editing?esc(existing.title):""}"/>
       <textarea class="big-input big-desc" id="ctDesc" rows="2" placeholder="Descripción (opcional)">${editing?esc(existing.desc||""):""}</textarea>
@@ -2728,15 +2759,13 @@ const Tasks = (() => {
       <div class="sheet-body">${body}</div>`;
     const sheet = Sheets.show(head);
 
-    // Menús desplegables (select nativo) para Categoría, Tiempo y Repetición.
+    // Menús desplegables (select nativo): las opciones ya vienen en el HTML
+    // (evita el "temblor" de reflow al rellenarlas tras abrir la hoja).
     const catSel=$("#ctCat",sheet);
-    catSel.innerHTML = CATEGORIES.map(c=>`<option value="${esc(c.name)}"${c.name===cat?" selected":""}>${Icons.raw(c.name)}  ${esc(c.name)}</option>`).join("");
     catSel.onchange=()=>{ cat=catSel.value; haptic(); };
     const durSel=$("#ctDur",sheet);
-    durSel.innerHTML = DURATIONS.map(m=>`<option value="${m}"${m===dur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("");
     durSel.onchange=()=>{ dur=+durSel.value; haptic(); };
     const recurSel=$("#ctRecur",sheet);
-    recurSel.innerHTML = RECUR.map(r=>`<option value="${r.k}"${r.k===recur?" selected":""}>🔁  ${esc(r.l)}</option>`).join("");
     recurSel.onchange=()=>{ recur=recurSel.value; haptic();
       $("#ctDaysWrap",sheet).style.display = recur==="weekly"?"block":"none";
       $("#ctDatesWrap",sheet).style.display = recur==="monthly"?"block":"none";
@@ -2805,6 +2834,11 @@ const Tasks = (() => {
         });
       }
       if(typeof scheduleReminders==="function") scheduleReminders();
+      // recordatorio en la nube (push programado con la app cerrada)
+      if((editing||!partner) && Cloud.enabled && Cloud.enabled()){
+        const savedTask = editing ? Store.get().tasks.find(x=>x.id===existing.id) : Store.get().tasks.find(x=>x.id===newId);
+        if(savedTask) Cloud.syncReminder(savedTask);
+      }
       // compartir en la nube
       if(!editing && partner){
         const meName=Store.get().profile.name||"Atleta";
@@ -3563,6 +3597,29 @@ const Cloud = (() => {
       }
     }catch(e){ console.warn("disablePush:", e && e.message); }
   }
+  // Guarda/actualiza el recordatorio de una tarea en la nube (tabla `reminders`)
+  // para que el push programado del servidor lo mande aunque la app esté cerrada.
+  // Si la tarea no tiene recordatorio, borra su fila.
+  async function syncReminder(t){
+    try{
+      if(!enabled() || !await init() || !client || !t) return;
+      if(!t.reminder || !t.reminder.time){ await client.from('reminders').delete().eq('user_id',uid).eq('task_id',String(t.id)); return; }
+      const p=String(t.reminder.time).split(":"); const hh=+p[0]||0, mm=+p[1]||0;
+      const r=t.recurrence||{type:'once'};
+      let kind='daily', dow=[], dom=[], on_date=null;
+      if(r.type==='weekly'||r.type==='custom'){ kind='weekly'; dow=(r.days||[]).slice(); }
+      else if(r.type==='monthly'){ kind='monthly'; dom=(r.dates||[]).slice(); }
+      else if(r.type==='date'){ kind='date'; on_date=r.date||dateKey(); }
+      else if(r.type==='once'){ kind='once'; on_date=dateKey(new Date(t.createdAt||Date.now())); }
+      else { kind='daily'; }
+      await client.from('reminders').upsert({ user_id:uid, task_id:String(t.id), title:t.title, hh, mm,
+        kind, dow, dom, on_date, tz_offset:new Date().getTimezoneOffset(), active:true, updated_at:new Date().toISOString() });
+    }catch(e){ console.warn("syncReminder:", e && e.message); }
+  }
+  async function deleteReminder(taskId){
+    try{ if(!enabled() || !await init() || !client) return; await client.from('reminders').delete().eq('user_id',uid).eq('task_id',String(taskId)); }
+    catch(e){ console.warn("deleteReminder:", e && e.message); }
+  }
   // Envía una notificación de PRUEBA a tus propios dispositivos. Sirve para
   // diagnosticar el push: si llega, toda la cadena (Edge Function + claves +
   // suscripción) funciona. Devuelve {ok, error, sent}.
@@ -3619,7 +3676,7 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
-    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, testPush, updatePartner,
+    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     fetchComments, addComment, deleteComment, exportSession, restoreSession };
 })();
@@ -4586,21 +4643,28 @@ function fitSheet(){
   const full=(document.body && document.body.offsetHeight) || window.innerHeight || 0;
   let kb=0;
   if(vv){ const raw=Math.round(full - vv.height - vv.offsetTop); if(raw>150) kb=raw; }
-  if(kb>0) host.style.bottom=kb+"px";
-  else     host.style.bottom="";
+  const newBottom = kb>0 ? kb+"px" : "";
+  if(host.style.bottom!==newBottom) host.style.bottom=newBottom;
   // Alto máximo: desde el borde superior del teclado (o el fondo real) hasta un
   // poco por debajo de la barra de estado, dejando SIEMPRE un hueco arriba como
   // una hoja iOS, para que el título/contenido NO queden cortados por el borde.
-  // La hoja igual se ajusta a su contenido si es más corta que este máximo.
-  const topGap=(SAFE_TOP||0)+26;
-  const avail=full - kb - topGap;
-  host.style.maxHeight=Math.max(240, Math.round(avail))+"px";
+  // Medimos safe-top AQUÍ (no dependemos del timing de updateDiag): así el alto
+  // es consistente en cada apertura y la hoja no "se sube demasiado" a veces.
+  let st=SAFE_TOP||0;
+  try{ const pr=document.createElement("div"); pr.style.cssText="position:absolute;left:0;top:0;width:0;height:env(safe-area-inset-top,0px)";
+    document.body.appendChild(pr); const mh=Math.round(pr.getBoundingClientRect().height); pr.remove(); if(mh>0) st=mh; }catch(e){}
+  const avail=full - kb - (st+26);
+  const newMax=Math.max(240, Math.round(avail))+"px";
+  if(host.style.maxHeight!==newMax) host.style.maxHeight=newMax;
 }
 function boot(){
   updateDiag();
   window.addEventListener("resize", updateDiag);
   window.addEventListener("resize", fitSheet);
-  if(window.visualViewport){ window.visualViewport.addEventListener("resize", fitSheet); window.visualViewport.addEventListener("scroll", fitSheet); }
+  // Solo "resize" (teclado). NO "scroll": el evento scroll del visualViewport se
+  // dispara al desplazar el contenido de la hoja y recalcular ahí el alto causaba
+  // un "temblor" mientras la hoja se reacomodaba.
+  if(window.visualViewport){ window.visualViewport.addEventListener("resize", fitSheet); }
   document.addEventListener("visibilitychange", ()=>{ if(!document.hidden){ setTimeout(updateDiag, 250); try{ Tasks.scheduleReminders(); }catch(e){} } });
   Store.load();
   Generator.init();
