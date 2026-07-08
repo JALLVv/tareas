@@ -598,7 +598,12 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .sheet-head .act:last-child{justify-self:end;text-align:right;}
 .sheet-head .act.cancel{font-weight:400;}
 .sheet-head .act[disabled]{color:var(--label-3);}
-.sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 18px 18px;}
+/* flex:1 + min-height:0 son CLAVE: sin min-height:0, en Safari/iOS este cuerpo
+   flexible NO forma un contenedor de scroll (min-height:auto = alto del
+   contenido), así que un formulario largo se DESBORDA por debajo de la hoja y
+   el botón "Guardar" queda cortado bajo el borde de la pantalla. Con esto, el
+   cuerpo llena el espacio disponible y hace scroll DENTRO de la hoja. */
+.sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 18px 18px;flex:1 1 auto;min-height:0;}
 .sheet-body .lbl-sm{font-size:13px;font-weight:600;color:var(--label-2);margin:18px 4px 8px;text-transform:none;}
 .sheet-body .lbl-sm:first-child{margin-top:6px;}
 .hint{font-size:12.5px;color:var(--label-3);margin:8px 4px 0;line-height:1.4;}
@@ -912,7 +917,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v95";
+const APP_VERSION = "v96";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)

@@ -2,7 +2,7 @@
    App-shell offline caching. The app stores all user data in
    localStorage + IndexedDB, so caching the shell is enough to run offline. */
 
-const CACHE = "rachas-v95";
+const CACHE = "rachas-v96";
 
 const SHELL = [
   "./",
