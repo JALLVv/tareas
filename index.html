@@ -336,11 +336,11 @@ img{display:block;}
 .dd select{
   appearance:none;-webkit-appearance:none;
   background:var(--fill);color:var(--label);border:none;border-radius:13px;
-  padding:10px 30px 10px 13px;font-size:14.5px;font-weight:600;font-family:inherit;
-  white-space:nowrap;width:auto;max-width:70vw;}
+  padding:10px 24px 10px 13px;font-size:14.5px;font-weight:600;font-family:inherit;
+  white-space:nowrap;width:auto;max-width:78vw;text-overflow:ellipsis;}
 .dd select:active{background:var(--fill-2);}
-.dd-chev{position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;
-  color:var(--label-2);font-size:11px;}
+.dd-chev{position:absolute;right:9px;top:50%;transform:translateY(-50%);pointer-events:none;
+  color:var(--label-2);font-size:10px;}
 
 /* Generador: campos verticales con subtítulo encima del desplegable. */
 .gen-field{margin-top:14px;}
@@ -352,7 +352,7 @@ img{display:block;}
   color:var(--label);font-family:inherit;letter-spacing:-0.02em;padding:4px 2px;}
 .big-input::placeholder{color:var(--label-4);}
 .big-title{font-size:26px;font-weight:800;line-height:1.15;margin-top:10px;}
-.big-desc{font-size:18px;font-weight:500;line-height:1.3;margin-top:0;}
+.big-desc{font-size:18px;font-weight:500;line-height:1.3;margin-top:0;overflow:hidden;min-height:0;}
 
 /* Interruptores con emoji (Urgente / Recordatorio) */
 .tg-list{margin-top:6px;background:var(--card);border-radius:16px;border:0.5px solid var(--hairline);overflow:hidden;}
@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v107";
+const APP_VERSION = "v108";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1738,6 +1738,21 @@ function streakFromHistory(history){
 const timeLabel = (d=new Date()) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
+// Ajusta el ancho de un <select> al texto de su opción ACTUAL (por defecto iOS lo
+// hace del ancho de la opción MÁS LARGA, dejando mucho hueco antes de la flecha).
+function fitSelectWidth(sel){
+  if(!sel) return;
+  try{
+    const opt=sel.options[sel.selectedIndex]; const txt=opt?opt.text:"";
+    const cs=getComputedStyle(sel);
+    const meas=document.createElement("span");
+    meas.style.cssText="position:absolute;visibility:hidden;white-space:pre;font-family:"+cs.fontFamily+";font-size:"+cs.fontSize+";font-weight:"+cs.fontWeight+";letter-spacing:"+cs.letterSpacing;
+    meas.textContent=txt; document.body.appendChild(meas);
+    const w=meas.getBoundingClientRect().width; meas.remove();
+    sel.style.width=(Math.ceil(w)+37)+"px";   // 13 izq + 24 der (texto→flecha)
+  }catch(e){}
+}
+
 /* ---------------------------------------------------------------------
    RESUMEN SEMANAL (lunes-domingo) — compartido entre tu perfil y el de un
    amigo. El resumen es siempre el de la ÚLTIMA semana YA TERMINADA (nunca
@@ -2020,17 +2035,20 @@ const Generator = (() => {
     const catSel=$("#genCat");
     if(catSel){
       catSel.innerHTML = CATEGORIES.map(c=>`<option value="${esc(c.name)}"${c.name===selCat?" selected":""}>${Icons.raw(c.name)}  ${esc(c.name)}</option>`).join("");
-      catSel.onchange=()=>{ selCat=catSel.value; haptic(); clearOutput(); };
+      catSel.onchange=()=>{ selCat=catSel.value; haptic(); clearOutput(); fitSelectWidth(catSel); };
+      fitSelectWidth(catSel);
     }
     const pplSel=$("#genPeople");
     if(pplSel){
       pplSel.innerHTML = PEOPLE.map(p=>`<option value="${p.k}"${p.k===selPeople?" selected":""}>${esc(peopleShort(p.k))}</option>`).join("");
-      pplSel.onchange=()=>{ selPeople=+pplSel.value; haptic(); clearOutput(); };
+      pplSel.onchange=()=>{ selPeople=+pplSel.value; haptic(); clearOutput(); fitSelectWidth(pplSel); };
+      fitSelectWidth(pplSel);
     }
     const durSel=$("#genDur");
     if(durSel){
       durSel.innerHTML = DURATIONS.map(m=>`<option value="${m}"${m===selDur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("");
-      durSel.onchange=()=>{ selDur=+durSel.value; haptic(); clearOutput(); };
+      durSel.onchange=()=>{ selDur=+durSel.value; haptic(); clearOutput(); fitSelectWidth(durSel); };
+      fitSelectWidth(durSel);
     }
   }
   function renderOutput(){
@@ -2164,8 +2182,17 @@ const Sheets = (() => {
   // (esperamos a que el teclado termine de abrir y la hoja se reubique).
   host.addEventListener("focusin", (e)=>{
     const t=e.target;
-    if(!t || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
-    setTimeout(()=>{ try{ t.scrollIntoView({block:"center", behavior:"smooth"}); }catch(_){}}, 330);
+    if(!t || !/^(INPUT|TEXTAREA)$/.test(t.tagName)) return;
+    // Solo si el campo enfocado queda TAPADO por el teclado, desplazamos el cuerpo
+    // de la hoja lo justo para subirlo por encima (no movemos la hoja entera).
+    setTimeout(()=>{ try{
+      const vv=window.visualViewport; if(!vv) return;
+      const kbTop=vv.offsetTop+vv.height;              // borde superior del teclado
+      const r=t.getBoundingClientRect();
+      const overlap=Math.round(r.bottom-(kbTop-16));
+      const bodyEl=host.querySelector(".sheet-body");
+      if(overlap>0 && bodyEl) bodyEl.scrollBy({top:overlap, behavior:"smooth"});
+    }catch(_){}}, 320);
   });
   function open(html, cls){
     delete host.dataset.closing;
@@ -2718,7 +2745,7 @@ const Tasks = (() => {
         </select><span class="dd-chev">▾</span></div>
       </div>
       <input class="big-input big-title" id="ctTitle" placeholder="Título" maxlength="120" value="${editing?esc(existing.title):""}"/>
-      <textarea class="big-input big-desc" id="ctDesc" rows="2" placeholder="Descripción (opcional)">${editing?esc(existing.desc||""):""}</textarea>
+      <textarea class="big-input big-desc" id="ctDesc" rows="1" placeholder="Descripción (opcional)">${editing?esc(existing.desc||""):""}</textarea>
       <div class="tg-list">
         <div class="tg-row"><span class="tg-ic emoji">‼️</span><span class="tg-lbl">Urgente</span><div class="switch${urgent?" on":""}" id="ctUrgent"><div class="knob"></div></div></div>
         <div class="tg-row"><span class="tg-ic emoji">🛎️</span><span class="tg-lbl">Recordatorio</span><div class="switch${remind?" on":""}" id="ctRemind"><div class="knob"></div></div></div>
@@ -2762,14 +2789,15 @@ const Tasks = (() => {
     // Menús desplegables (select nativo): las opciones ya vienen en el HTML
     // (evita el "temblor" de reflow al rellenarlas tras abrir la hoja).
     const catSel=$("#ctCat",sheet);
-    catSel.onchange=()=>{ cat=catSel.value; haptic(); };
+    catSel.onchange=()=>{ cat=catSel.value; haptic(); fitSelectWidth(catSel); };
     const durSel=$("#ctDur",sheet);
-    durSel.onchange=()=>{ dur=+durSel.value; haptic(); };
+    durSel.onchange=()=>{ dur=+durSel.value; haptic(); fitSelectWidth(durSel); };
     const recurSel=$("#ctRecur",sheet);
-    recurSel.onchange=()=>{ recur=recurSel.value; haptic();
+    recurSel.onchange=()=>{ recur=recurSel.value; haptic(); fitSelectWidth(recurSel);
       $("#ctDaysWrap",sheet).style.display = recur==="weekly"?"block":"none";
       $("#ctDatesWrap",sheet).style.display = recur==="monthly"?"block":"none";
       $("#ctDateWrap",sheet).style.display = recur==="date"?"block":"none"; validate(); };
+    [catSel,durSel,recurSel].forEach(fitSelectWidth);
     const renderDays = ()=>{ const w=$("#ctDays",sheet); if(!w) return; w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
         cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
@@ -2805,6 +2833,10 @@ const Tasks = (() => {
     if(dateInput) dateInput.onchange = ()=>{ taskDate=dateInput.value; validate(); };
 
     const titleInput = $("#ctTitle",sheet);
+    // Descripción de una línea que CRECE con el texto (sin dejar hueco vacío).
+    const descInput = $("#ctDesc",sheet);
+    if(descInput){ const grow=()=>{ descInput.style.height="auto"; descInput.style.height=descInput.scrollHeight+"px"; };
+      descInput.addEventListener("input",grow); requestAnimationFrame(grow); }
     const saveBtn = $("#ctSave",sheet);
     // "Cada semana" exige ≥1 día; "Cada mes" exige ≥1 fecha; "Fecha" exige una fecha
     function validate(){ saveBtn.disabled = !titleInput.value.trim() || (recur==="weekly" && days.length===0) || (recur==="monthly" && monthDays.length===0) || (recur==="date" && !taskDate); }
@@ -4624,38 +4656,20 @@ function updateDiag(){
 // dejando el botón inferior visible. No mueve la hoja (bottom:0).
 function fitSheet(){
   const host=document.getElementById("sheet"); if(!host) return;
-  // Mientras la hoja se cierra NO la reposicionamos: si el teclado se cerrara a
-  // la vez, un reajuste aquí la bajaría de golpe al fondo ANTES de deslizarse
-  // fuera, dando sensación de cierre lento/"reaparece abajo". La dejamos donde
-  // está y que solo la anime el transform de salida.
   if(host.dataset.closing) return;
-  const vv=window.visualViewport;
-  const h=(vv && vv.height) || window.innerHeight || 0;
-  if(h<=260) return;
-  // Teclado abierto: iOS encoge el visualViewport. Elevamos el borde inferior de
-  // la hoja lo que tape el teclado, para que el campo y los botones queden por
-  // ENCIMA del teclado. Medimos contra el alto REAL del shell (body = 100lvh =
-  // 844), no contra window.innerHeight (797 en modo translúcido), para que el
-  // levantamiento coincida con la altura real del teclado. CLAVE: solo un
-  // solapamiento GRANDE (>150px) es un teclado real; la diferencia ~47px de la
-  // safe-area SIN teclado no debe mover la hoja. Sin teclado dejamos el bottom
-  // del CSS (0 = fondo real de la pantalla).
   const full=(document.body && document.body.offsetHeight) || window.innerHeight || 0;
-  let kb=0;
-  if(vv){ const raw=Math.round(full - vv.height - vv.offsetTop); if(raw>150) kb=raw; }
-  const newBottom = kb>0 ? kb+"px" : "";
-  if(host.style.bottom!==newBottom) host.style.bottom=newBottom;
-  // Alto máximo: desde el borde superior del teclado (o el fondo real) hasta un
-  // poco por debajo de la barra de estado, dejando SIEMPRE un hueco arriba como
-  // una hoja iOS, para que el título/contenido NO queden cortados por el borde.
-  // Medimos safe-top AQUÍ (no dependemos del timing de updateDiag): así el alto
-  // es consistente en cada apertura y la hoja no "se sube demasiado" a veces.
+  if(full<=260) return;
+  // La hoja NO se eleva con el teclado (eso la subía demasiado). Se queda anclada
+  // abajo; si un campo enfocado queda tras el teclado, se desplaza el CUERPO de la
+  // hoja lo justo (ver focusin). Aquí solo fijamos el alto máximo: desde el fondo
+  // real hasta un poco por debajo de la barra de estado, midiendo safe-top ahora
+  // mismo (no dependemos del timing de updateDiag) para que sea consistente.
   let st=SAFE_TOP||0;
   try{ const pr=document.createElement("div"); pr.style.cssText="position:absolute;left:0;top:0;width:0;height:env(safe-area-inset-top,0px)";
     document.body.appendChild(pr); const mh=Math.round(pr.getBoundingClientRect().height); pr.remove(); if(mh>0) st=mh; }catch(e){}
-  const avail=full - kb - (st+26);
-  const newMax=Math.max(240, Math.round(avail))+"px";
+  const newMax=Math.max(240, Math.round(full-(st+26)))+"px";
   if(host.style.maxHeight!==newMax) host.style.maxHeight=newMax;
+  if(host.style.bottom) host.style.bottom="";   // nunca elevamos la hoja
 }
 function boot(){
   updateDiag();
