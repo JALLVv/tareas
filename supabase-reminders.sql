@@ -55,7 +55,7 @@ security definer
 as $$
 declare
   r        record;
-  loc      timestamptz;   -- "ahora" en la hora local del usuario
+  loc      timestamp;     -- "ahora" en la hora LOCAL del usuario (sin tz, comparación directa)
   ldow     int;
   ldom     int;
   ldate    date;
