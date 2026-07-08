@@ -587,7 +587,11 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
   border-radius:22px 22px 0 0;border-top:0.5px solid var(--sep);
   box-shadow:0 -20px 60px rgba(0,0,0,0.6);
-  padding-bottom:calc(var(--safe-bottom) + 16px);
+  /* Sin padding-bottom propio: el respiro de la zona segura (home indicator)
+     vive DENTRO de .sheet-body para que haga scroll con el contenido. Antes,
+     este padding dejaba una franja gris fija (el fondo del sheet) bajo el área
+     scrollable, siempre visible aunque no llegaras al fondo, y el botón
+     "Guardar" quedaba pegado a ella como si se cortara. */
   transform:translateY(100%);transition:transform .42s var(--ease);
   will-change:transform;
 }
@@ -607,7 +611,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
    contenido), así que un formulario largo se DESBORDA por debajo de la hoja y
    el botón "Guardar" queda cortado bajo el borde de la pantalla. Con esto, el
    cuerpo llena el espacio disponible y hace scroll DENTRO de la hoja. */
-.sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 18px 18px;flex:1 1 auto;min-height:0;}
+.sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 18px calc(20px + var(--safe-bottom));flex:1 1 auto;min-height:0;}
 .sheet-body .lbl-sm{font-size:13px;font-weight:600;color:var(--label-2);margin:18px 4px 8px;text-transform:none;}
 .sheet-body .lbl-sm:first-child{margin-top:6px;}
 .hint{font-size:12.5px;color:var(--label-3);margin:8px 4px 0;line-height:1.4;}
@@ -921,7 +925,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v98";
+const APP_VERSION = "v99";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
