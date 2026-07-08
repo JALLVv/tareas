@@ -328,6 +328,37 @@ img{display:block;}
 .sr-chev{color:var(--label-3);font-size:24px;font-weight:400;flex:0 0 auto;line-height:1;}
 .settings-row.tappable:active{background:var(--fill-2);}
 
+/* Menús desplegables (Categoría/Tiempo/Repetición) en UNA sola línea con scroll
+   horizontal. Select nativo estilizado como pastilla mate. */
+.dd-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 4px;-webkit-overflow-scrolling:touch;}
+.dd-row::-webkit-scrollbar{display:none;}
+.dd{position:relative;flex:0 0 auto;}
+.dd select{
+  appearance:none;-webkit-appearance:none;
+  background:var(--fill);color:var(--label);border:none;border-radius:13px;
+  padding:11px 32px 11px 14px;font-size:14.5px;font-weight:600;font-family:inherit;
+  white-space:nowrap;max-width:62vw;text-overflow:ellipsis;}
+.dd select:active{background:var(--fill-2);}
+.dd-chev{position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;
+  color:var(--label-2);font-size:11px;}
+
+/* Campos de escritura SIN borde: texto grande, placeholder tenue. */
+.big-input{width:100%;background:transparent;border:none;outline:none;resize:none;
+  color:var(--label);font-family:inherit;letter-spacing:-0.02em;padding:6px 2px;}
+.big-input::placeholder{color:var(--label-4);}
+.big-title{font-size:26px;font-weight:800;line-height:1.15;margin-top:10px;}
+.big-desc{font-size:18px;font-weight:500;line-height:1.35;margin-top:2px;}
+
+/* Interruptores con emoji (Urgente / Recordatorio) */
+.tg-list{margin-top:14px;background:var(--card);border-radius:16px;border:0.5px solid var(--hairline);overflow:hidden;}
+.tg-row{display:flex;align-items:center;gap:12px;padding:13px 16px;}
+.tg-row + .tg-row{border-top:0.5px solid var(--hairline);}
+.tg-ic{font-size:20px;width:26px;text-align:center;flex:0 0 auto;}
+.tg-lbl{flex:1;font-size:16px;font-weight:600;}
+#ctRemindWrap{padding:6px 16px 14px;border-top:0.5px solid var(--hairline);}
+.time-field{background:var(--fill);border:none;border-radius:12px;color:var(--label);
+  font-family:inherit;font-size:17px;font-weight:600;padding:9px 12px;color-scheme:dark;}
+
 /* Inputs / formularios agrupados estilo iOS */
 .form-group{border-radius:var(--radius);overflow:hidden;background:var(--card);
   border:0.5px solid var(--hairline);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);}
@@ -822,16 +853,12 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
     <h1 class="large-title">Generador</h1>
     <p class="subtitle">Crea una tarea a tu medida y gana el doble de puntos.</p>
 
-    <div class="section-title">Categoría</div>
-    <div class="chips" id="genCats"></div>
+    <div class="dd-row" id="genDD" style="margin-top:6px;">
+      <div class="dd"><select id="genCat" aria-label="Categoría"></select><span class="dd-chev">▾</span></div>
+      <div class="dd"><select id="genDur" aria-label="Duración"></select><span class="dd-chev">▾</span></div>
+    </div>
 
-    <div class="section-title">Personas</div>
-    <div class="segmented" id="genPeople"></div>
-
-    <div class="section-title">Duración</div>
-    <div class="segmented" id="genDur"></div>
-
-    <button class="btn" id="genBtn" style="margin-top:22px;">
+    <button class="btn" id="genBtn" style="margin-top:18px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 4l1.6 4.4L20 10l-4.4 1.6L14 16l-1.6-4.4L8 10l4.4-1.6zM6 4v3M4.5 5.5h3M6 17v3M4.5 18.5h3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Generar tarea
     </button>
@@ -911,20 +938,20 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 </div>
 
 <!-- FAB crear tarea -->
-<button class="fab" id="fab"><span class="emoji">➕</span></button>
+<button class="fab" id="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 
 <!-- Tab bar -->
 <nav class="tabbar">
   <button class="tab" data-view="gen">
-    <span class="emoji tab-ic">✨</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l1.9 4.9 4.9 1.9-4.9 1.9L12 17.1l-1.9-4.9L5.2 10.3l4.9-1.9zM18.5 3.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7zM5 15l.6 1.5 1.5.6-1.5.6L5 19.7l-.6-1.5L2.9 17.6l1.5-.6z"/></svg>
     Generador
   </button>
   <button class="tab active" data-view="tasks">
-    <span class="emoji tab-ic">✅</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h11M4.5 12h11M4.5 17.5h7"/><path d="M18.5 15.5l1.7 1.7 3-3.4"/></svg>
     Tareas
   </button>
   <button class="tab" data-view="profile">
-    <span class="emoji tab-ic">👤</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0114.4 0"/></svg>
     Perfil
   </button>
 </nav>
@@ -965,7 +992,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v105";
+const APP_VERSION = "v106";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -974,7 +1001,7 @@ const Icons = (() => {
   // Iconos como EMOJIS (una sola fuente de verdad). Se envuelve en un <span> con
   // la clase "emoji" para tamaño/alineación consistentes estilo iOS.
   const map = {
-    Deporte:"🏋️", Arte:"🎨", "Música":"🎵", Lectura:"📖", Productividad:"⚡",
+    Deporte:"💪🏻", Arte:"🎨", "Música":"🎵", Lectura:"📖", Productividad:"⚡",
     Estudio:"📚", Cocina:"🍳", Limpieza:"🧽", Creatividad:"💡", Salud:"❤️",
     Bienestar:"😌", Idiomas:"🗣️", "Programación":"💻", "Fotografía":"📷",
     Naturaleza:"🌳", "Meditación":"🧘", Escritura:"✍️", _default:"⭐"
@@ -1976,36 +2003,17 @@ const Generator = (() => {
   }
   function clearOutput(){ current=null; genPartner=null; const o=$("#genOutput"); if(o) o.innerHTML=""; }
 
-  function renderCats(){
-    // se conserva el scroll horizontal: al re-pintar (elegir un chip lejano)
-    // antes la tira saltaba de vuelta al inicio.
-    const wrap = $("#genCats"); const sl=wrap.scrollLeft; wrap.innerHTML="";
-    CATEGORIES.forEach(c=>{
-      const chip = el("button","chip"+(c.name===selCat?" sel":""));
-      chip.style.setProperty("--accent", c.color);
-      chip.innerHTML = `<span class="ic" style="color:${c.name===selCat?'#fff':c.color}">${Icons.get(c.name)}</span>${esc(c.name)}`;
-      chip.onclick = ()=>{ selCat=c.name; haptic(); renderCats(); clearOutput(); };
-      wrap.appendChild(chip);
-    });
-    wrap.scrollLeft=sl;
-  }
-  function renderPeople(){
-    const wrap = $("#genPeople"); const sl=wrap.scrollLeft; wrap.innerHTML="";
-    PEOPLE.forEach(p=>{
-      const seg = el("div","seg"+(p.k===selPeople?" sel":""), p.short);
-      seg.onclick = ()=>{ selPeople=p.k; haptic(); renderPeople(); clearOutput(); };
-      wrap.appendChild(seg);
-    });
-    wrap.scrollLeft=sl;
-  }
-  function renderDur(){
-    const wrap = $("#genDur"); const sl=wrap.scrollLeft; wrap.innerHTML="";
-    DURATIONS.forEach(m=>{
-      const seg = el("div","seg"+(m===selDur?" sel":""), durShort(m));
-      seg.onclick = ()=>{ selDur=m; haptic(); renderDur(); clearOutput(); };
-      wrap.appendChild(seg);
-    });
-    wrap.scrollLeft=sl;
+  function renderControls(){
+    const catSel=$("#genCat");
+    if(catSel){
+      catSel.innerHTML = CATEGORIES.map(c=>`<option value="${esc(c.name)}"${c.name===selCat?" selected":""}>${Icons.raw(c.name)}  ${esc(c.name)}</option>`).join("");
+      catSel.onchange=()=>{ selCat=catSel.value; haptic(); clearOutput(); };
+    }
+    const durSel=$("#genDur");
+    if(durSel){
+      durSel.innerHTML = DURATIONS.map(m=>`<option value="${m}"${m===selDur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("");
+      durSel.onchange=()=>{ selDur=+durSel.value; haptic(); clearOutput(); };
+    }
   }
   function renderOutput(){
     const out = $("#genOutput");
@@ -2076,7 +2084,7 @@ const Generator = (() => {
   }
 
   function init(){
-    renderCats(); renderPeople(); renderDur();
+    renderControls();
     $("#genBtn").onclick = generate;
   }
   return { init };
@@ -2290,6 +2298,37 @@ const Tasks = (() => {
     return true;
   };
 
+  /* ---------- RECORDATORIOS ----------
+     Programa una notificación local a la hora elegida para las tareas con
+     recordatorio que tocan HOY y siguen pendientes. Nota: los timers viven
+     mientras la app está abierta/en segundo plano; para un aviso garantizado con
+     la app CERRADA hace falta un envío push programado en el servidor. */
+  let reminderTimers=[];
+  function scheduleReminders(){
+    reminderTimers.forEach(t=>clearTimeout(t)); reminderTimers=[];
+    if(!("Notification" in window) || Notification.permission!=="granted") return;
+    if(localStorage.getItem("rachas_notif")==="off") return;
+    const now=new Date(), todayKey=dateKey();
+    (Store.get().tasks||[]).forEach(t=>{
+      if(!t.reminder || !t.reminder.time) return;
+      if(!dueOn(t, todayKey) || isDoneToday(t)) return;
+      const p=String(t.reminder.time).split(":"), h=+p[0], m=+p[1];
+      if(isNaN(h)||isNaN(m)) return;
+      const at=new Date(now); at.setHours(h,m,0,0);
+      const delay=at.getTime()-now.getTime();
+      if(delay<=0 || delay>26*3600*1000) return;   // solo lo que queda de hoy
+      reminderTimers.push(setTimeout(()=>fireReminder(t), delay));
+    });
+  }
+  async function fireReminder(t){
+    try{
+      if(Notification.permission!=="granted") return;
+      const opts={ body:t.title, icon:"./icons/icon-192.png", badge:"./icons/icon-192.png", tag:"reminder-"+t.id };
+      if("serviceWorker" in navigator){ const reg=await navigator.serviceWorker.ready; reg.showNotification("🛎️ Recordatorio", opts); }
+      else { new Notification("🛎️ Recordatorio", opts); }
+    }catch(e){}
+  }
+
   /* ---------- AUTO-ELIMINACIÓN (solo de una vez) ----------
      "Solo hoy" y "Fecha" se borran al pasar su día sin completar. Las
      recurrentes NO se borran: solo penalizan los días programados sin hacer. */
@@ -2475,6 +2514,7 @@ const Tasks = (() => {
   /* ---------- LISTA ---------- */
   function render(){
     cleanupExpired();
+    scheduleReminders();
     if(filter==="done"){ renderDone(); return; }
     const wrap = $("#taskListWrap");
     const s = Store.get();
@@ -2617,7 +2657,7 @@ const Tasks = (() => {
   }
   function emptyState(title,sub){
     return `<div class="empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="4"/><path d="M9 12l2 2 4-4"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/></svg>
       <p>${title}</p><div class="sub">${sub}</div></div>`;
   }
 
@@ -2635,25 +2675,27 @@ const Tasks = (() => {
     let monthDays = editing && existing.recurrence && existing.recurrence.dates ? existing.recurrence.dates.slice() : [];
     let onlyDays = editing ? !!existing.onlyOnDays : false;
     let taskDate = editing && existing.recurrence && existing.recurrence.date ? existing.recurrence.date : "";
+    let remind = editing && existing.reminder && existing.reminder.time ? true : false;
+    let remindTime = editing && existing.reminder && existing.reminder.time ? existing.reminder.time : "09:00";
     let partner = null; // amigo con quien se comparte (solo al crear)
     if(!CATEGORIES.some(c=>c.name===cat)) cat = CATEGORIES[0].name;
 
     const body = `
-      <div class="form-group" style="margin-top:6px;">
-        <div class="field-block"><input class="field" id="ctTitle" placeholder="Título de la tarea" maxlength="120" value="${editing?esc(existing.title):""}"/></div>
-        <div class="field-block"><textarea class="field" id="ctDesc" rows="2" placeholder="Descripción (opcional)">${editing?esc(existing.desc||""):""}</textarea></div>
+      <div class="dd-row" id="ctDD">
+        <div class="dd"><select id="ctCat" aria-label="Categoría"></select><span class="dd-chev">▾</span></div>
+        <div class="dd"><select id="ctDur" aria-label="Tiempo estimado"></select><span class="dd-chev">▾</span></div>
+        <div class="dd"><select id="ctRecur" aria-label="Repetición"></select><span class="dd-chev">▾</span></div>
       </div>
-      <div class="lbl-sm">Categoría</div>
-      <div class="chips" id="ctCats"></div>
-      <div class="lbl-sm">Personas</div>
-      <div class="segmented" id="ctPeople"></div>
-      <div class="lbl-sm">Tiempo estimado</div>
-      <div class="segmented" id="ctDur"></div>
-      <div class="form-group" style="margin-top:18px;">
-        <div class="row"><span class="lbl">Urgente</span><div style="flex:1"></div><div class="switch${urgent?" on":""}" id="ctUrgent"><div class="knob"></div></div></div>
+      <input class="big-input big-title" id="ctTitle" placeholder="Título" maxlength="120" value="${editing?esc(existing.title):""}"/>
+      <textarea class="big-input big-desc" id="ctDesc" rows="2" placeholder="Descripción (opcional)">${editing?esc(existing.desc||""):""}</textarea>
+      <div class="tg-list">
+        <div class="tg-row"><span class="tg-ic emoji">‼️</span><span class="tg-lbl">Urgente</span><div class="switch${urgent?" on":""}" id="ctUrgent"><div class="knob"></div></div></div>
+        <div class="tg-row"><span class="tg-ic emoji">🛎️</span><span class="tg-lbl">Recordatorio</span><div class="switch${remind?" on":""}" id="ctRemind"><div class="knob"></div></div></div>
+        <div id="ctRemindWrap" style="display:${remind?"block":"none"};">
+          <input type="time" class="time-field" id="ctRemindTime" value="${esc(remindTime)}"/>
+          <div class="hint">Recibirás una notificación a esa hora los días en que toque la tarea.</div>
+        </div>
       </div>
-      <div class="lbl-sm">Repetición</div>
-      <div class="segmented" id="ctRecur"></div>
       <div id="ctDaysWrap" style="display:${recur==="weekly"?"block":"none"};">
         <div class="lbl-sm">Días de la semana</div><div class="daypicker" id="ctDays"></div>
         <div class="form-group" style="margin-top:14px;">
@@ -2686,20 +2728,19 @@ const Tasks = (() => {
       <div class="sheet-body">${body}</div>`;
     const sheet = Sheets.show(head);
 
-    // en todos: se conserva el scroll horizontal al re-pintar (antes saltaba al inicio)
-    const renderCats = ()=>{ const w=$("#ctCats",sheet); const sl=w.scrollLeft; w.innerHTML="";
-      CATEGORIES.forEach(c=>{ const chip=el("button","chip"+(c.name===cat?" sel":"")); chip.style.setProperty("--accent",c.color);
-        chip.innerHTML=`<span class="ic" style="color:${c.name===cat?'#fff':c.color}">${Icons.get(c.name)}</span>${esc(c.name)}`;
-        chip.onclick=()=>{cat=c.name;haptic();renderCats();}; w.appendChild(chip); }); w.scrollLeft=sl; };
-    const renderPeople = ()=>{ const w=$("#ctPeople",sheet); const sl=w.scrollLeft; w.innerHTML="";
-      PEOPLE.forEach(p=>{ const seg=el("div","seg"+(p.k===ppl?" sel":""),p.short); seg.onclick=()=>{ppl=p.k;haptic();renderPeople();}; w.appendChild(seg); }); w.scrollLeft=sl; };
-    const renderDur = ()=>{ const w=$("#ctDur",sheet); const sl=w.scrollLeft; w.innerHTML="";
-      DURATIONS.forEach(m=>{ const seg=el("div","seg"+(m===dur?" sel":""),durShort(m)); seg.onclick=()=>{dur=m;haptic();renderDur();}; w.appendChild(seg); }); w.scrollLeft=sl; };
-    const renderRecur = ()=>{ const w=$("#ctRecur",sheet); const sl=w.scrollLeft; w.innerHTML="";
-      RECUR.forEach(r=>{ const seg=el("div","seg"+(r.k===recur?" sel":""),r.l); seg.onclick=()=>{recur=r.k;haptic();renderRecur();
-        $("#ctDaysWrap",sheet).style.display = recur==="weekly"?"block":"none";
-        $("#ctDatesWrap",sheet).style.display = recur==="monthly"?"block":"none";
-        $("#ctDateWrap",sheet).style.display = recur==="date"?"block":"none"; validate(); }; w.appendChild(seg); }); w.scrollLeft=sl; };
+    // Menús desplegables (select nativo) para Categoría, Tiempo y Repetición.
+    const catSel=$("#ctCat",sheet);
+    catSel.innerHTML = CATEGORIES.map(c=>`<option value="${esc(c.name)}"${c.name===cat?" selected":""}>${Icons.raw(c.name)}  ${esc(c.name)}</option>`).join("");
+    catSel.onchange=()=>{ cat=catSel.value; haptic(); };
+    const durSel=$("#ctDur",sheet);
+    durSel.innerHTML = DURATIONS.map(m=>`<option value="${m}"${m===dur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("");
+    durSel.onchange=()=>{ dur=+durSel.value; haptic(); };
+    const recurSel=$("#ctRecur",sheet);
+    recurSel.innerHTML = RECUR.map(r=>`<option value="${r.k}"${r.k===recur?" selected":""}>🔁  ${esc(r.l)}</option>`).join("");
+    recurSel.onchange=()=>{ recur=recurSel.value; haptic();
+      $("#ctDaysWrap",sheet).style.display = recur==="weekly"?"block":"none";
+      $("#ctDatesWrap",sheet).style.display = recur==="monthly"?"block":"none";
+      $("#ctDateWrap",sheet).style.display = recur==="date"?"block":"none"; validate(); };
     const renderDays = ()=>{ const w=$("#ctDays",sheet); if(!w) return; w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
         cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
@@ -2716,10 +2757,14 @@ const Tasks = (() => {
         chip.innerHTML=`<span class="friend-av" style="width:22px;height:22px;font-size:11px">${f.avatar?`<img src="${esc(f.avatar)}">`:esc((f.name||"A").charAt(0).toUpperCase())}</span>${esc(f.name)}`;
         chip.onclick=()=>{ partner = (partner&&partner.cloudId===f.cloudId)?null:{cloudId:f.cloudId,name:f.name}; haptic(); renderShare(); const h=$("#ctShareHint",sheet); if(h) h.style.display=partner?"block":"none"; };
         w.appendChild(chip); }); };
-    renderCats(); renderPeople(); renderDur(); renderRecur(); renderDays(); renderMonthDays(); renderShare();
+    renderDays(); renderMonthDays(); renderShare();
 
     const sw = $("#ctUrgent",sheet);
     sw.onclick = ()=>{ urgent=!urgent; sw.classList.toggle("on",urgent); haptic(); };
+    const swR = $("#ctRemind",sheet), rWrap=$("#ctRemindWrap",sheet), rTime=$("#ctRemindTime",sheet);
+    swR.onclick = ()=>{ remind=!remind; swR.classList.toggle("on",remind); haptic();
+      rWrap.style.display = remind?"block":"none"; };
+    rTime.onchange = ()=>{ remindTime = rTime.value || "09:00"; };
     const syncToggles = ()=>{ ["#ctOnlyDays","#ctOnlyMonth","#ctOnlyDate"].forEach(sel=>{ const e=$(sel,sheet); if(e) e.classList.toggle("on",onlyDays); }); };
     const swOnly = $("#ctOnlyDays",sheet);
     if(swOnly) swOnly.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
@@ -2744,6 +2789,7 @@ const Tasks = (() => {
       const desc = $("#ctDesc",sheet).value.trim();
       const rec = {type:recur, days:days.slice(), dates:monthDays.slice()};
       if(recur==="date") rec.date = taskDate; // fecha concreta (YYYY-MM-DD)
+      const reminder = remind ? { time: (remindTime||"09:00") } : null;
       const newId = uid();
       // Con compañero: es solo una INVITACIÓN (como una solicitud de amistad). No
       // se añade a tu lista todavía; se añadirá a ambas listas cuando la acepte.
@@ -2751,13 +2797,14 @@ const Tasks = (() => {
         Store.update(s=>{
           if(editing){
             const t = s.tasks.find(x=>x.id===existing.id);
-            if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent; t.recurrence=rec; t.onlyOnDays=onlyDays; }
+            if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent; t.recurrence=rec; t.onlyOnDays=onlyDays; t.reminder=reminder; }
           } else {
             s.tasks.unshift({ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
-              recurrence:rec, onlyOnDays:onlyDays, random:false, createdAt:Date.now(), done:false, lastDone:null });
+              recurrence:rec, onlyOnDays:onlyDays, reminder, random:false, createdAt:Date.now(), done:false, lastDone:null });
           }
         });
       }
+      if(typeof scheduleReminders==="function") scheduleReminders();
       // compartir en la nube
       if(!editing && partner){
         const meName=Store.get().profile.name||"Atleta";
@@ -2858,7 +2905,7 @@ const Tasks = (() => {
       haptic(); setFilter(seg.getAttribute("data-f"));
     });
   }
-  return { init, render, openCreate, syncShared };
+  return { init, render, openCreate, syncShared, scheduleReminders };
 })();
 
 function camSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 015.5 7H8l1.5-2.2h5L16 7h2.5A1.5 1.5 0 0120 8.5V17a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17z"/><circle cx="12" cy="12.5" r="3.2"/></svg>';}
@@ -4211,7 +4258,7 @@ function openSettingsSheet(){
       if(denied){ UI.toast("Bloqueadas en Ajustes de iOS","bell","var(--red)"); return; }
       localStorage.setItem("rachas_notif","on");
       const ok=await Cloud.ensurePush();   // dispara el permiso push + suscribe
-      if(ok){ sw.classList.add("on"); UI.toast("Notificaciones activadas","check","var(--green)"); }
+      if(ok){ sw.classList.add("on"); try{ Tasks.scheduleReminders(); }catch(e){} UI.toast("Notificaciones activadas","check","var(--green)"); }
       else { localStorage.setItem("rachas_notif","off"); UI.toast("No se pudieron activar","bell","var(--red)"); }
     }
   };
@@ -4554,7 +4601,7 @@ function boot(){
   window.addEventListener("resize", updateDiag);
   window.addEventListener("resize", fitSheet);
   if(window.visualViewport){ window.visualViewport.addEventListener("resize", fitSheet); window.visualViewport.addEventListener("scroll", fitSheet); }
-  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) setTimeout(updateDiag, 250); });
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden){ setTimeout(updateDiag, 250); try{ Tasks.scheduleReminders(); }catch(e){} } });
   Store.load();
   Generator.init();
   Tasks.init();
