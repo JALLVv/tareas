@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v109";
+const APP_VERSION = "v110";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2410,6 +2410,10 @@ const Tasks = (() => {
      mientras la app está abierta/en segundo plano; para un aviso garantizado con
      la app CERRADA hace falta un envío push programado en el servidor. */
   let reminderTimers=[];
+  const remKey=(t)=> t.id+"@"+dateKey();               // una vez por tarea y día
+  function remFired(t){ try{ return (localStorage.getItem("rachas_reminded")||"").split(",").includes(remKey(t)); }catch(e){ return false; } }
+  function remMark(t){ try{ let s=(localStorage.getItem("rachas_reminded")||"").split(",").filter(Boolean);
+    const k=remKey(t); if(!s.includes(k)){ s.push(k); if(s.length>60) s=s.slice(-60); localStorage.setItem("rachas_reminded", s.join(",")); } }catch(e){} }
   function scheduleReminders(){
     reminderTimers.forEach(t=>clearTimeout(t)); reminderTimers=[];
     if(!("Notification" in window) || Notification.permission!=="granted") return;
@@ -2418,17 +2422,25 @@ const Tasks = (() => {
     (Store.get().tasks||[]).forEach(t=>{
       if(!t.reminder || !t.reminder.time) return;
       if(!dueOn(t, todayKey) || isDoneToday(t)) return;
+      if(remFired(t)) return;                            // ya avisado hoy
       const p=String(t.reminder.time).split(":"), h=+p[0], m=+p[1];
       if(isNaN(h)||isNaN(m)) return;
       const at=new Date(now); at.setHours(h,m,0,0);
       const delay=at.getTime()-now.getTime();
-      if(delay<=0 || delay>26*3600*1000) return;   // solo lo que queda de hoy
+      if(delay>26*3600*1000) return;
+      if(delay<=0){
+        // La hora ya pasó hoy: iOS suspende los timers con la app cerrada, así que
+        // al REABRIR la app avisamos (catch-up) si fue hace <= 12 h y está visible.
+        if(now.getTime()-at.getTime() <= 12*3600*1000 && !document.hidden) fireReminder(t);
+        return;
+      }
       reminderTimers.push(setTimeout(()=>fireReminder(t), delay));
     });
   }
   async function fireReminder(t){
     try{
-      if(Notification.permission!=="granted") return;
+      if(Notification.permission!=="granted" || remFired(t)) return;
+      remMark(t);
       const opts={ body:t.title, icon:"./icons/icon-192.png", badge:"./icons/icon-192.png", tag:"reminder-"+t.id };
       if("serviceWorker" in navigator){ const reg=await navigator.serviceWorker.ready; reg.showNotification("🛎️ Recordatorio", opts); }
       else { new Notification("🛎️ Recordatorio", opts); }
@@ -3698,7 +3710,8 @@ const Cloud = (() => {
       const p=String(t.reminder.time).split(":"); const hh=+p[0]||0, mm=+p[1]||0;
       const r=t.recurrence||{type:'once'};
       let kind='daily', dow=[], dom=[], on_date=null;
-      if(r.type==='weekly'||r.type==='custom'){ kind='weekly'; dow=(r.days||[]).slice(); }
+      // La app usa 0=Lunes; Postgres extract(dow) usa 0=Domingo → convertimos.
+      if(r.type==='weekly'||r.type==='custom'){ kind='weekly'; dow=(r.days||[]).map(d=>(d+1)%7); }
       else if(r.type==='monthly'){ kind='monthly'; dom=(r.dates||[]).slice(); }
       else if(r.type==='date'){ kind='date'; on_date=r.date||dateKey(); }
       else if(r.type==='once'){ kind='once'; on_date=dateKey(new Date(t.createdAt||Date.now())); }
@@ -3710,6 +3723,14 @@ const Cloud = (() => {
   async function deleteReminder(taskId){
     try{ if(!enabled() || !await init() || !client) return; await client.from('reminders').delete().eq('user_id',uid).eq('task_id',String(taskId)); }
     catch(e){ console.warn("deleteReminder:", e && e.message); }
+  }
+  // Sube a la nube TODOS los recordatorios locales (para que el push programado
+  // funcione aunque la tabla se creara DESPUÉS de fijar el recordatorio).
+  async function syncAllReminders(){
+    try{ if(!enabled() || !await init() || !client) return;
+      const tasks=(Store.get().tasks||[]).filter(t=>t.reminder && t.reminder.time);
+      for(const t of tasks){ await syncReminder(t); }
+    }catch(e){ console.warn("syncAllReminders:", e && e.message); }
   }
   // Envía una notificación de PRUEBA a tus propios dispositivos. Sirve para
   // diagnosticar el push: si llega, toda la cadena (Edge Function + claves +
@@ -3767,7 +3788,7 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
-    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, testPush, updatePartner,
+    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, syncAllReminders, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     fetchComments, addComment, deleteComment, exportSession, restoreSession };
 })();
@@ -4406,7 +4427,7 @@ function openSettingsSheet(){
       if(denied){ UI.toast("Bloqueadas en Ajustes de iOS","bell","var(--red)"); return; }
       localStorage.setItem("rachas_notif","on");
       const ok=await Cloud.ensurePush();   // dispara el permiso push + suscribe
-      if(ok){ sw.classList.add("on"); try{ Tasks.scheduleReminders(); }catch(e){} UI.toast("Notificaciones activadas","check","var(--green)"); }
+      if(ok){ sw.classList.add("on"); try{ Tasks.scheduleReminders(); Cloud.syncAllReminders(); }catch(e){} UI.toast("Notificaciones activadas","check","var(--green)"); }
       else { localStorage.setItem("rachas_notif","off"); UI.toast("No se pudieron activar","bell","var(--red)"); }
     }
   };
@@ -4774,6 +4795,7 @@ function boot(){
       Tasks.syncShared();   // reconcilia tareas compartidas
       Notifs.refresh();     // trae notificaciones + avisa en primer plano
       autoEnablePush();     // activa el push automáticamente (pide permiso al abrir)
+      Cloud.syncAllReminders(); // sube los recordatorios (para el push programado)
       checkWeeklySummary();
       // Sondeo periódico: tareas compartidas + notificaciones nuevas; y cada
       // ~minuto, reconcilia la nube (borra del servidor lo que ya eliminaste)
