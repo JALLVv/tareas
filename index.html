@@ -79,8 +79,21 @@
 
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
+  /* Hueco entre el viewport DINÁMICO (dvh, área de layout donde iOS ancla los
+     elementos fijos) y el viewport GRANDE (lvh, pantalla completa real). En modo
+     translúcido, iOS deja ese hueco (~47px en el dispositivo) SIN cubrir en el
+     borde inferior: los elementos con bottom:0 se anclan al borde de dvh, no al
+     de la pantalla, y bajo ellos queda una franja negra. Empujamos esos
+     elementos hacia abajo justo ese hueco para que lleguen al fondo REAL de la
+     pantalla. En pantallas sin hueco (dvh==lvh) vale 0 y todo queda igual. */
+  --vp-gap:0px;
   --ease:cubic-bezier(0.32,0.72,0,1);            /* curva tipo iOS spring */
   --ease-out:cubic-bezier(0.22,1,0.36,1);
+}
+/* Solo donde el navegador soporta lvh/dvh (iOS 15.4+) calculamos el hueco real.
+   En los demás, --vp-gap se queda en 0px y el layout es el de siempre. */
+@supports (height:1lvh){
+  :root{ --vp-gap:calc(100lvh - 100dvh); }
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -203,9 +216,12 @@ img{display:block;}
    TAB BAR
    ========================================================================= */
 .tabbar{
-  position:fixed;left:0;right:0;bottom:0;z-index:50;
-  height:calc(var(--tabbar-h) + var(--safe-bottom));
-  padding-bottom:var(--safe-bottom);
+  /* bottom negativo (= −hueco): baja la barra hasta el borde INFERIOR real de la
+     pantalla y cubre la franja de la safe-area con su propio material, sin dejar
+     negro debajo. En pantallas sin hueco, --vp-gap=0 y queda en bottom:0. */
+  position:fixed;left:0;right:0;bottom:calc(-1 * var(--vp-gap));z-index:50;
+  height:calc(var(--tabbar-h) + var(--safe-bottom) + var(--vp-gap));
+  padding-bottom:calc(var(--safe-bottom) + var(--vp-gap));
   display:flex;align-items:stretch;
   background:var(--mat-bar);
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
@@ -575,7 +591,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 /* =========================================================================
    SHEETS / MODALES
    ========================================================================= */
-.scrim{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,0.5);
+.scrim{position:fixed;top:0;left:0;right:0;bottom:calc(-1 * var(--vp-gap));z-index:90;background:rgba(0,0,0,0.5);
   -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
   opacity:0;pointer-events:none;transition:opacity .3s var(--ease-out);}
 .scrim.show{opacity:1;pointer-events:auto;}
@@ -585,7 +601,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
      (el rectángulo REALMENTE visible), para que la hoja quede dentro de lo
      visible aunque iOS ancle los elementos fijos a un viewport más grande.
      Estos valores CSS son solo el respaldo inicial. */
-  position:fixed;left:0;right:0;bottom:0;z-index:100;
+  position:fixed;left:0;right:0;bottom:calc(-1 * var(--vp-gap));z-index:100;
   /* dvh (viewport visible real), NO vh: en iOS instalado vh ve la pantalla
      completa (incluida la barra de estado) y una hoja alta se extendía por
      debajo del área visible y se cortaba abajo. dvh usa el alto realmente
@@ -934,7 +950,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v100";
+const APP_VERSION = "v101";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4430,13 +4446,17 @@ function fitSheet(){
   const h=(vv && vv.height) || window.innerHeight || 0;
   if(h<=260) return;
   // Teclado abierto: iOS encoge el visualViewport pero deja los elementos fijos
-  // anclados al viewport de layout (detrás del teclado). Calculamos cuánto tapa
-  // el teclado y elevamos el borde inferior de la hoja esa cantidad, para que el
-  // campo enfocado y los botones queden por ENCIMA del teclado, no tapados.
-  // Sin teclado, overlap=0 y la hoja queda pegada abajo como siempre.
-  let overlap=0;
-  if(vv){ overlap=Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)); }
-  host.style.bottom=overlap+"px";
+  // anclados al viewport de layout (detrás del teclado). Elevamos el borde
+  // inferior de la hoja lo que tape el teclado, para que el campo y los botones
+  // queden por ENCIMA del teclado. CLAVE: solo un solapamiento GRANDE (>150px)
+  // es un teclado real; en modo translúcido innerHeight y visualViewport ya
+  // difieren ~47px (safe-area) SIN teclado, y tomar eso por teclado subía la
+  // hoja de más (flotando arriba). Sin teclado dejamos el bottom del CSS
+  // (−vp-gap, que ancla la hoja al fondo REAL de la pantalla).
+  let kb=0;
+  if(vv){ const raw=Math.round(window.innerHeight - vv.height - vv.offsetTop); if(raw>150) kb=raw; }
+  if(kb>0) host.style.bottom=kb+"px";
+  else     host.style.bottom="";
   host.style.maxHeight=Math.round(h-12)+"px";
 }
 function boot(){
