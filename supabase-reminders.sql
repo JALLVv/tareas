@@ -10,8 +10,12 @@
 --      `send-push` (la misma que ya usan los avisos de amigos) para enviar el
 --      push a los dispositivos suscritos del usuario.
 --
--- REQUISITO: pon abajo la URL de tu proyecto y la SERVICE ROLE KEY (donde dice
--- <<<...>>>). La service role key está en: Ajustes → API → service_role.
+-- SEGURIDAD: NO se usa la service_role key (privada). Solo la ANON key, que es
+-- PÚBLICA por diseño (ya va incrustada en la app) y es segura de publicar. El
+-- trabajo con permisos (leer suscripciones, firmar el push) lo hace la Edge
+-- Function send-push con SU propia clave privada, que Supabase le da como
+-- variable de entorno — nunca sale del servidor ni entra al repositorio.
+-- La URL del proyecto y la anon key de abajo ya son las tuyas.
 -- =====================================================================
 
 -- Extensiones necesarias (en Supabase suelen estar disponibles).
@@ -59,8 +63,10 @@ declare
   ldow     int;
   ldom     int;
   ldate    date;
-  proj_url text := 'https://muvqfjyzneszkptsjxgi.supabase.co';        -- p.ej. https://xxxx.supabase.co
-  svc_key  text := '<<<SERVICE_ROLE_KEY>>>';   -- service_role (secreta)
+  proj_url text := 'https://muvqfjyzneszkptsjxgi.supabase.co';
+  -- ANON key (PÚBLICA, la misma de la app). Segura de publicar: solo sirve para
+  -- INVOCAR la Edge Function; el envío del push lo hace ella con su clave privada.
+  anon_key text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11dnFmanl6bmVzemtwdHNqeGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDI0NjIsImV4cCI6MjA5ODI3ODQ2Mn0.Ud4QhDc2EsTKPQoHtEaubH3jMTppI4CKDZKZqGf2Uao';
 begin
   for r in select * from public.reminders where active loop
     -- hora local del usuario = ahora (UTC) menos su offset (minutos)
@@ -83,7 +89,8 @@ begin
       url     := proj_url || '/functions/v1/send-push',
       headers := jsonb_build_object(
                    'Content-Type','application/json',
-                   'Authorization','Bearer ' || svc_key),
+                   'apikey', anon_key,
+                   'Authorization','Bearer ' || anon_key),
       body    := jsonb_build_object(
                    'recipientId', r.user_id,
                    'title', '🛎️ Recordatorio',
