@@ -950,7 +950,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v101";
+const APP_VERSION = "v102";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2130,7 +2130,16 @@ const Gamify = (() => {
 const Sheets = (() => {
   const scrim = $("#scrim"), host = $("#sheet");
   let onClose = null;
+  // Al enfocar un campo dentro de la hoja, el teclado la eleva; centramos el
+  // campo enfocado en el área visible para que quede JUSTO encima del teclado
+  // (esperamos a que el teclado termine de abrir y la hoja se reubique).
+  host.addEventListener("focusin", (e)=>{
+    const t=e.target;
+    if(!t || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    setTimeout(()=>{ try{ t.scrollIntoView({block:"center", behavior:"smooth"}); }catch(_){}}, 330);
+  });
   function open(html, cls){
+    delete host.dataset.closing;
     try{ fitSheet(); }catch(e){} // ajusta el alto de la hoja al área visible
     host.className = "sheet" + (cls?(" "+cls):"");
     host.innerHTML = html;
@@ -2145,6 +2154,7 @@ const Sheets = (() => {
   // usara open() ahí, quitaría y volvería a poner "show" y la hoja completa
   // se vería "temblar" (baja y vuelve a subir) en cada navegación.
   function swap(html, cls){
+    delete host.dataset.closing;
     host.className = "sheet show" + (cls?(" "+cls):"");
     host.innerHTML = html;
     scrim.classList.add("show");
@@ -2153,9 +2163,15 @@ const Sheets = (() => {
     return host;
   }
   function close(){
+    // marca "cerrando" para que fitSheet no reubique la hoja mientras sale, y
+    // cierra el teclado (blur) para que su desaparición no la empuje.
+    host.dataset.closing = "1";
+    const a=document.activeElement; if(a && a.blur) a.blur();
     host.classList.remove("show");
     scrim.classList.remove("show");
     if (onClose){ const f=onClose; onClose=null; setTimeout(f,300); }
+    // al acabar la animación de salida, limpia estado y estilos en línea
+    setTimeout(()=>{ delete host.dataset.closing; host.style.bottom=""; host.style.maxHeight=""; }, 480);
   }
   // Abre si está cerrado; si ya hay una hoja abierta, solo cambia el contenido
   // (swap). Así, navegar dentro de una hoja (aceptar un aviso, pasar de las
@@ -4442,6 +4458,11 @@ function updateDiag(){
 // dejando el botón inferior visible. No mueve la hoja (bottom:0).
 function fitSheet(){
   const host=document.getElementById("sheet"); if(!host) return;
+  // Mientras la hoja se cierra NO la reposicionamos: si el teclado se cerrara a
+  // la vez, un reajuste aquí la bajaría de golpe al fondo ANTES de deslizarse
+  // fuera, dando sensación de cierre lento/"reaparece abajo". La dejamos donde
+  // está y que solo la anime el transform de salida.
+  if(host.dataset.closing) return;
   const vv=window.visualViewport;
   const h=(vv && vv.height) || window.innerHeight || 0;
   if(h<=260) return;
