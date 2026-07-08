@@ -59,7 +59,7 @@ declare
   ldow     int;
   ldom     int;
   ldate    date;
-  proj_url text := '<<<PROJECT_URL>>>';        -- p.ej. https://xxxx.supabase.co
+  proj_url text := 'https://muvqfjyzneszkptsjxgi.supabase.co';        -- p.ej. https://xxxx.supabase.co
   svc_key  text := '<<<SERVICE_ROLE_KEY>>>';   -- service_role (secreta)
 begin
   for r in select * from public.reminders where active loop
