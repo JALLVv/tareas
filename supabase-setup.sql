@@ -500,7 +500,11 @@ begin
         'Content-Type', 'application/json',
         'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11dnFmanl6bmVzemtwdHNqeGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDI0NjIsImV4cCI6MjA5ODI3ODQ2Mn0.Ud4QhDc2EsTKPQoHtEaubH3jMTppI4CKDZKZqGf2Uao'
       ),
-      body    := jsonb_build_object('recipientId', new.recipient_id, 'title', 'Tareas', 'body', body, 'photo', new.photo_url)
+      -- El "tag" es DETERMINISTA (tipo + referencia + actor): el envío de respaldo
+      -- que hace la app del que actuó usa el MISMO tag, así que si el aviso llega
+      -- por los dos caminos, el sistema los funde en UNA sola notificación.
+      body    := jsonb_build_object('recipientId', new.recipient_id, 'title', 'Tareas', 'body', body, 'photo', new.photo_url,
+                                    'tag', new.type || '-' || coalesce(new.ref_key, new.actor_id::text, new.id::text))
     );
   exception when others then null; -- nunca bloquear la inserción del aviso
   end;
