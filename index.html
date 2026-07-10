@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v112";
+const APP_VERSION = "v113";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2418,10 +2418,11 @@ const Tasks = (() => {
     reminderTimers.forEach(t=>clearTimeout(t)); reminderTimers=[];
     if(!("Notification" in window) || Notification.permission!=="granted") return;
     if(localStorage.getItem("rachas_notif")==="off") return;
-    // Si la nube está activa, el push PROGRAMADO del servidor ya envía el aviso
-    // (aunque la app esté cerrada). No programamos el local para NO duplicarlo.
-    // Sin nube, el recordatorio local es el único disponible.
-    if(Cloud.enabled && Cloud.enabled()) return;
+    // REDUNDANTE: el aviso local a la hora exacta se programa SIEMPRE (con o sin
+    // nube). Con nube, el push del servidor y este local llevan el MISMO tag
+    // ('reminder-<id>') y fireReminder comprueba si ya hay uno visible igual:
+    // si llegan los dos, se queda UNO; si un camino falla, entrega el otro.
+    const cloudOn = Cloud.enabled && Cloud.enabled();
     const now=new Date(), todayKey=dateKey();
     (Store.get().tasks||[]).forEach(t=>{
       if(!t.reminder || !t.reminder.time) return;
@@ -2433,9 +2434,11 @@ const Tasks = (() => {
       const delay=at.getTime()-now.getTime();
       if(delay>26*3600*1000) return;
       if(delay<=0){
-        // La hora ya pasó hoy: iOS suspende los timers con la app cerrada, así que
-        // al REABRIR la app avisamos (catch-up) si fue hace <= 12 h y está visible.
-        if(now.getTime()-at.getTime() <= 12*3600*1000 && !document.hidden) fireReminder(t);
+        // La hora ya pasó hoy. SIN nube, iOS suspendió el timer con la app
+        // cerrada: al reabrir avisamos (catch-up, hasta 12 h después). CON nube
+        // no: el push del servidor ya avisó a su hora; repetirlo al abrir la app
+        // duplicaría un aviso que quizá ya viste y descartaste.
+        if(!cloudOn && now.getTime()-at.getTime() <= 12*3600*1000 && !document.hidden) fireReminder(t);
         return;
       }
       reminderTimers.push(setTimeout(()=>fireReminder(t), delay));
@@ -2444,10 +2447,18 @@ const Tasks = (() => {
   async function fireReminder(t){
     try{
       if(Notification.permission!=="granted" || remFired(t)) return;
-      remMark(t);
+      const title="🛎️ Recordatorio";
       const opts={ body:t.title, icon:"./icons/icon-192.png", badge:"./icons/icon-192.png", tag:"reminder-"+t.id };
-      if("serviceWorker" in navigator){ const reg=await navigator.serviceWorker.ready; reg.showNotification("🛎️ Recordatorio", opts); }
-      else { new Notification("🛎️ Recordatorio", opts); }
+      if("serviceWorker" in navigator){
+        const reg=await navigator.serviceWorker.ready;
+        // Antiduplicados: si el push del servidor ya está visible con el mismo
+        // texto (aunque llegara sin tag), no añadimos un segundo aviso.
+        try{ const ex=await reg.getNotifications();
+          if(ex.some(n=>n.title===title && n.body===t.title)){ remMark(t); return; } }catch(_){}
+        remMark(t);
+        reg.showNotification(title, opts);
+      }
+      else { remMark(t); new Notification(title, opts); }
     }catch(e){}
   }
 
@@ -3559,6 +3570,10 @@ const Cloud = (() => {
     const name=(Store.get().profile.name||"Atleta");
     try{ await client.from('notifications').insert({ recipient_id:uid, actor_id:uid, actor_name:name, type:'weekly_summary', task_title:"", ref_key:weekKey }); }
     catch(e){ console.warn("maybeNotifyWeeklySummary:", e && e.message); }
+    // Respaldo directo (a mí mismo): mismo tag que el trigger del servidor
+    // ('weekly_summary-<weekKey>') → si llegan los dos, se funden en uno.
+    try{ await client.functions.invoke('send-push', { body:{ recipientId:uid, title:"Tareas",
+      body:"Ya está disponible tu resumen de la semana", tag:'weekly_summary-'+weekKey } }); }catch(e){}
     return true;
   }
 
@@ -3631,15 +3646,21 @@ const Cloud = (() => {
   }
   // El aviso in-app Y el push (vía trigger del servidor) los crea
   // trg_notify_comment al insertarse el comentario. ADEMÁS, este dispositivo
-  // manda un push de RESPALDO directo al dueño (mismo tag: el trigger del
-  // servidor usa 'comment-<completion_key>') por si el trigger falla o está
-  // desactualizado — así el aviso llega en cualquier circunstancia, sin duplicar.
+  // manda un push de RESPALDO directo a TODOS los dueños de la completada (los
+  // consulta en la nube: cubre tareas compartidas con varios implicados, no solo
+  // el dueño que conoce el visor). Mismo tag que el trigger del servidor
+  // ('comment-<completion_key>') → si llegan los dos caminos, se funden en uno.
   async function addComment(key, text, ownerId){
     if(!enabled() || !await init() || !client || !key || !text) return false;
     const name=(Store.get().profile.name||"Atleta");
     try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text }); if(error) throw error; }
     catch(e){ console.warn("addComment:", e && e.message); return false; }
-    backupPush(ownerId, 'comment', key, null);
+    try{
+      const owners=new Set(); if(ownerId) owners.add(ownerId);
+      const { data }=await client.from('completions').select('user_id').or(`id.eq.${key},shared_id.eq.${key}`);
+      (data||[]).forEach(r=>{ if(r.user_id) owners.add(r.user_id); });
+      owners.forEach(o=>backupPush(o, 'comment', key, null));
+    }catch(e){ backupPush(ownerId, 'comment', key, null); } // al menos el conocido
     return true;
   }
   async function deleteComment(id){
