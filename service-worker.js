@@ -2,7 +2,7 @@
    App-shell offline caching. The app stores all user data in
    localStorage + IndexedDB, so caching the shell is enough to run offline. */
 
-const CACHE = "rachas-v111";
+const CACHE = "rachas-v112";
 
 const SHELL = [
   "./",
@@ -54,22 +54,44 @@ self.addEventListener("fetch", (event) => {
 });
 
 // --- Push en segundo plano (app cerrada) --------------------------------
-// La Edge Function "send-push" envía un JSON: { title, body, photo, url }.
+// La Edge Function "send-push" envía un JSON: { title, body, photo, url, tag }.
+// ANTIDUPLICADOS: el aviso puede llegar por más de un camino a la vez (trigger
+// del servidor + envío de respaldo desde el dispositivo del que actuó). Todos
+// usan el mismo "tag"; si no viene, se deriva del CONTENIDO (título+cuerpo por
+// ventana de ~1 min). Con el mismo tag, el sistema funde los avisos en UNO.
+function contentTag(title, body) {
+  const s = String(title) + "|" + String(body) + "|" + Math.floor(Date.now() / 60000);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+  return "c" + (h >>> 0).toString(36);
+}
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) {
     try { data = { body: event.data && event.data.text() }; } catch (_) {}
   }
   const title = data.title || "Tareas";
-  const options = {
-    body: data.body || "Tienes una nueva notificación",
-    icon: "./icons/icon-192.png",
-    badge: "./icons/icon-192.png",
-    tag: data.tag || undefined,
-    data: { url: data.url || "./" },
-  };
-  if (data.photo) options.image = data.photo; // foto de la tarea, formato calendario
-  event.waitUntil(self.registration.showNotification(title, options));
+  const body = data.body || "Tienes una nueva notificación";
+  event.waitUntil((async () => {
+    let tag = data.tag || contentTag(title, body);
+    // Refuerzo extra: si YA hay una notificación visible con el mismo texto,
+    // reutiliza su tag para REEMPLAZARLA en vez de añadir una segunda (cubre
+    // el caso de que los dos caminos lleguen con tags distintos).
+    try {
+      const existing = await self.registration.getNotifications();
+      const dup = existing.find((n) => n.title === title && n.body === body);
+      if (dup && dup.tag) tag = dup.tag;
+    } catch (_) {}
+    const options = {
+      body,
+      icon: "./icons/icon-192.png",
+      badge: "./icons/icon-192.png",
+      tag,
+      data: { url: data.url || "./" },
+    };
+    if (data.photo) options.image = data.photo; // foto de la tarea, formato calendario
+    await self.registration.showNotification(title, options);
+  })());
 });
 
 // Al tocar la notificación: enfoca la app (o la abre) en la sección.

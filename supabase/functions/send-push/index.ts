@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
     }
 
     // 2) Cuerpo de la petición.
-    const { recipientId, title, body, photo, url } = await req.json().catch(() => ({}));
+    const { recipientId, title, body, photo, url, tag } = await req.json().catch(() => ({}));
     if (!recipientId) return json({ error: "recipientId requerido" }, 400);
 
     // 3) Suscripciones del destinatario (service role: salta RLS).
@@ -64,12 +64,14 @@ Deno.serve(async (req) => {
       return json({ ok: true, sent: 0, note: "El destinatario no tiene dispositivos suscritos." });
     }
 
-    // 4) Enviar a cada dispositivo.
+    // 4) Enviar a cada dispositivo. El "tag" permite al service worker fundir
+    //    en UNO los avisos duplicados (mismo aviso llegando por dos caminos).
     const payload = JSON.stringify({
       title: title || "Tareas",
       body: body || "Tienes una nueva notificación",
       photo: photo || null,
       url: url || "./",
+      tag: tag || null,
     });
 
     let sent = 0;

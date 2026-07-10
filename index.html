@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v111";
+const APP_VERSION = "v112";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3014,10 +3014,11 @@ const Tasks = (() => {
       Gamify.awardCompletion(entry);
       render(); UI.renderProfile();
       // sincronizar con la nube (si está activada). El aviso a mis amigos (con
-      // push) lo crea el trigger del servidor al insertarse la completada,
-      // para cualquier tarea (compartida o no) y sin depender de mi conexión.
+      // push) lo crea el trigger del servidor al insertarse la completada; y
+      // justNow=true manda además un push de respaldo directo (mismo tag → si
+      // llegan los dos caminos se funden en uno; si uno falla, llega el otro).
       if (Cloud.enabled()){
-        Cloud.pushCompletion(entry, photoData); Cloud.pushProfile();
+        Cloud.pushCompletion(entry, photoData, true); Cloud.pushProfile();
       }
       // tarea compartida: subir la foto y marcar la fila como hecha (para ambos)
       if (task.shared && task.sharedId && Cloud.enabled() && photoData){
@@ -3320,7 +3321,10 @@ const Cloud = (() => {
   }
 
   function markSynced(id){ Store.update(s=>{ s.cloud=s.cloud||{}; s.cloud.syncedCompletions=s.cloud.syncedCompletions||[]; if(!s.cloud.syncedCompletions.includes(id)) s.cloud.syncedCompletions.push(id); }); }
-  async function pushCompletion(entry, photoDataUrl){
+  // justNow=true SOLO en la completación interactiva (no en re-sincronizaciones):
+  // manda a cada amigo un push de RESPALDO además del que envía el trigger del
+  // servidor. Mismo tag ('shared_done-<ref>') → si llegan los dos, se funden en uno.
+  async function pushCompletion(entry, photoDataUrl, justNow){
     if(!enabled() || !await init() || !client) return;
     // CLAVE: si no hay foto nueva que subir, se CONSERVA la URL existente
     // (entry.photoUrl) en vez de poner null. Antes se ponía null y eso BORRABA
@@ -3345,6 +3349,10 @@ const Cloud = (() => {
       // solo se marca como sincronizada si la foto subió (o no había). Si la foto
       // falló, se reintenta en el próximo arranque (syncBacklog).
       if(photoOk) markSynced(entry.id);
+      if(justNow){
+        const ref=entry.sharedId||entry.id;
+        (Store.get().friends||[]).forEach(f=>{ if(f.cloudId) backupPush(f.cloudId, 'shared_done', ref, photo_url); });
+      }
     }catch(e){ console.warn("pushCompletion:", e && e.message); }
   }
   // sube una completada de tarea COMPARTIDA recibida del compañero: usa la
@@ -3495,14 +3503,41 @@ const Cloud = (() => {
   }
 
   /* ---------- Notificaciones ---------- */
-  // El push ya NO se manda desde aquí: un trigger del servidor lo envía en
-  // cuanto se inserta la fila, así llega aunque cierres la app justo después
-  // (antes, si lo hacías, el push se perdía aunque el aviso in-app sí quedara).
+  // PUSH REDUNDANTE (para que llegue en cualquier circunstancia): el aviso viaja
+  // por DOS caminos a la vez — (1) el trigger del servidor lo envía al insertarse
+  // la fila (funciona aunque cierres la app justo después) y (2) este dispositivo
+  // manda un envío de RESPALDO directo a la Edge Function (funciona aunque el
+  // trigger del servidor esté desactualizado o falle en silencio). Ambos llevan
+  // el MISMO tag determinista, así que si llegan los dos, el sistema los funde
+  // en UNA sola notificación (cero duplicados).
+  function pushBodyFor(type, actorName){
+    switch(type){
+      case 'friend_request': return (actorName||'Alguien')+' te ha enviado una solicitud de amistad';
+      case 'shared_invite':  return (actorName||'Alguien')+' quiere agregarte a una tarea';
+      case 'comment':        return (actorName||'Alguien')+' te comentó';
+      case 'shared_done':    return (actorName||'Un amigo')+' completó una tarea';
+      default:               return (actorName||'Alguien')+' te envió una notificación';
+    }
+  }
+  // Envío directo (respaldo). Nunca lanza: si falla, el trigger del servidor
+  // sigue siendo el camino principal.
+  async function backupPush(recipientId, type, refKey, photoUrl){
+    try{
+      if(!client || !recipientId || recipientId===uid) return;
+      const actorName=(Store.get().profile.name||"Atleta");
+      await client.functions.invoke('send-push', { body:{
+        recipientId, title:"Tareas", body:pushBodyFor(type, actorName),
+        photo:photoUrl||null,
+        tag: type+'-'+(refKey||uid)   // mismo tag que construye el trigger del servidor
+      }});
+    }catch(e){}
+  }
   async function notify(recipientId, type, taskTitle, photoUrl, refKey){
     if(!enabled() || !await init() || !client || recipientId===uid) return;
     const actorName=(Store.get().profile.name||"Atleta");
     try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null, ref_key:refKey||null }); }
     catch(e){ console.warn("notify:", e && e.message); }
+    backupPush(recipientId, type, refKey, photoUrl); // respaldo (mismo tag → sin duplicados)
   }
   // Crea una notificación PARA MÍ MISMO (cuando detecto que un amigo completó una
   // tarea compartida). Así el aviso in-app es fiable aunque su app sea vieja.
@@ -3595,13 +3630,16 @@ const Cloud = (() => {
     }catch(e){ console.warn("fetchComments:", e && e.message); return []; }
   }
   // El aviso in-app Y el push (vía trigger del servidor) los crea
-  // trg_notify_comment al insertarse el comentario: fiable aunque cierres la
-  // app justo después de comentar.
-  async function addComment(key, text){
+  // trg_notify_comment al insertarse el comentario. ADEMÁS, este dispositivo
+  // manda un push de RESPALDO directo al dueño (mismo tag: el trigger del
+  // servidor usa 'comment-<completion_key>') por si el trigger falla o está
+  // desactualizado — así el aviso llega en cualquier circunstancia, sin duplicar.
+  async function addComment(key, text, ownerId){
     if(!enabled() || !await init() || !client || !key || !text) return false;
     const name=(Store.get().profile.name||"Atleta");
     try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text }); if(error) throw error; }
     catch(e){ console.warn("addComment:", e && e.message); return false; }
+    backupPush(ownerId, 'comment', key, null);
     return true;
   }
   async function deleteComment(id){
@@ -4546,7 +4584,7 @@ const Lightbox = (() => {
     const txt=(cInput.value||"").trim(); if(!txt || !curKey) return;
     cInput.value=""; cInput.blur();
     const key=curKey, gen=curGen;
-    const ok=await Cloud.addComment(key, txt);
+    const ok=await Cloud.addComment(key, txt, curOwner);
     if(!ok){ UI.toast("No se pudo comentar","bell","var(--red)"); }
     if(gen===curGen) load(key, gen);
   }
