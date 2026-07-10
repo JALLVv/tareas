@@ -95,6 +95,7 @@ begin
                    'recipientId', r.user_id,
                    'title', '🛎️ Recordatorio',
                    'body', r.title,
+                   'tag', 'reminder-' || r.task_id,   -- mismo tag = el sistema fusiona duplicados en uno
                    'url', './')
     );
   end loop;
