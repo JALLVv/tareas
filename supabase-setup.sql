@@ -16,6 +16,9 @@ create table if not exists public.profiles (
 );
 -- Puntos descontados por tareas no completadas en su día (penalizaciones).
 alter table public.profiles add column if not exists penalties int default 0;
+-- zona horaria del usuario (getTimezoneOffset(), minutos UTC−local): la usan los
+-- crons del servidor (resumen semanal) para avisar a la hora local correcta.
+alter table public.profiles add column if not exists tz_offset int default 0;
 
 alter table public.profiles enable row level security;
 

@@ -103,9 +103,59 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
--- Programa el cron: cada minuto.
+-- RESUMEN SEMANAL con la app CERRADA: cada lunes a las 9:00 (hora LOCAL de
+-- cada usuario, según profiles.tz_offset), si tuvo actividad la semana pasada,
+-- inserta el aviso 'weekly_summary'. El push lo manda el trigger existente
+-- (trg_send_push_notification) al insertarse la fila. Idempotente por semana
+-- (ref_key = lunes de la semana terminada): si la app ya lo creó al abrirse
+-- (o al revés), el otro camino no lo repite.
+-- ---------------------------------------------------------------------
+create or replace function public.send_weekly_summaries()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  p    record;
+  loc  timestamp;   -- "ahora" en la hora local del usuario
+  wk   date;        -- lunes de la semana TERMINADA
+begin
+  for p in select id, name, coalesce(tz_offset,0) as tz from public.profiles loop
+    loc := (now() at time zone 'UTC') - make_interval(mins => p.tz);
+    -- lunes (dow=1) a las 09:00 local
+    if extract(dow from loc)::int <> 1 or extract(hour from loc)::int <> 9 or extract(minute from loc)::int <> 0 then
+      continue;
+    end if;
+    wk := loc::date - 7;   -- hoy es lunes → el lunes anterior abre la semana terminada
+    -- solo si hubo actividad esa semana
+    if not exists (
+      select 1 from public.completions
+      where user_id = p.id and date >= to_char(wk,'YYYY-MM-DD') and date <= to_char(wk+6,'YYYY-MM-DD')
+    ) then continue; end if;
+    -- idempotente: no repetir el aviso de esa semana
+    if exists (
+      select 1 from public.notifications
+      where recipient_id = p.id and type = 'weekly_summary' and ref_key = to_char(wk,'YYYY-MM-DD')
+    ) then continue; end if;
+    begin
+      insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, ref_key)
+      values (p.id, p.id, coalesce(p.name,'Atleta'), 'weekly_summary', '', to_char(wk,'YYYY-MM-DD'));
+    exception when others then null;
+    end;
+  end loop;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Programa los crons: cada minuto.
 -- ---------------------------------------------------------------------
 select cron.unschedule('send_due_reminders')
   where exists (select 1 from cron.job where jobname = 'send_due_reminders');
 
 select cron.schedule('send_due_reminders', '* * * * *', $$ select public.send_due_reminders(); $$);
+
+select cron.unschedule('send_weekly_summaries')
+  where exists (select 1 from cron.job where jobname = 'send_weekly_summaries');
+
+select cron.schedule('send_weekly_summaries', '* * * * *', $$ select public.send_weekly_summaries(); $$);

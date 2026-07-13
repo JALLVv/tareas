@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v113";
+const APP_VERSION = "v114";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3327,8 +3327,14 @@ const Cloud = (() => {
     }
     try{
       await client.from('profiles').upsert({ id:uid, name:s.profile.name||"Atleta", avatar_url:avatarUrl,
-        points:s.points, streak_current:s.streak.current, streak_best:s.streak.best, penalties:(s.penalties||0), updated_at:new Date().toISOString() });
-    }catch(e){ console.warn("pushProfile:", e && e.message); }
+        points:s.points, streak_current:s.streak.current, streak_best:s.streak.best, penalties:(s.penalties||0),
+        tz_offset:new Date().getTimezoneOffset(), updated_at:new Date().toISOString() });
+    }catch(e){ console.warn("pushProfile:", e && e.message);
+      // compatibilidad: si la columna tz_offset aún no existe en el proyecto,
+      // reintenta sin ella para no dejar el perfil sin sincronizar.
+      try{ await client.from('profiles').upsert({ id:uid, name:s.profile.name||"Atleta", avatar_url:avatarUrl,
+        points:s.points, streak_current:s.streak.current, streak_best:s.streak.best, penalties:(s.penalties||0), updated_at:new Date().toISOString() }); }catch(_){}
+    }
   }
 
   function markSynced(id){ Store.update(s=>{ s.cloud=s.cloud||{}; s.cloud.syncedCompletions=s.cloud.syncedCompletions||[]; if(!s.cloud.syncedCompletions.includes(id)) s.cloud.syncedCompletions.push(id); }); }
@@ -3568,12 +3574,13 @@ const Cloud = (() => {
       if(data && data.length) return false; // ya avisado
     }catch(e){ return false; }
     const name=(Store.get().profile.name||"Atleta");
+    // El push lo manda el trigger del servidor al insertarse la fila. SIN envío
+    // de respaldo aquí: este aviso se crea con la app ABIERTA (lo generas tú
+    // mismo), así que el push extra solo duplicaba. El aviso con la app CERRADA
+    // lo cubre el cron del servidor (send_weekly_summaries), idempotente con
+    // este mismo ref_key: quien llegue primero inserta, el otro no repite.
     try{ await client.from('notifications').insert({ recipient_id:uid, actor_id:uid, actor_name:name, type:'weekly_summary', task_title:"", ref_key:weekKey }); }
     catch(e){ console.warn("maybeNotifyWeeklySummary:", e && e.message); }
-    // Respaldo directo (a mí mismo): mismo tag que el trigger del servidor
-    // ('weekly_summary-<weekKey>') → si llegan los dos, se funden en uno.
-    try{ await client.functions.invoke('send-push', { body:{ recipientId:uid, title:"Tareas",
-      body:"Ya está disponible tu resumen de la semana", tag:'weekly_summary-'+weekKey } }); }catch(e){}
     return true;
   }
 
