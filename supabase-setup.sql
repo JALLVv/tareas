@@ -287,6 +287,13 @@ as $$
 declare f uuid; cname text;
 begin
   if new.id like 'sh\_%' escape '\' then return new; end if; -- completada recibida (no la hiciste tú)
+  -- Solo completadas RECIENTES (hoy/ayer en cualquier zona horaria): las
+  -- re-subidas de historial (resync/transferencia) insertan completadas
+  -- antiguas y NO deben avisar a los amigos (spam de avisos falsos que además
+  -- contamina la ventana antiduplicados de 6 h).
+  if new.date is null or new.date < to_char((now() at time zone 'UTC') - interval '2 days', 'YYYY-MM-DD') then
+    return new;
+  end if;
   select name into cname from public.profiles where id = new.user_id;
   for f in
     select case when requester = new.user_id then addressee else requester end
