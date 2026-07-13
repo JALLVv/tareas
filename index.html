@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v117";
+const APP_VERSION = "v118";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -4580,6 +4580,11 @@ function openSettingsSheet(){
           <div class="sr-info"><div class="sr-t">Nube</div><div class="sr-s" id="setCloudSub" style="${cs.disconnected?'color:var(--red);font-weight:600;':(cs.superseded?'color:var(--orange);font-weight:600;':'')}">${cloudSub}</div></div>
           <span class="sr-chev">›</span>
         </button>
+        <button class="settings-row tappable" id="setTestPush">
+          <span class="sr-ic emoji">🧪</span>
+          <div class="sr-info"><div class="sr-t">Probar notificación</div><div class="sr-s" id="setTestSub">Comprueba la cadena completa del push</div></div>
+          <span class="sr-chev">›</span>
+        </button>
         <button class="settings-row tappable" id="setTransfer">
           <span class="sr-ic emoji">↔️</span>
           <div class="sr-info"><div class="sr-t">Transferir datos</div><div class="sr-s">Mueve tu cuenta a otra instalación</div></div>
@@ -4587,6 +4592,15 @@ function openSettingsSheet(){
         </button>
       </div>
     </div>`);
+  // Estado en vivo de la suscripción push de ESTE dispositivo (bajo "Probar").
+  (async ()=>{ try{
+    const el=$("#setTestSub"); if(!el) return;
+    if(!("serviceWorker" in navigator) || !("PushManager" in window)){ el.textContent="Push no disponible en este navegador"; return; }
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.getSubscription();
+    el.textContent = sub ? "Dispositivo suscrito ✅ · toca para enviarte una prueba"
+                         : "⚠️ Este dispositivo NO está suscrito · activa Notificaciones arriba";
+  }catch(e){} })();
   $("#setClose").onclick=Sheets.close;
   $("#setCloud").onclick=async ()=>{
     haptic();
@@ -4627,6 +4641,14 @@ function openSettingsSheet(){
     }
   };
   $("#setTransfer").onclick=()=>{ haptic(); openTransferSheet(); };
+  $("#setTestPush").onclick=async ()=>{
+    haptic();
+    const el=$("#setTestSub"); if(el) el.textContent="Enviando prueba…";
+    const r=await Cloud.testPush();
+    if(r && r.ok && r.sent>0){ if(el) el.textContent=`Prueba enviada a ${r.sent} dispositivo(s) · debería sonar YA`; UI.toast("Prueba enviada ✅","check","var(--green)"); }
+    else if(r && r.ok){ if(el) el.textContent="⚠️ La función respondió pero no hay dispositivos suscritos"; UI.toast("Sin dispositivos suscritos","bell","var(--red)"); }
+    else { if(el) el.textContent="❌ "+((r&&r.error)||"falló el envío"); UI.toast("Prueba fallida: "+((r&&r.error)||""),"bell","var(--red)"); }
+  };
 }
 // La sesión de nube es irrecuperable: explica las opciones y deja elegir.
 function openCloudRecoverySheet(){
