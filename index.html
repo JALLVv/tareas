@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v116";
+const APP_VERSION = "v117";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2752,41 +2752,27 @@ const Tasks = (() => {
       <div class="sheet-body photo-modal">
         <div class="ico danger">${trashSvg()}</div>
         <h3>¿Eliminar esta tarea?</h3>
-        <p>“${esc(task.title)}” se quitará de tu lista. Si ya la habías completado, sus puntos se descontarán y se borrarán su registro y su foto.</p>
+        <p>“${esc(task.title)}” se quitará de tu lista. Lo que ya completaste se conserva: tus puntos, tu racha y las fotos de tu calendario no cambian.</p>
         <button class="btn danger" id="cdConfirm">Eliminar tarea</button>
       </div>`;
     Sheets.show(head);
     $("#cdCancel").onclick = Sheets.close;
     $("#cdConfirm").onclick = ()=>{
       haptic(20);
-      let removedPts = 0;
-      const photoIds = [];
+      // Eliminar una tarea NO toca lo ya ganado: los puntos solo se pierden con
+      // la penalización de fin de día (tareas programadas sin completar). El
+      // historial, las fotos y la racha se conservan tal cual.
       Store.update(s=>{
-        // revertir las completadas de esta tarea: sumar sus puntos y recoger sus fotos
-        s.history.forEach(h=>{ if(h.taskId===task.id){ removedPts += (h.points||0); if(h.photoId) photoIds.push(h.photoId); } });
-        // quitar la tarea, descontar sus puntos y borrar sus registros del historial
-        s.tasks   = s.tasks.filter(x=>x.id!==task.id);
-        s.history = s.history.filter(h=>h.taskId!==task.id);
-        s.points  = Math.max(0, s.points - removedPts);
+        s.tasks = s.tasks.filter(x=>x.id!==task.id);
         // si es compartida, recordar que la borraste para que el sondeo no la
-        // vuelva a añadir ni re-otorgue puntos (la fila se borra para ambos)
+        // vuelva a añadir (la fila se borra para ambos)
         if(task.shared && task.sharedId && !s.deletedShared.includes(task.sharedId)) s.deletedShared.push(task.sharedId);
-        // recalcular la racha: si un día se queda sin completadas, deja de contar
-        const st = streakFromHistory(s.history);
-        s.streak.current  = st.current;
-        s.streak.lastDate = st.lastDate;
-        s.streak.best     = st.best; // récord = racha más larga que aún existe en el historial
       });
-      // borrar de IndexedDB las fotos de esas completadas
-      photoIds.forEach(id=> DB.del(id));
       if(Cloud.enabled && Cloud.enabled()) Cloud.deleteReminder(task.id); // quita su recordatorio en la nube
       Sheets.close(); render();
       if (UI.renderProfile) UI.renderProfile();
-      if (Cloud.enabled()){ Cloud.pushProfile(); Cloud.reconcile(); } // refleja la eliminación en la nube
       if (task.shared && task.sharedId && Cloud.enabled()) Cloud.deleteShared(task.sharedId); // se borra para ambos
-      // quitar mis notificaciones sobre esta tarea (ya no tiene sentido verlas)
-      if (Cloud.enabled()){ Cloud.clearNotifsByTitle(task.title); Store.update(s=>{ s.notifs=(s.notifs||[]).filter(n=>n.task_title!==task.title); }); if(Notifs&&Notifs.updateBadge) Notifs.updateBadge(); }
-      UI.toast(removedPts>0 ? `Tarea eliminada · −${removedPts} pts` : "Tarea eliminada", "check", "var(--red)");
+      UI.toast("Tarea eliminada", "check", "var(--red)");
     };
   }
   function emptyState(title,sub){
@@ -4481,9 +4467,14 @@ function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path 
    la MISMA cuenta y las fotos se re-enlazan desde la nube (Storage).
    ===================================================================== */
 async function makeTransferCode(){
-  const t=await Cloud.exportSession(); if(!t) return null;
+  // Si la sesión de nube está muerta (p. ej. instalación vieja tras una
+  // transferencia), el código se crea igual SOLO CON LOS DATOS: al restaurarlo
+  // en otra instalación, se fusiona con la cuenta de allí (rescate del
+  // historial sin sesión).
+  const t=await Cloud.exportSession();
+  let luid=Cloud.myId(); if(!luid){ try{ luid=localStorage.getItem("rachas_uid"); }catch(e){} }
   const s=Store.get();
-  const payload={ v:1, uid:Cloud.myId(), at:t.access_token, rt:t.refresh_token,
+  const payload={ v:1, uid:luid||null, at:t?t.access_token:null, rt:t?t.refresh_token:null,
     st:{ name:s.profile.name, tasks:s.tasks, penalties:s.penalties||0, deletedShared:s.deletedShared||[],
          // La lista de amigos viaja en el código (además de re-bajarse de la
          // nube al restaurar): así no se pierde aunque la sincronización falle.
@@ -4496,7 +4487,27 @@ async function makeTransferCode(){
 async function restoreFromCode(code){
   let p=null;
   try{ p=JSON.parse(decodeURIComponent(escape(atob((code||"").trim())))); }catch(e){}
-  if(!p || p.v!==1 || !p.uid || !p.rt) return { ok:false, error:"Código no válido" };
+  if(!p || p.v!==1 || !p.st) return { ok:false, error:"Código no válido" };
+  // ---- Código SOLO DE DATOS (sin sesión): fusiona el historial/tareas/amigos
+  // con la cuenta de ESTA instalación y re-sube todo a su nube. Es el rescate
+  // para cuando la instalación vieja perdió la sesión pero conserva los datos.
+  if(!p.rt){
+    const st=p.st||{};
+    Store.update(s=>{
+      const have=new Set((s.history||[]).map(h=>h.id));
+      (Array.isArray(st.history)?st.history:[]).forEach(h=>{ if(h && h.id && !have.has(h.id)){ const {photoId, ...rest}=h; s.history.push(rest); } });
+      s.history.sort((a,b)=> ((a.date||"")+(a.time||"")) > ((b.date||"")+(b.time||"")) ? -1 : 1);
+      const haveT=new Set((s.tasks||[]).map(t=>t.id));
+      (Array.isArray(st.tasks)?st.tasks:[]).forEach(t=>{ if(t && t.id && !haveT.has(t.id)) s.tasks.push(t); });
+      const haveF=new Set((s.friends||[]).map(f=>f.cloudId||f.id));
+      (Array.isArray(st.friends)?st.friends:[]).forEach(f=>{ if(f && !haveF.has(f.cloudId||f.id)) s.friends.push(f); });
+    });
+    Store.load();          // recalcula puntos y racha con el historial fusionado
+    Tasks.render(); Profile.render();
+    if(Cloud.enabled()){ Cloud.forceResync(); Friends.syncFriends(); } // sube TODO a la cuenta actual
+    return { ok:true };
+  }
+  if(!p.uid) return { ok:false, error:"Código no válido" };
   if(!await Cloud.init()) return { ok:false, error:"Necesitas conexión a internet" };
   // 1) leer los datos en la nube de la cuenta antigua (visible como un perfil)
   const prof=await Cloud.pullFriend(p.uid);
@@ -4652,6 +4663,7 @@ function openTransferSheet(){
       <button class="btn secondary" id="tfMake">Crear código de transferencia</button>
       <div class="code-box" id="tfBox" style="display:none;margin-top:10px;"></div>
       <button class="btn" id="tfCopy" style="display:none;margin-top:10px;">Copiar código</button>
+      <div class="hint" id="tfMode" style="display:none;color:var(--orange);"></div>
       <div class="hint">Créalo justo antes de borrar el ícono y guárdalo (Notas, mensaje a ti mismo…). No lo compartas: da acceso a tu cuenta.</div>
       <div class="lbl-sm" style="margin-top:22px;">2 · En la instalación nueva</div>
       <div class="field-block" style="border:0.5px solid var(--hairline);border-radius:14px;"><textarea class="field" id="tfInput" rows="3" placeholder="Pega aquí el código"></textarea></div>
@@ -4663,10 +4675,15 @@ function openTransferSheet(){
     haptic(); const b=$("#tfMake"); b.disabled=true; b.textContent="Creando…";
     const code=await makeTransferCode();
     b.disabled=false; b.textContent="Crear código de transferencia";
-    if(!code){ UI.toast("Necesitas conexión para crear el código","bell","var(--red)"); return; }
+    if(!code){ UI.toast("No se pudo crear el código","bell","var(--red)"); return; }
     const box=$("#tfBox"), cp=$("#tfCopy");
     box.style.display="block"; box.textContent=code;
     cp.style.display="flex";
+    // Sin sesión de nube, el código es SOLO DE DATOS: avisarlo con claridad.
+    const mode=$("#tfMode");
+    if(mode){ const connected=Cloud.state && Cloud.state().connected;
+      mode.style.display = connected ? "none" : "block";
+      mode.textContent = connected ? "" : "⚠️ Código SOLO DE DATOS (esta instalación no tiene sesión de nube): al restaurarlo, tu calendario y tareas se FUSIONAN con la cuenta de la otra instalación."; }
     cp.onclick=()=>{ try{ navigator.clipboard && navigator.clipboard.writeText(code); }catch(e){}
       try{ const rng=document.createRange(); rng.selectNodeContents(box); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(rng); }catch(e){}
       haptic(); UI.toast("Código copiado","check","var(--green)"); };
