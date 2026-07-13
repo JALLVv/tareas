@@ -85,19 +85,24 @@ begin
     end if;
 
     -- Llama a la Edge Function send-push (misma que los avisos de amigos).
-    perform net.http_post(
-      url     := proj_url || '/functions/v1/send-push',
-      headers := jsonb_build_object(
-                   'Content-Type','application/json',
-                   'apikey', anon_key,
-                   'Authorization','Bearer ' || anon_key),
-      body    := jsonb_build_object(
-                   'recipientId', r.user_id,
-                   'title', '🛎️ Recordatorio',
-                   'body', r.title,
-                   'tag', 'reminder-' || r.task_id,   -- mismo tag = el sistema fusiona duplicados en uno
-                   'url', './')
-    );
+    -- PROTEGIDO por fila: si un envío falla, NO aborta la función entera
+    -- (antes, una sola fila problemática dejaba sin recordatorio a todos).
+    begin
+      perform net.http_post(
+        url     := proj_url || '/functions/v1/send-push',
+        headers := jsonb_build_object(
+                     'Content-Type','application/json',
+                     'apikey', anon_key,
+                     'Authorization','Bearer ' || anon_key),
+        body    := jsonb_build_object(
+                     'recipientId', r.user_id,
+                     'title', '🛎️ Recordatorio',
+                     'body', r.title,
+                     'tag', 'reminder-' || r.task_id,   -- mismo tag = el sistema fusiona duplicados en uno
+                     'url', './')
+      );
+    exception when others then null;
+    end;
   end loop;
 end;
 $$;
