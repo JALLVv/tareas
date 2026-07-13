@@ -19,6 +19,11 @@ alter table public.profiles add column if not exists penalties int default 0;
 -- zona horaria del usuario (getTimezoneOffset(), minutos UTC−local): la usan los
 -- crons del servidor (resumen semanal) para avisar a la hora local correcta.
 alter table public.profiles add column if not exists tz_offset int default 0;
+-- "dueño" de la cuenta: identificador de la INSTALACIÓN que usa la cuenta. Al
+-- transferir, la instalación nueva lo reclama y la vieja (si sigue instalada)
+-- se retira sola al verlo cambiado — sin esto, dos instalaciones con la misma
+-- sesión se la revocan mutuamente (rotación de refresh tokens) y la nube muere.
+alter table public.profiles add column if not exists device_epoch text;
 
 alter table public.profiles enable row level security;
 

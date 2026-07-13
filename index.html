@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v115";
+const APP_VERSION = "v116";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3255,7 +3255,7 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const VAPID_PUBLIC = "BALkr9K1ATw7s5_C4jOzRk6TX8-bVL-BuYsNxHF3miixd2r9s-cHeFcsNkrpWo67Ouq53s2Pbx7dxWf8L66-W7Q";
 
 const Cloud = (() => {
-  let client=null, uid=null, ready=false, initing=null, disconnected=false;
+  let client=null, uid=null, ready=false, initing=null, disconnected=false, superseded=false;
   const sdk = ()=> (window.supabase && window.supabase.createClient) ? window.supabase : null;
   function configured(){ return !!sdk() && typeof SUPABASE_URL==="string" && SUPABASE_URL.startsWith("http"); }
   function enabled(){ return configured(); } // la nube es el modo único: activa si el SDK está disponible
@@ -3263,8 +3263,24 @@ const Cloud = (() => {
   const UID_KEY = "rachas_uid"; // recuerda la cuenta para no crear una nueva por error
   function knownUid(){ try{ return localStorage.getItem(UID_KEY); }catch(e){ return null; } }
   function rememberUid(id){ if(id){ try{ localStorage.setItem(UID_KEY, id); }catch(e){} } }
+  // "Dueño" de la cuenta: cada instalación guarda su marca (epoch). Si la marca
+  // de la nube es de OTRA instalación (p. ej. tras transferir la cuenta sin
+  // borrar la app vieja), ESTA instalación se retira: deja de renovar la sesión
+  // (dos instalaciones renovando el mismo refresh token se lo revocan
+  // mutuamente y la nube muere para las dos, en silencio).
+  const EPOCH_KEY = "rachas_epoch";
+  function localEpoch(){ try{ return localStorage.getItem(EPOCH_KEY); }catch(e){ return null; } }
+  async function claimEpoch(){
+    try{
+      if(!client || !uid) return;
+      const e = "e"+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+      try{ localStorage.setItem(EPOCH_KEY, e); }catch(_){}
+      await client.from('profiles').upsert({ id:uid, device_epoch:e });
+    }catch(e){}
+  }
   async function init(){
     if(ready) return uid;
+    if(superseded) return null;  // esta instalación fue transferida: no usar la sesión
     if(!configured()) return null;
     if(initing) return initing;
     initing = (async ()=>{
@@ -3294,6 +3310,23 @@ const Cloud = (() => {
         }
         uid = session && session.user ? session.user.id : null; ready=!!uid;
         rememberUid(uid);
+        // ¿Sigue siendo ESTA instalación la dueña de la cuenta? Si la marca de
+        // la nube es de otra (cuenta transferida sin borrar esta app), retirarse:
+        // parar la renovación del token (fin de la "pelea" que mataba la sesión
+        // de ambas) y dejar la nube inactiva aquí. Reclamable desde Ajustes.
+        if(ready){
+          try{
+            const { data:prof } = await client.from('profiles').select('device_epoch').eq('id', uid).maybeSingle();
+            const cloudE = prof && prof.device_epoch;
+            const mine = localEpoch();
+            if(!cloudE){ claimEpoch(); }                    // cuenta sin marca: reclamar
+            else if(cloudE !== mine){
+              superseded=true; ready=false;
+              try{ client.auth.stopAutoRefresh(); }catch(_){}
+              return null;
+            }
+          }catch(e){} // sin red para comprobar: seguir normal (se comprueba al próximo arranque)
+        }
         return uid;
       }catch(e){ console.warn("Cloud init:", e && e.message); client=null; return null; }
       finally{ initing=null; }
@@ -3304,7 +3337,7 @@ const Cloud = (() => {
   // Estado de la nube, visible en Ajustes: conectada / desconectada (sesión
   // perdida). Antes esta desconexión era SILENCIOSA: la app funcionaba local
   // pero dejaba de subir todo (amigos veían el perfil congelado y sin avisos).
-  function state(){ return { connected: !!ready, disconnected, hasAccount: !!knownUid(), uid }; }
+  function state(){ return { connected: !!ready, disconnected, superseded, hasAccount: !!knownUid(), uid }; }
   // Reintenta restaurar la sesión (getSession + refreshSession). Si lo logra,
   // re-sincroniza todo para que los amigos vuelvan a ver los avances.
   async function reconnect(){
@@ -3312,6 +3345,18 @@ const Cloud = (() => {
     const id=await init();
     if(id){ disconnected=false; pushProfile(); syncBacklog(2000); ensurePush(); syncAllReminders(); }
     return id;
+  }
+  // "Usar la cuenta en ESTA instalación": reclama la marca de dueño (la otra
+  // instalación se retirará sola al abrirse) y re-sincroniza todo aquí.
+  async function reclaimHere(){
+    superseded=false; ready=false; initing=null;
+    const id=await init();          // puede volver a marcar superseded (marca ajena)
+    if(!id && !uid) return null;    // sin sesión: no hay nada que reclamar
+    superseded=false; ready=true;
+    try{ if(client) client.auth.startAutoRefresh(); }catch(_){}
+    await claimEpoch();             // ahora la marca es de ESTA instalación
+    pushProfile(); syncBacklog(2000); ensurePush(); syncAllReminders();
+    return uid;
   }
   // ÚLTIMO RECURSO (lo elige el usuario en Ajustes): la sesión es irrecuperable →
   // crea una cuenta de nube NUEVA y re-sube TODOS los datos locales (perfil,
@@ -3324,7 +3369,8 @@ const Cloud = (() => {
       const { data, error } = await client.auth.signInAnonymously(); if(error) throw error;
       uid = data.session && data.session.user ? data.session.user.id : null;
       if(!uid) return null;
-      ready=true; disconnected=false; rememberUid(uid);
+      ready=true; disconnected=false; superseded=false; rememberUid(uid);
+      await claimEpoch(); // esta instalación es la dueña de la cuenta nueva
       await pushProfile();
       forceResync();      // re-sube historial completo + fotos y reconcilia
       ensurePush(); syncAllReminders();
@@ -3884,13 +3930,17 @@ const Cloud = (() => {
       // aunque el access token que viajó en el código ya haya caducado.
       const { data, error } = await client.auth.refreshSession({ refresh_token:tokens.refresh_token });
       if(error || !data || !data.session){ console.warn("restoreSession:", error && error.message); return false; }
-      uid = data.session.user.id; ready = true;
+      uid = data.session.user.id; ready = true; superseded = false;
       rememberUid(uid); // recuerda la cuenta restaurada (para no crear una nueva por error)
+      // ESTA instalación pasa a ser la dueña de la cuenta: la instalación vieja
+      // (si sigue instalada) se retirará sola al ver la marca cambiada, en vez
+      // de quedarse renovando el mismo token y matando la sesión de ambas.
+      await claimEpoch();
       return true;
     }catch(e){ console.warn("restoreSession:", e && e.message); return false; }
   }
 
-  return { configured, enabled, init, myId, state, reconnect, startFresh, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
+  return { configured, enabled, init, myId, state, reconnect, reclaimHere, startFresh, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
     createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, syncAllReminders, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     fetchComments, addComment, deleteComment, exportSession, restoreSession };
@@ -4502,7 +4552,8 @@ function openSettingsSheet(){
   const notifOn = hasN && Notification.permission==="granted" && localStorage.getItem("rachas_notif")!=="off";
   const cs = Cloud.state ? Cloud.state() : { connected:true };
   const cloudSub = cs.connected ? 'Conectada · tus amigos ven tus avances'
-                 : (cs.disconnected ? 'SIN CONEXIÓN · tus amigos no ven tus avances' : 'Conectando…');
+                 : (cs.superseded ? 'Cuenta transferida a otra instalación · toca para usarla AQUÍ'
+                 : (cs.disconnected ? 'SIN CONEXIÓN · tus amigos no ven tus avances' : 'Conectando…'));
   Sheets.show(`
     <div class="grabber"></div>
     <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Ajustes</span><span class="act" id="setClose">Cerrar</span></div>
@@ -4515,7 +4566,7 @@ function openSettingsSheet(){
         </div>
         <button class="settings-row tappable" id="setCloud">
           <span class="sr-ic emoji">☁️</span>
-          <div class="sr-info"><div class="sr-t">Nube</div><div class="sr-s" id="setCloudSub" style="${cs.disconnected?'color:var(--red);font-weight:600;':''}">${cloudSub}</div></div>
+          <div class="sr-info"><div class="sr-t">Nube</div><div class="sr-s" id="setCloudSub" style="${cs.disconnected?'color:var(--red);font-weight:600;':(cs.superseded?'color:var(--orange);font-weight:600;':'')}">${cloudSub}</div></div>
           <span class="sr-chev">›</span>
         </button>
         <button class="settings-row tappable" id="setTransfer">
@@ -4530,7 +4581,18 @@ function openSettingsSheet(){
     haptic();
     const st=Cloud.state();
     if(st.connected){ UI.toast("Nube conectada ✅","check","var(--green)"); return; }
-    const sub=$("#setCloudSub"); if(sub) sub.textContent="Reconectando…";
+    const sub=$("#setCloudSub");
+    if(st.superseded){
+      // La cuenta se usa en otra instalación: reclamarla AQUÍ (la otra se
+      // retirará sola la próxima vez que se abra).
+      if(sub) sub.textContent="Reclamando cuenta…";
+      const id=await Cloud.reclaimHere();
+      if(id){ if(sub){ sub.textContent="Conectada · tus amigos ven tus avances"; sub.style.color=""; sub.style.fontWeight=""; }
+        UI.toast("Cuenta activa en esta instalación ✅","check","var(--green)"); return; }
+      if(sub) sub.textContent="No se pudo reclamar (sesión perdida)";
+      openCloudRecoverySheet(); return;
+    }
+    if(sub) sub.textContent="Reconectando…";
     const id=await Cloud.reconnect();
     if(id){ if(sub){ sub.textContent="Conectada · tus amigos ven tus avances"; sub.style.color=""; sub.style.fontWeight=""; }
       UI.toast("Nube reconectada ✅","check","var(--green)"); return; }
@@ -4936,7 +4998,8 @@ function boot(){
         // La sesión no se pudo restaurar: AVISAR (antes era silencioso y el
         // perfil quedaba congelado para los amigos sin que nadie lo supiera).
         const st=Cloud.state ? Cloud.state() : null;
-        if(st && st.disconnected) setTimeout(()=>UI.toast("Nube sin conexión · revisa Ajustes ⚙️","bell","var(--red)"), 1200);
+        if(st && st.superseded) setTimeout(()=>UI.toast("Cuenta transferida a otra instalación · Ajustes ⚙️","bell","var(--orange)"), 1200);
+        else if(st && st.disconnected) setTimeout(()=>UI.toast("Nube sin conexión · revisa Ajustes ⚙️","bell","var(--red)"), 1200);
         return;
       }
       Cloud.pushProfile();
