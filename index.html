@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v114";
+const APP_VERSION = "v115";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3255,7 +3255,7 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const VAPID_PUBLIC = "BALkr9K1ATw7s5_C4jOzRk6TX8-bVL-BuYsNxHF3miixd2r9s-cHeFcsNkrpWo67Ouq53s2Pbx7dxWf8L66-W7Q";
 
 const Cloud = (() => {
-  let client=null, uid=null, ready=false, initing=null;
+  let client=null, uid=null, ready=false, initing=null, disconnected=false;
   const sdk = ()=> (window.supabase && window.supabase.createClient) ? window.supabase : null;
   function configured(){ return !!sdk() && typeof SUPABASE_URL==="string" && SUPABASE_URL.startsWith("http"); }
   function enabled(){ return configured(); } // la nube es el modo único: activa si el SDK está disponible
@@ -3283,8 +3283,11 @@ const Cloud = (() => {
             for(let i=0;i<3 && !session;i++){
               await new Promise(r=>setTimeout(r,700));
               try{ session=(await client.auth.getSession()).data.session; }catch(e){}
+              // intenta también REFRESCAR con el refresh token guardado (getSession
+              // puede devolver null aunque el token siga siendo recuperable)
+              if(!session){ try{ const r=await client.auth.refreshSession(); session=(r.data&&r.data.session)||null; }catch(e){} }
             }
-            if(!session){ ready=false; return null; }
+            if(!session){ ready=false; disconnected=true; return null; }
           } else {
             const { data, error } = await client.auth.signInAnonymously(); if(error) throw error; session=data.session;
           }
@@ -3298,6 +3301,36 @@ const Cloud = (() => {
     return initing;
   }
   function myId(){ return uid; }
+  // Estado de la nube, visible en Ajustes: conectada / desconectada (sesión
+  // perdida). Antes esta desconexión era SILENCIOSA: la app funcionaba local
+  // pero dejaba de subir todo (amigos veían el perfil congelado y sin avisos).
+  function state(){ return { connected: !!ready, disconnected, hasAccount: !!knownUid(), uid }; }
+  // Reintenta restaurar la sesión (getSession + refreshSession). Si lo logra,
+  // re-sincroniza todo para que los amigos vuelvan a ver los avances.
+  async function reconnect(){
+    ready=false; initing=null; disconnected=false;
+    const id=await init();
+    if(id){ disconnected=false; pushProfile(); syncBacklog(2000); ensurePush(); syncAllReminders(); }
+    return id;
+  }
+  // ÚLTIMO RECURSO (lo elige el usuario en Ajustes): la sesión es irrecuperable →
+  // crea una cuenta de nube NUEVA y re-sube TODOS los datos locales (perfil,
+  // historial completo y fotos). Se conserva todo lo tuyo; los amigos tendrán
+  // que volver a agregarte porque tu ID cambia.
+  async function startFresh(){
+    try{
+      if(!configured()) return null;
+      if(!client) client = sdk().createClient(SUPABASE_URL, SUPABASE_ANON, { auth:{ persistSession:true, autoRefreshToken:true } });
+      const { data, error } = await client.auth.signInAnonymously(); if(error) throw error;
+      uid = data.session && data.session.user ? data.session.user.id : null;
+      if(!uid) return null;
+      ready=true; disconnected=false; rememberUid(uid);
+      await pushProfile();
+      forceResync();      // re-sube historial completo + fotos y reconcilia
+      ensurePush(); syncAllReminders();
+      return uid;
+    }catch(e){ console.warn("startFresh:", e && e.message); return null; }
+  }
   // URL pública "adivinada" de la foto de una completada, según el patrón de
   // subida ({uid}/{id}.jpg). Sirve como último recurso para mostrar una foto
   // que perdió su enlace: si el archivo existe en el Storage de esta cuenta se
@@ -3857,7 +3890,7 @@ const Cloud = (() => {
     }catch(e){ console.warn("restoreSession:", e && e.message); return false; }
   }
 
-  return { configured, enabled, init, myId, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
+  return { configured, enabled, init, myId, state, reconnect, startFresh, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
     createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, syncAllReminders, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     fetchComments, addComment, deleteComment, exportSession, restoreSession };
@@ -4467,6 +4500,9 @@ function openSettingsSheet(){
   const hasN = ("Notification" in window);
   const denied = hasN && Notification.permission==="denied";
   const notifOn = hasN && Notification.permission==="granted" && localStorage.getItem("rachas_notif")!=="off";
+  const cs = Cloud.state ? Cloud.state() : { connected:true };
+  const cloudSub = cs.connected ? 'Conectada · tus amigos ven tus avances'
+                 : (cs.disconnected ? 'SIN CONEXIÓN · tus amigos no ven tus avances' : 'Conectando…');
   Sheets.show(`
     <div class="grabber"></div>
     <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Ajustes</span><span class="act" id="setClose">Cerrar</span></div>
@@ -4477,6 +4513,11 @@ function openSettingsSheet(){
           <div class="sr-info"><div class="sr-t">Notificaciones</div><div class="sr-s">${denied?'Bloqueadas en iOS · actívalas en Ajustes › esta app':'Avisos de amigos y recordatorios'}</div></div>
           <div class="switch${notifOn?' on':''}" id="setNotif"><div class="knob"></div></div>
         </div>
+        <button class="settings-row tappable" id="setCloud">
+          <span class="sr-ic emoji">☁️</span>
+          <div class="sr-info"><div class="sr-t">Nube</div><div class="sr-s" id="setCloudSub" style="${cs.disconnected?'color:var(--red);font-weight:600;':''}">${cloudSub}</div></div>
+          <span class="sr-chev">›</span>
+        </button>
         <button class="settings-row tappable" id="setTransfer">
           <span class="sr-ic emoji">↔️</span>
           <div class="sr-info"><div class="sr-t">Transferir datos</div><div class="sr-s">Mueve tu cuenta a otra instalación</div></div>
@@ -4485,6 +4526,17 @@ function openSettingsSheet(){
       </div>
     </div>`);
   $("#setClose").onclick=Sheets.close;
+  $("#setCloud").onclick=async ()=>{
+    haptic();
+    const st=Cloud.state();
+    if(st.connected){ UI.toast("Nube conectada ✅","check","var(--green)"); return; }
+    const sub=$("#setCloudSub"); if(sub) sub.textContent="Reconectando…";
+    const id=await Cloud.reconnect();
+    if(id){ if(sub){ sub.textContent="Conectada · tus amigos ven tus avances"; sub.style.color=""; sub.style.fontWeight=""; }
+      UI.toast("Nube reconectada ✅","check","var(--green)"); return; }
+    if(sub) sub.textContent="SIN CONEXIÓN · no se pudo reconectar";
+    openCloudRecoverySheet();
+  };
   const sw=$("#setNotif");
   sw.onclick=async ()=>{
     haptic();
@@ -4502,6 +4554,31 @@ function openSettingsSheet(){
     }
   };
   $("#setTransfer").onclick=()=>{ haptic(); openTransferSheet(); };
+}
+// La sesión de nube es irrecuperable: explica las opciones y deja elegir.
+function openCloudRecoverySheet(){
+  Sheets.show(`
+    <div class="grabber"></div>
+    <div class="sheet-head"><span class="act cancel" id="crCancel">Cancelar</span><span class="title">Recuperar nube</span><span class="act" style="opacity:0">•</span></div>
+    <div class="sheet-body">
+      <p style="color:var(--label-2);font-size:14px;margin:6px 0 14px;line-height:1.5;">No se pudo restaurar tu sesión de nube. Tus datos (puntos, racha, calendario y fotos) están a salvo en este dispositivo. Opciones:</p>
+      <div class="lbl-sm">Si tienes un código de transferencia</div>
+      <button class="btn secondary" id="crTransfer">Restaurar con mi código</button>
+      <div class="lbl-sm" style="margin-top:20px;">Si no lo tienes</div>
+      <button class="btn" id="crFresh">Crear nube nueva con mis datos</button>
+      <div class="hint">Se crea una cuenta de nube nueva y se re-suben TODOS tus datos locales (perfil, calendario completo y fotos). Lo único que cambia: tu ID es nuevo, así que tus amigos tendrán que volver a agregarte.</div>
+    </div>`);
+  $("#crCancel").onclick=Sheets.close;
+  $("#crTransfer").onclick=()=>{ haptic(); openTransferSheet(); };
+  $("#crFresh").onclick=async ()=>{
+    haptic(15); const b=$("#crFresh"); b.disabled=true; b.textContent="Creando…";
+    const id=await Cloud.startFresh();
+    b.disabled=false; b.textContent="Crear nube nueva con mis datos";
+    if(!id){ UI.toast("No se pudo crear (¿sin conexión?)","bell","var(--red)"); return; }
+    Sheets.close();
+    UI.toast("Nube nueva creada · datos re-subidos ✅","check","var(--green)");
+    if(typeof Profile!=="undefined" && Profile.render) Profile.render();
+  };
 }
 function openTransferSheet(){
   Sheets.show(`
@@ -4855,7 +4932,13 @@ function boot(){
   // Nube (si está activada): inicia sesión y sube perfil + historial en segundo plano
   if (Cloud.enabled()){
     Cloud.init().then(id=>{
-      if(!id) return;
+      if(!id){
+        // La sesión no se pudo restaurar: AVISAR (antes era silencioso y el
+        // perfil quedaba congelado para los amigos sin que nadie lo supiera).
+        const st=Cloud.state ? Cloud.state() : null;
+        if(st && st.disconnected) setTimeout(()=>UI.toast("Nube sin conexión · revisa Ajustes ⚙️","bell","var(--red)"), 1200);
+        return;
+      }
       Cloud.pushProfile();
       // recupera enlaces de foto que falten en el calendario (p.ej. tras una
       // transferencia) ANTES de re-subir, para no pisarlos con null.
