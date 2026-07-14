@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v118";
+const APP_VERSION = "v119";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1930,10 +1930,15 @@ function confirmDeleteCompletion(h){
       <button class="btn danger" id="cdcDel">Eliminar</button>
     </div>`);
   $("#cdcCancel").onclick=Sheets.close;
-  $("#cdcDel").onclick=()=>{ haptic(15); deleteCompletion(h); Sheets.close();
-    if(typeof Tasks!=="undefined" && Tasks.render) Tasks.render();
-    if(UI && UI.renderProfile) UI.renderProfile();
-    UI.toast("Tarea completada eliminada","check","var(--red)"); };
+  $("#cdcDel").onclick=()=>{
+    // RESPONDER PRIMERO: cerrar al instante y trabajar después.
+    haptic(15); Sheets.close();
+    setTimeout(()=>{
+      deleteCompletion(h);
+      if(typeof Tasks!=="undefined" && Tasks.render) Tasks.render();
+      if(UI && UI.renderProfile) UI.renderProfile();
+      UI.toast("Tarea completada eliminada","check","var(--red)");
+    }, 60); };
 }
 // Borra una completación del historial: resta sus puntos, borra su foto (local y
 // nube), reabre la tarea para poder rehacerla y recalcula la racha.
@@ -2001,6 +2006,7 @@ const Store = (() => {
   });
   let state;
   function load(){
+    if(saveTimer) saveNow();   // vuelca lo pendiente ANTES de releer (o se perdería)
     try{ state = JSON.parse(localStorage.getItem(KEY)) || defaults(); }
     catch(e){ state = defaults(); }
     // normalizar racha al cargar: si el último día válido es anterior a ayer, se rompe
@@ -2035,7 +2041,17 @@ const Store = (() => {
     }
     return state;
   }
-  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  // Guardado DIFERIDO y fusionado: serializar todo el estado (historial +
+  // avatar) en localStorage es costoso y una sola acción dispara varios
+  // update() seguidos. Se agrupan en UN solo guardado en el siguiente tick,
+  // fuera del camino del toque (la interfaz responde primero). Al ocultar o
+  // cerrar la app se vuelca al instante para no perder nada.
+  let saveTimer=null;
+  function saveNow(){ if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; }
+    try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  function save(){ if(!saveTimer) saveTimer=setTimeout(saveNow, 0); }
+  window.addEventListener("pagehide", saveNow);
+  document.addEventListener("visibilitychange", ()=>{ if(document.hidden) saveNow(); });
   return {
     get:()=>state || load(),
     load, save,
@@ -2758,21 +2774,26 @@ const Tasks = (() => {
     Sheets.show(head);
     $("#cdCancel").onclick = Sheets.close;
     $("#cdConfirm").onclick = ()=>{
+      // RESPONDER PRIMERO: cerrar al instante; el guardado y los re-pintados van
+      // después, con la animación de cierre ya en marcha.
       haptic(20);
-      // Eliminar una tarea NO toca lo ya ganado: los puntos solo se pierden con
-      // la penalización de fin de día (tareas programadas sin completar). El
-      // historial, las fotos y la racha se conservan tal cual.
-      Store.update(s=>{
-        s.tasks = s.tasks.filter(x=>x.id!==task.id);
-        // si es compartida, recordar que la borraste para que el sondeo no la
-        // vuelva a añadir (la fila se borra para ambos)
-        if(task.shared && task.sharedId && !s.deletedShared.includes(task.sharedId)) s.deletedShared.push(task.sharedId);
-      });
-      if(Cloud.enabled && Cloud.enabled()) Cloud.deleteReminder(task.id); // quita su recordatorio en la nube
-      Sheets.close(); render();
-      if (UI.renderProfile) UI.renderProfile();
-      if (task.shared && task.sharedId && Cloud.enabled()) Cloud.deleteShared(task.sharedId); // se borra para ambos
-      UI.toast("Tarea eliminada", "check", "var(--red)");
+      Sheets.close();
+      setTimeout(()=>{
+        // Eliminar una tarea NO toca lo ya ganado: los puntos solo se pierden con
+        // la penalización de fin de día (tareas programadas sin completar). El
+        // historial, las fotos y la racha se conservan tal cual.
+        Store.update(s=>{
+          s.tasks = s.tasks.filter(x=>x.id!==task.id);
+          // si es compartida, recordar que la borraste para que el sondeo no la
+          // vuelva a añadir (la fila se borra para ambos)
+          if(task.shared && task.sharedId && !s.deletedShared.includes(task.sharedId)) s.deletedShared.push(task.sharedId);
+        });
+        if(Cloud.enabled && Cloud.enabled()) Cloud.deleteReminder(task.id); // quita su recordatorio en la nube
+        render();
+        if (UI.renderProfile) UI.renderProfile();
+        if (task.shared && task.sharedId && Cloud.enabled()) Cloud.deleteShared(task.sharedId); // se borra para ambos
+        UI.toast("Tarea eliminada", "check", "var(--red)");
+      }, 60);
     };
   }
   function emptyState(title,sub){
@@ -2919,10 +2940,16 @@ const Tasks = (() => {
       const title = titleInput.value.trim();
       if(!title) return;
       const desc = $("#ctDesc",sheet).value.trim();
+      // RESPONDER PRIMERO: cerrar el menú al instante; el guardado (localStorage),
+      // el re-pintado y la nube van después, con la animación ya en marcha.
+      haptic(15);
+      Sheets.close();
+      saveBtn.disabled = true;
       const rec = {type:recur, days:days.slice(), dates:monthDays.slice()};
       if(recur==="date") rec.date = taskDate; // fecha concreta (YYYY-MM-DD)
       const reminder = remind ? { time: (remindTime||"09:00") } : null;
       const newId = uid();
+      setTimeout(()=>{
       // Con compañero: es solo una INVITACIÓN (como una solicitud de amistad). No
       // se añade a tu lista todavía; se añadirá a ambas listas cuando la acepte.
       if(editing || !partner){
@@ -2948,8 +2975,9 @@ const Tasks = (() => {
         Cloud.createShared({ id:newId, owner_id:Cloud.myId(), owner_name:meName, partner_id:partner.cloudId, partner_name:partner.name,
           title, descr:desc, category:cat, minutes:dur, people:ppl, urgent, recurrence:rec, only_on_days:onlyDays });
       }
-      haptic(15); Sheets.close(); render();
+      render();
       UI.toast(editing?"Cambios guardados":(partner?`Invitación enviada a ${esc(partner.name)}`:"Tarea creada"),"check","var(--green)");
+      }, 60);
     };
     if(editing){ const delBtn=$("#ctDelete",sheet); if(delBtn) delBtn.onclick=()=>{ haptic(); confirmDelete(existing); }; }
     if(!editing) setTimeout(()=>titleInput.focus(),350);
@@ -2990,9 +3018,15 @@ const Tasks = (() => {
     $("#pcRetake").onclick = ()=> fileLib.click();
     $("#pcCancel").onclick = Sheets.close;
 
-    confirm.onclick = async ()=>{
+    confirm.onclick = ()=>{
+      // RESPONDER PRIMERO, trabajar después: el menú se cierra al instante y el
+      // trabajo pesado (IndexedDB, localStorage, re-pintados, red) se hace tras
+      // arrancar la animación de cierre. Antes, el clic esperaba a guardar la
+      // foto (varios MB) y reescribir el estado ANTES de cerrar → se sentía lento.
+      haptic(15);
+      Sheets.close();
+      confirm.disabled = true; // evita doble clic mientras cierra
       const photoId = uid();
-      if (photoData) await DB.put(photoId, photoData);
       const now = new Date();
       const entry = {
         id:uid(), taskId:task.id, title:task.title, category:task.category,
@@ -3002,29 +3036,31 @@ const Tasks = (() => {
         partnerId: task.shared?(task.partnerId||null):undefined,
         sharedId: task.shared?(task.sharedId||null):undefined
       };
-      // marcar la tarea
-      Store.update(s=>{
-        const t=s.tasks.find(x=>x.id===task.id);
-        if(t){ if(t.recurrence && t.recurrence.type!=="once") t.lastDone=dateKey(now); else t.done=true; }
-      });
-      Sheets.close();
-      Gamify.awardCompletion(entry);
-      render(); UI.renderProfile();
-      // sincronizar con la nube (si está activada). El aviso a mis amigos (con
-      // push) lo crea el trigger del servidor al insertarse la completada; y
-      // justNow=true manda además un push de respaldo directo (mismo tag → si
-      // llegan los dos caminos se funden en uno; si uno falla, llega el otro).
-      if (Cloud.enabled()){
-        Cloud.pushCompletion(entry, photoData, true); Cloud.pushProfile();
-      }
-      // tarea compartida: subir la foto y marcar la fila como hecha (para ambos)
-      if (task.shared && task.sharedId && Cloud.enabled() && photoData){
-        (async ()=>{
-          let url=null;
-          try{ url = await uploadSharedPhoto(task.sharedId, photoData); }catch(e){}
-          try{ await Cloud.completeShared(task.sharedId, { status:'done', completed_by:Cloud.myId(), photo_url:url, points:pts, done_date:entry.date, done_time:entry.time }); }catch(e){}
-        })();
-      }
+      setTimeout(()=>{
+        if (photoData) DB.put(photoId, photoData); // sin await: IndexedDB en segundo plano
+        // marcar la tarea
+        Store.update(s=>{
+          const t=s.tasks.find(x=>x.id===task.id);
+          if(t){ if(t.recurrence && t.recurrence.type!=="once") t.lastDone=dateKey(now); else t.done=true; }
+        });
+        Gamify.awardCompletion(entry);
+        render(); UI.renderProfile();
+        // sincronizar con la nube (si está activada). El aviso a mis amigos (con
+        // push) lo crea el trigger del servidor al insertarse la completada; y
+        // justNow=true manda además un push de respaldo directo (mismo tag → si
+        // llegan los dos caminos se funden en uno; si uno falla, llega el otro).
+        if (Cloud.enabled()){
+          Cloud.pushCompletion(entry, photoData, true); Cloud.pushProfile();
+        }
+        // tarea compartida: subir la foto y marcar la fila como hecha (para ambos)
+        if (task.shared && task.sharedId && Cloud.enabled() && photoData){
+          (async ()=>{
+            let url=null;
+            try{ url = await uploadSharedPhoto(task.sharedId, photoData); }catch(e){}
+            try{ await Cloud.completeShared(task.sharedId, { status:'done', completed_by:Cloud.myId(), photo_url:url, points:pts, done_date:entry.date, done_time:entry.time }); }catch(e){}
+          })();
+        }
+      }, 60); // deja arrancar la animación de cierre antes del trabajo pesado
     };
   }
   // sube la foto de una tarea compartida al Storage y devuelve su URL pública
