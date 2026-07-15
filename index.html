@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v119";
+const APP_VERSION = "v120";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3469,7 +3469,10 @@ const Cloud = (() => {
       if(photoOk) markSynced(entry.id);
       if(justNow){
         const ref=entry.sharedId||entry.id;
-        (Store.get().friends||[]).forEach(f=>{ if(f.cloudId) backupPush(f.cloudId, 'shared_done', ref, photo_url); });
+        (Store.get().friends||[]).forEach(f=>{ if(f.cloudId){
+          backupDoneNotify(f.cloudId, entry, photo_url);           // aviso in-app (fila) si el trigger no lo creó
+          backupPush(f.cloudId, 'shared_done', ref, photo_url);    // push directo (mismo tag → sin duplicados)
+        } });
       }
     }catch(e){ console.warn("pushCompletion:", e && e.message); }
   }
@@ -3656,6 +3659,23 @@ const Cloud = (() => {
     try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null, ref_key:refKey||null }); }
     catch(e){ console.warn("notify:", e && e.message); }
     backupPush(recipientId, type, refKey, photoUrl); // respaldo (mismo tag → sin duplicados)
+  }
+  // Respaldo del aviso "completó una tarea" COMO FILA (no solo push): si el
+  // trigger del servidor no avisó (p. ej. la amistad en la nube está rota o
+  // desactualizada), este dispositivo crea el aviso in-app del amigo. Se
+  // comprueba antes si el trigger ya lo insertó, para no duplicar.
+  async function backupDoneNotify(recipientId, entry, photoUrl){
+    try{
+      if(!client || !recipientId || recipientId===uid) return;
+      const ref = entry.sharedId || entry.id;
+      const { data } = await client.from('notifications').select('id')
+        .eq('recipient_id',recipientId).eq('actor_id',uid).eq('type','shared_done').eq('ref_key',ref).limit(1);
+      if(data && data.length) return;   // el trigger ya avisó
+      const actorName=(Store.get().profile.name||"Atleta");
+      await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName,
+        type:'shared_done', task_title:entry.title||"", photo_url:photoUrl||null, ref_key:ref,
+        task_time:entry.time||null, task_category:entry.category||null, task_points:entry.points||null });
+    }catch(e){}
   }
   // Crea una notificación PARA MÍ MISMO (cuando detecto que un amigo completó una
   // tarea compartida). Así el aviso in-app es fiable aunque su app sea vieja.
@@ -4641,7 +4661,16 @@ function openSettingsSheet(){
   $("#setCloud").onclick=async ()=>{
     haptic();
     const st=Cloud.state();
-    if(st.connected){ UI.toast("Nube conectada ✅","check","var(--green)"); return; }
+    if(st.connected){
+      // Conectada: el toque fuerza una RE-SUBIDA COMPLETA (perfil + historial +
+      // fotos). Útil si a tus amigos les falta parte de tu calendario.
+      const sub=$("#setCloudSub"); if(sub) sub.textContent="Re-subiendo todo tu calendario…";
+      UI.toast("Re-subiendo todo…","check","var(--blue)");
+      try{ await Cloud.forceResync(); }catch(e){}
+      if(sub) sub.textContent="Conectada · tus amigos ven tus avances";
+      UI.toast("Calendario re-subido ✅","check","var(--green)");
+      return;
+    }
     const sub=$("#setCloudSub");
     if(st.superseded){
       // La cuenta se usa en otra instalación: reclamarla AQUÍ (la otra se

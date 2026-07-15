@@ -59,6 +59,29 @@ alter table public.completions add column if not exists shared_id    text;
 -- normales" que ve un amigo en tu perfil).
 alter table public.completions add column if not exists random bool default false;
 
+-- MIGRACIÓN: clave primaria COMPUESTA (user_id, id). Antes la PK era solo `id`:
+-- si una cuenta nueva re-subía su historial (transferencia/nube nueva) con ids
+-- que ya existían bajo la cuenta VIEJA, el upsert chocaba con la fila ajena y
+-- RLS lo bloqueaba EN SILENCIO → el historial nunca migraba (calendario
+-- incompleto para los amigos). Con la PK compuesta, cada cuenta tiene sus
+-- propias completadas aunque compartan id.
+do $$
+begin
+  if not exists (
+    select 1
+    from information_schema.table_constraints tc
+    join information_schema.key_column_usage k
+      on k.constraint_name = tc.constraint_name and k.table_schema = tc.table_schema
+    where tc.table_schema='public' and tc.table_name='completions'
+      and tc.constraint_type='PRIMARY KEY' and k.column_name='user_id'
+  ) then
+    delete from public.completions where user_id is null;   -- huérfanas (sin dueño)
+    alter table public.completions alter column user_id set not null;
+    alter table public.completions drop constraint completions_pkey;
+    alter table public.completions add primary key (user_id, id);
+  end if;
+end $$;
+
 alter table public.completions enable row level security;
 
 drop policy if exists "completions_read"   on public.completions;
