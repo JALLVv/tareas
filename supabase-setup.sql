@@ -309,32 +309,38 @@ set search_path = public
 as $$
 declare f uuid; cname text;
 begin
-  if new.id like 'sh\_%' escape '\' then return new; end if; -- completada recibida (no la hiciste tú)
-  -- Solo completadas RECIENTES (hoy/ayer en cualquier zona horaria): las
-  -- re-subidas de historial (resync/transferencia) insertan completadas
-  -- antiguas y NO deben avisar a los amigos (spam de avisos falsos que además
-  -- contamina la ventana antiduplicados de 6 h).
-  if new.date is null or new.date < to_char((now() at time zone 'UTC') - interval '2 days', 'YYYY-MM-DD') then
-    return new;
-  end if;
-  select name into cname from public.profiles where id = new.user_id;
-  for f in
-    select case when requester = new.user_id then addressee else requester end
-    from public.friendships
-    where status = 'accepted' and (requester = new.user_id or addressee = new.user_id)
-  loop
-    begin
-      if not exists (
-        select 1 from public.notifications
-        where recipient_id = f and actor_id = new.user_id and type = 'shared_done'
-          and task_title = new.title and created_at > now() - interval '6 hours'
-      ) then
-        insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url, ref_key, task_time, task_category, task_points)
-        values(f, new.user_id, cname, 'shared_done', new.title, new.photo_url, coalesce(new.shared_id, new.id), new.time, new.category, new.points);
-      end if;
-    exception when others then null;
-    end;
-  end loop;
+  -- BLINDAJE TOTAL: un fallo en los AVISOS jamás debe bloquear la inserción de
+  -- la COMPLETADA (una excepción sin capturar en un trigger aborta el insert:
+  -- eso dejó a todos sin sincronizar cuando el filtro comparaba date con text).
+  begin
+    if new.id like 'sh\_%' escape '\' then return new; end if; -- completada recibida (no la hiciste tú)
+    -- Solo completadas RECIENTES (hoy/ayer en cualquier zona horaria): las
+    -- re-subidas de historial (resync/transferencia) insertan completadas
+    -- antiguas y NO deben avisar a los amigos. OJO: comparación date-con-date
+    -- (to_char devolvía text y "date < text" no existe en Postgres).
+    if new.date is null or new.date < ((now() at time zone 'UTC')::date - 2) then
+      return new;
+    end if;
+    select name into cname from public.profiles where id = new.user_id;
+    for f in
+      select case when requester = new.user_id then addressee else requester end
+      from public.friendships
+      where status = 'accepted' and (requester = new.user_id or addressee = new.user_id)
+    loop
+      begin
+        if not exists (
+          select 1 from public.notifications
+          where recipient_id = f and actor_id = new.user_id and type = 'shared_done'
+            and task_title = new.title and created_at > now() - interval '6 hours'
+        ) then
+          insert into public.notifications(recipient_id, actor_id, actor_name, type, task_title, photo_url, ref_key, task_time, task_category, task_points)
+          values(f, new.user_id, cname, 'shared_done', new.title, new.photo_url, coalesce(new.shared_id, new.id), new.time, new.category, new.points);
+        end if;
+      exception when others then null;
+      end;
+    end loop;
+  exception when others then null;
+  end;
   return new;
 end;
 $$;
