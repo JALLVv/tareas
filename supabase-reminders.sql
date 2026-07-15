@@ -136,7 +136,7 @@ begin
     -- solo si hubo actividad esa semana
     if not exists (
       select 1 from public.completions
-      where user_id = p.id and date >= to_char(wk,'YYYY-MM-DD') and date <= to_char(wk+6,'YYYY-MM-DD')
+      where user_id = p.id and date >= wk and date <= wk + 6   -- date con date (to_char rompía: date >= text no existe)
     ) then continue; end if;
     -- idempotente: no repetir el aviso de esa semana
     if exists (
