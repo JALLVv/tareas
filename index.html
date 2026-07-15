@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v121";
+const APP_VERSION = "v122";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3932,6 +3932,13 @@ const Cloud = (() => {
     try{ if(!enabled() || !await init() || !client) return; await client.from('reminders').delete().eq('user_id',uid).eq('task_id',String(taskId)); }
     catch(e){ console.warn("deleteReminder:", e && e.message); }
   }
+  // Mis recordatorios registrados en la nube (para el diagnóstico de Ajustes).
+  async function listReminders(){
+    try{ if(!enabled() || !await init() || !client) return null;
+      const { data, error }=await client.from('reminders').select('task_id,title,hh,mm,active').eq('user_id',uid);
+      if(error) throw error; return data||[];
+    }catch(e){ return null; }
+  }
   // Sube a la nube TODOS los recordatorios locales (para que el push programado
   // funcione aunque la tabla se creara DESPUÉS de fijar el recordatorio).
   async function syncAllReminders(){
@@ -4000,7 +4007,7 @@ const Cloud = (() => {
   }
 
   return { configured, enabled, init, myId, state, reconnect, reclaimHere, startFresh, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
-    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, syncAllReminders, testPush, updatePartner,
+    createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, syncAllReminders, listReminders, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
     fetchComments, addComment, deleteComment, exportSession, restoreSession };
 })();
@@ -4659,6 +4666,11 @@ function openSettingsSheet(){
           <div class="sr-info"><div class="sr-t">Probar notificación</div><div class="sr-s" id="setTestSub">Comprueba la cadena completa del push</div></div>
           <span class="sr-chev">›</span>
         </button>
+        <button class="settings-row tappable" id="setRem">
+          <span class="sr-ic emoji">🛎️</span>
+          <div class="sr-info"><div class="sr-t">Recordatorios</div><div class="sr-s" id="setRemSub">Comprobando…</div></div>
+          <span class="sr-chev">›</span>
+        </button>
         <button class="settings-row tappable" id="setTransfer">
           <span class="sr-ic emoji">↔️</span>
           <div class="sr-info"><div class="sr-t">Transferir datos</div><div class="sr-s">Mueve tu cuenta a otra instalación</div></div>
@@ -4731,6 +4743,27 @@ function openSettingsSheet(){
     if(r && r.ok && r.sent>0){ if(el) el.textContent=`Prueba enviada a ${r.sent} dispositivo(s) · debería sonar YA`; UI.toast("Prueba enviada ✅","check","var(--green)"); }
     else if(r && r.ok){ if(el) el.textContent="⚠️ La función respondió pero no hay dispositivos suscritos"; UI.toast("Sin dispositivos suscritos","bell","var(--red)"); }
     else { if(el) el.textContent="❌ "+((r&&r.error)||"falló el envío"); UI.toast("Prueba fallida: "+((r&&r.error)||""),"bell","var(--red)"); }
+  };
+  // Estado de los recordatorios en la NUBE (los que envía el cron): cuántos hay
+  // registrados vs cuántas tareas locales tienen recordatorio. Toque = re-subir.
+  const localRem = ()=> (Store.get().tasks||[]).filter(t=>t.reminder && t.reminder.time).length;
+  const refreshRemRow = async ()=>{
+    const el=$("#setRemSub"); if(!el) return;
+    const rows=await Cloud.listReminders();
+    const loc=localRem();
+    if(rows===null){ el.textContent="Sin conexión con la nube"; return; }
+    if(loc===0 && rows.length===0){ el.textContent="No tienes tareas con recordatorio"; return; }
+    el.textContent = rows.length>=loc
+      ? `${rows.length} registrados en la nube ✅ (${loc} locales)`
+      : `⚠️ ${rows.length} en la nube de ${loc} locales · toca para re-subirlos`;
+  };
+  refreshRemRow();
+  $("#setRem").onclick=async ()=>{
+    haptic();
+    const el=$("#setRemSub"); if(el) el.textContent="Re-subiendo recordatorios…";
+    try{ await Cloud.syncAllReminders(); }catch(e){}
+    await refreshRemRow();
+    UI.toast("Recordatorios re-sincronizados","check","var(--green)");
   };
 }
 // La sesión de nube es irrecuperable: explica las opciones y deja elegir.

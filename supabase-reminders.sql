@@ -41,6 +41,10 @@ create table if not exists public.reminders (
   primary key (user_id, task_id)
 );
 
+-- último día (local) en que se envió: evita duplicados y permite la ventana de
+-- 60 min (si el cron se retrasa o salta un minuto, el aviso NO se pierde).
+alter table public.reminders add column if not exists last_sent date;
+
 alter table public.reminders enable row level security;
 
 -- Cada quien gestiona SOLO sus recordatorios.
@@ -49,8 +53,11 @@ create policy reminders_own on public.reminders
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------
--- Función que envía los recordatorios que tocan en este minuto.
--- Calcula la hora LOCAL de cada usuario con su tz_offset (minutos) y compara.
+-- Función que envía los recordatorios que YA TOCAN y no se han enviado hoy.
+-- Antes exigía coincidencia EXACTA de hora:minuto: si pg_cron se retrasaba o
+-- saltaba esa ejecución, el recordatorio se perdía para todo el día. Ahora usa
+-- una VENTANA de 60 minutos tras la hora + la marca last_sent (una vez al día):
+-- aunque el cron falle unos minutos, el aviso sale igual, y nunca duplica.
 -- ---------------------------------------------------------------------
 create or replace function public.send_due_reminders()
 returns void
@@ -60,6 +67,7 @@ as $$
 declare
   r        record;
   loc      timestamp;     -- "ahora" en la hora LOCAL del usuario (sin tz, comparación directa)
+  due      timestamp;     -- momento programado de HOY (hora local)
   ldow     int;
   ldom     int;
   ldate    date;
@@ -69,25 +77,32 @@ declare
   anon_key text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11dnFmanl6bmVzemtwdHNqeGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDI0NjIsImV4cCI6MjA5ODI3ODQ2Mn0.Ud4QhDc2EsTKPQoHtEaubH3jMTppI4CKDZKZqGf2Uao';
 begin
   for r in select * from public.reminders where active loop
-    -- hora local del usuario = ahora (UTC) menos su offset (minutos)
-    loc  := now() at time zone 'UTC' - make_interval(mins => r.tz_offset);
-    if extract(hour from loc)::int <> r.hh or extract(minute from loc)::int <> r.mm then
-      continue;
-    end if;
-    ldow  := extract(dow  from loc)::int;   -- 0=Dom..6=Sab
-    ldom  := extract(day  from loc)::int;
-    ldate := loc::date;
-
-    if     r.kind = 'daily'   then null;                                   -- todos los días
-    elsif  r.kind = 'weekly'  then if not (r.dow @> array[ldow]) and array_length(r.dow,1) is not null then continue; end if;
-    elsif  r.kind = 'monthly' then if not (r.dom @> array[ldom]) and array_length(r.dom,1) is not null then continue; end if;
-    elsif  r.kind in ('date','once') then if r.on_date is distinct from ldate then continue; end if;
-    end if;
-
-    -- Llama a la Edge Function send-push (misma que los avisos de amigos).
-    -- PROTEGIDO por fila: si un envío falla, NO aborta la función entera
-    -- (antes, una sola fila problemática dejaba sin recordatorio a todos).
     begin
+      -- hora local del usuario = ahora (UTC) menos su offset (minutos)
+      loc := now() at time zone 'UTC' - make_interval(mins => r.tz_offset);
+      due := date_trunc('day', loc) + make_interval(hours => r.hh, mins => r.mm);
+      -- ¿ya toca? (dentro de la ventana de 60 min tras la hora programada)
+      if loc < due or loc >= due + interval '60 minutes' then continue; end if;
+      -- ¿ya se envió hoy? (una sola vez por día)
+      if r.last_sent is not distinct from loc::date then continue; end if;
+
+      ldow  := extract(dow  from loc)::int;   -- 0=Dom..6=Sab
+      ldom  := extract(day  from loc)::int;
+      ldate := loc::date;
+
+      if     r.kind = 'daily'   then null;                                   -- todos los días
+      elsif  r.kind = 'weekly'  then if not (r.dow @> array[ldow]) and array_length(r.dow,1) is not null then continue; end if;
+      elsif  r.kind = 'monthly' then if not (r.dom @> array[ldom]) and array_length(r.dom,1) is not null then continue; end if;
+      elsif  r.kind in ('date','once') then if r.on_date is distinct from ldate then continue; end if;
+      end if;
+
+      -- marca ANTES de enviar (si el envío falla, el begin/exception lo traga y
+      -- no reintenta en bucle cada minuto; el aviso de un día fallido se pierde,
+      -- preferible a un bombardeo por reintentos)
+      update public.reminders set last_sent = loc::date
+        where user_id = r.user_id and task_id = r.task_id;
+
+      -- Llama a la Edge Function send-push (misma que los avisos de amigos).
       perform net.http_post(
         url     := proj_url || '/functions/v1/send-push',
         headers := jsonb_build_object(
@@ -98,10 +113,10 @@ begin
                      'recipientId', r.user_id,
                      'title', '🛎️ Recordatorio',
                      'body', r.title,
-                     'tag', 'reminder-' || r.task_id,   -- mismo tag = el sistema fusiona duplicados en uno
+                     'tag', 'reminder-' || r.task_id,
                      'url', './')
       );
-    exception when others then null;
+    exception when others then null; -- una fila mala jamás bloquea a las demás
     end;
   end loop;
 end;
