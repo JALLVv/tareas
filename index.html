@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v120";
+const APP_VERSION = "v121";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3468,11 +3468,10 @@ const Cloud = (() => {
       // falló, se reintenta en el próximo arranque (syncBacklog).
       if(photoOk) markSynced(entry.id);
       if(justNow){
-        const ref=entry.sharedId||entry.id;
-        (Store.get().friends||[]).forEach(f=>{ if(f.cloudId){
-          backupDoneNotify(f.cloudId, entry, photo_url);           // aviso in-app (fila) si el trigger no lo creó
-          backupPush(f.cloudId, 'shared_done', ref, photo_url);    // push directo (mismo tag → sin duplicados)
-        } });
+        // Respaldo SOLO de fila: si el trigger no creó el aviso, lo crea este
+        // dispositivo, y ESA inserción dispara su push. Sin push directo extra:
+        // mandarlo además del push del trigger duplicaba la notificación.
+        (Store.get().friends||[]).forEach(f=>{ if(f.cloudId) backupDoneNotify(f.cloudId, entry, photo_url); });
       }
     }catch(e){ console.warn("pushCompletion:", e && e.message); }
   }
@@ -3653,12 +3652,15 @@ const Cloud = (() => {
       }});
     }catch(e){}
   }
+  // UNA FILA = UN PUSH: insertar el aviso dispara el push del servidor (trigger
+  // sobre notifications). NO se manda además un push directo — eso duplicaba la
+  // notificación (la deduplicación por etiqueta no es fiable en iOS). El push
+  // directo (backupPush) queda SOLO como último recurso si la fila falla.
   async function notify(recipientId, type, taskTitle, photoUrl, refKey){
     if(!enabled() || !await init() || !client || recipientId===uid) return;
     const actorName=(Store.get().profile.name||"Atleta");
-    try{ await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null, ref_key:refKey||null }); }
-    catch(e){ console.warn("notify:", e && e.message); }
-    backupPush(recipientId, type, refKey, photoUrl); // respaldo (mismo tag → sin duplicados)
+    try{ const { error }=await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName, type, task_title:taskTitle||"", photo_url:photoUrl||null, ref_key:refKey||null }); if(error) throw error; }
+    catch(e){ console.warn("notify:", e && e.message); backupPush(recipientId, type, refKey, photoUrl); }
   }
   // Respaldo del aviso "completó una tarea" COMO FILA (no solo push): si el
   // trigger del servidor no avisó (p. ej. la amistad en la nube está rota o
@@ -3670,12 +3672,13 @@ const Cloud = (() => {
       const ref = entry.sharedId || entry.id;
       const { data } = await client.from('notifications').select('id')
         .eq('recipient_id',recipientId).eq('actor_id',uid).eq('type','shared_done').eq('ref_key',ref).limit(1);
-      if(data && data.length) return;   // el trigger ya avisó
+      if(data && data.length) return;   // el trigger ya avisó (fila + push): no duplicar
       const actorName=(Store.get().profile.name||"Atleta");
-      await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName,
+      const { error } = await client.from('notifications').insert({ recipient_id:recipientId, actor_id:uid, actor_name:actorName,
         type:'shared_done', task_title:entry.title||"", photo_url:photoUrl||null, ref_key:ref,
         task_time:entry.time||null, task_category:entry.category||null, task_points:entry.points||null });
-    }catch(e){}
+      if(error) throw error;            // la fila insertada dispara SU push (trigger)
+    }catch(e){ backupPush(recipientId, 'shared_done', entry.sharedId||entry.id, photoUrl); } // último recurso
   }
   // Crea una notificación PARA MÍ MISMO (cuando detecto que un amigo completó una
   // tarea compartida). Así el aviso in-app es fiable aunque su app sea vieja.
@@ -3783,12 +3786,26 @@ const Cloud = (() => {
     const name=(Store.get().profile.name||"Atleta");
     try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text }); if(error) throw error; }
     catch(e){ console.warn("addComment:", e && e.message); return false; }
+    // Respaldo de FILA (no push directo): si el trigger del comentario no creó
+    // el aviso para algún dueño, lo crea este dispositivo — y esa inserción
+    // dispara su propio push. Sin doble envío (duplicaba la notificación).
     try{
       const owners=new Set(); if(ownerId) owners.add(ownerId);
-      const { data }=await client.from('completions').select('user_id').or(`id.eq.${key},shared_id.eq.${key}`);
-      (data||[]).forEach(r=>{ if(r.user_id) owners.add(r.user_id); });
-      owners.forEach(o=>backupPush(o, 'comment', key, null));
-    }catch(e){ backupPush(ownerId, 'comment', key, null); } // al menos el conocido
+      const { data:rows }=await client.from('completions').select('user_id,title').or(`id.eq.${key},shared_id.eq.${key}`);
+      let ttl=""; (rows||[]).forEach(r=>{ if(r.user_id) owners.add(r.user_id); if(r.title) ttl=r.title; });
+      for(const o of owners){
+        if(!o || o===uid) continue;
+        try{
+          const { data:ex }=await client.from('notifications').select('id')
+            .eq('recipient_id',o).eq('actor_id',uid).eq('type','comment').eq('ref_key',key)
+            .gt('created_at', new Date(Date.now()-120000).toISOString()).limit(1);
+          if(ex && ex.length) continue;   // el trigger ya avisó de ESTE comentario
+          const { error }=await client.from('notifications').insert({ recipient_id:o, actor_id:uid, actor_name:name,
+            type:'comment', task_title:ttl, ref_key:key });
+          if(error) throw error;
+        }catch(e){ backupPush(o, 'comment', key, null); } // último recurso
+      }
+    }catch(e){ if(ownerId && ownerId!==uid) backupPush(ownerId, 'comment', key, null); }
     return true;
   }
   async function deleteComment(id){
@@ -4340,9 +4357,10 @@ const Notifs = (() => {
       if(d<86400) return `hace ${Math.floor(d/3600)} h`; return `hace ${Math.floor(d/86400)} d`;
     }catch(e){ return ""; }
   }
-  // Una notificación se conserva si es una solicitud (de amistad o de tarea
-  // compartida: no vencen hasta que se responden) o si tiene menos de 24 h.
-  const fresh = (n)=> n.type==='friend_request' || n.type==='shared_invite' || (Date.now()-new Date(n.created_at).getTime()) < 86400000;
+  // Los avisos viven 72 h (antes 24 h: tras una racha de avisos parecía que
+  // "desaparecían" de un día para otro). Solicitudes e invitaciones no caducan
+  // hasta que se responden.
+  const fresh = (n)=> n.type==='friend_request' || n.type==='shared_invite' || (Date.now()-new Date(n.created_at).getTime()) < 259200000;
   function updateBadge(){
     const list=(Store.get().notifs||[]).filter(fresh);
     const n=list.filter(x=>!x.read).length;
