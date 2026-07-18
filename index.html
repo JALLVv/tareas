@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v122";
+const APP_VERSION = "v123";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -5138,13 +5138,11 @@ function boot(){
   // "solo hoy"/fecha vencidas desaparezcan solas), sin depender de la nube.
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden) Tasks.render(); });
 
-  // Si ya terminó una semana (lunes-domingo) que aún no se avisó, notifica
-  // (con push) que el resumen está disponible. Idempotente en el servidor
-  // (no duplica aunque se llame desde varios dispositivos o al cada rato).
-  function checkWeeklySummary(){
-    const ws = weeklySummaryFor(Store.get().history);
-    if(ws.hasData) Cloud.maybeNotifyWeeklySummary(ws.weekStart);
-  }
+  // El aviso del resumen semanal lo genera SOLO el cron del servidor
+  // (send_weekly_summaries): cada lunes a las 12:00 hora local, una sola vez,
+  // con push, y funciona con la app cerrada. Antes también lo generaba la app
+  // al abrirse, a cualquier hora — se eliminó para que la hora sea exacta y
+  // no haya carreras entre ambos caminos.
 
   // Nube (si está activada): inicia sesión y sube perfil + historial en segundo plano
   if (Cloud.enabled()){
@@ -5167,7 +5165,6 @@ function boot(){
       Notifs.refresh();     // trae notificaciones + avisa en primer plano
       autoEnablePush();     // activa el push automáticamente (pide permiso al abrir)
       Cloud.syncAllReminders(); // sube los recordatorios (para el push programado)
-      checkWeeklySummary();
       // Sondeo periódico: tareas compartidas + notificaciones nuevas; y cada
       // ~minuto, reconcilia la nube (borra del servidor lo que ya eliminaste)
       let tick=0;
@@ -5175,7 +5172,7 @@ function boot(){
       // Al volver a primer plano, refresca de inmediato
       document.addEventListener("visibilitychange",()=>{
         if(document.hidden) return;
-        Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile(); checkWeeklySummary();
+        Tasks.syncShared(); Notifs.refresh(); Friends.syncFriends(); Cloud.reconcile();
         // Revalida la suscripción push cada vez que vuelves a la app (no solo al
         // arrancar): así, si el sistema la invalidó en algún momento, se repara
         // sola sin esperar a un reinicio completo de la app.

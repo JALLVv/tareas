@@ -476,6 +476,42 @@ create policy "notif_insert" on public.notifications for insert to authenticated
 create policy "notif_update" on public.notifications for update to authenticated using (auth.uid() = recipient_id);   -- marcar como leída
 create policy "notif_delete" on public.notifications for delete to authenticated using (auth.uid() = recipient_id);
 
+-- ANTIDUPLICADOS EN ORIGEN: un mismo aviso puede intentar insertarse por DOS
+-- caminos a la vez (el trigger del servidor + el respaldo del dispositivo del
+-- que actúa). El respaldo no puede comprobar si el trigger ya avisó, porque
+-- RLS le impide leer los avisos del destinatario — así que la deduplicación se
+-- hace AQUÍ, donde sí se ven todas las filas: si ya existe un aviso equivalente
+-- reciente, la inserción se descarta (y con ella, su push). Una fila = un push.
+create or replace function public.dedupe_notification()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if exists (
+    select 1 from public.notifications
+    where recipient_id = new.recipient_id
+      and actor_id is not distinct from new.actor_id
+      and type = new.type
+      and ref_key is not distinct from new.ref_key
+      -- comentarios: ventana corta (60 s) para no tragar dos comentarios
+      -- seguidos legítimos del mismo autor en la misma tarea
+      and created_at > now() - (case when new.type = 'comment'
+                                     then interval '60 seconds'
+                                     else interval '3 minutes' end)
+  ) then
+    return null; -- duplicado: no se inserta (ni genera segundo push)
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_dedupe_notification on public.notifications;
+create trigger trg_dedupe_notification
+  before insert on public.notifications
+  for each row execute function public.dedupe_notification();
+
 -- 5b) AMISTADES (solicitudes + amigos aceptados) ----------------------
 -- Una fila por relación. status 'pending' = solicitud enviada; 'accepted' = amigos.
 -- Borrar la fila = rechazar la solicitud o eliminar al amigo (afecta a ambos).

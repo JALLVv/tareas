@@ -123,12 +123,12 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
--- RESUMEN SEMANAL con la app CERRADA: cada lunes a las 9:00 (hora LOCAL de
--- cada usuario, según profiles.tz_offset), si tuvo actividad la semana pasada,
--- inserta el aviso 'weekly_summary'. El push lo manda el trigger existente
--- (trg_send_push_notification) al insertarse la fila. Idempotente por semana
--- (ref_key = lunes de la semana terminada): si la app ya lo creó al abrirse
--- (o al revés), el otro camino no lo repite.
+-- RESUMEN SEMANAL: cada LUNES a las 12:00 (mediodía, hora LOCAL de cada
+-- usuario según profiles.tz_offset), UNA sola vez, si tuvo actividad la semana
+-- pasada. Inserta el aviso 'weekly_summary' y el push lo manda el trigger
+-- existente (trg_send_push_notification) al insertarse la fila — funciona con
+-- la app cerrada. Ventana de 60 min (si el cron se retrasa, no se pierde) e
+-- idempotente por semana (ref_key = lunes de la semana terminada).
 -- ---------------------------------------------------------------------
 create or replace function public.send_weekly_summaries()
 returns void
@@ -139,14 +139,15 @@ as $$
 declare
   p    record;
   loc  timestamp;   -- "ahora" en la hora local del usuario
+  due  timestamp;   -- lunes 12:00 local
   wk   date;        -- lunes de la semana TERMINADA
 begin
   for p in select id, name, coalesce(tz_offset,0) as tz from public.profiles loop
     loc := (now() at time zone 'UTC') - make_interval(mins => p.tz);
-    -- lunes (dow=1) a las 09:00 local
-    if extract(dow from loc)::int <> 1 or extract(hour from loc)::int <> 9 or extract(minute from loc)::int <> 0 then
-      continue;
-    end if;
+    -- solo lunes (dow=1), dentro de la ventana 12:00–13:00 local
+    if extract(dow from loc)::int <> 1 then continue; end if;
+    due := date_trunc('day', loc) + interval '12 hours';
+    if loc < due or loc >= due + interval '60 minutes' then continue; end if;
     wk := loc::date - 7;   -- hoy es lunes → el lunes anterior abre la semana terminada
     -- solo si hubo actividad esa semana
     if not exists (
