@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v123";
+const APP_VERSION = "v124";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3710,11 +3710,24 @@ const Cloud = (() => {
 
   /* ---------- Amistades (solicitudes + amigos) ---------- */
   // Envía una solicitud de amistad: crea la relación 'pending' + notificación + push.
+  // Busca un perfil por su ID EXACTO (nombre + avatar) mediante la función
+  // segura del servidor: la tabla de perfiles ya NO es legible en abierto, así
+  // que esta es la vía para agregar a alguien que todavía no es tu amigo.
+  async function lookupProfile(id){
+    try{
+      if(!enabled() || !await init() || !client || !id) return null;
+      const { data, error }=await client.rpc('lookup_profile', { target:id });
+      if(error) throw error;
+      const r=Array.isArray(data)?data[0]:data;
+      return r ? { cloudId:r.id, name:r.name||"Amigo", avatar:r.avatar_url||null } : null;
+    }catch(e){ console.warn("lookupProfile:", e && e.message); return null; }
+  }
   async function sendFriendRequest(targetId){
     if(!enabled() || !await init() || !client) return { ok:false, error:"sin conexión" };
     if(targetId===uid) return { ok:false, error:"Ese es tu propio ID" };
-    // ¿existe el usuario?
-    const prof=await pullFriend(targetId);
+    // ¿existe el usuario? (lookup seguro: aún no sois amigos, no se puede leer
+    // su perfil directamente)
+    const prof=await lookupProfile(targetId);
     if(!prof) return { ok:false, error:"No se encontró ese ID" };
     // ¿ya hay relación?
     try{
@@ -4009,7 +4022,7 @@ const Cloud = (() => {
   return { configured, enabled, init, myId, state, reconnect, reclaimHere, startFresh, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
     createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, syncAllReminders, listReminders, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
-    fetchComments, addComment, deleteComment, exportSession, restoreSession };
+    fetchComments, addComment, deleteComment, lookupProfile, exportSession, restoreSession };
 })();
 
 /* =====================================================================
@@ -4590,11 +4603,13 @@ async function restoreFromCode(code){
   }
   if(!p.uid) return { ok:false, error:"Código no válido" };
   if(!await Cloud.init()) return { ok:false, error:"Necesitas conexión a internet" };
-  // 1) leer los datos en la nube de la cuenta antigua (visible como un perfil)
-  const prof=await Cloud.pullFriend(p.uid);
-  // 2) cambiar la sesión de esta instalación a la cuenta antigua
+  // 1) cambiar PRIMERO la sesión de esta instalación a la cuenta antigua: sus
+  //    datos ya no son legibles desde fuera (las políticas exigen ser el dueño
+  //    o su amigo), así que hay que "ser" esa cuenta para poder leerlos.
   const ok=await Cloud.restoreSession({ access_token:p.at, refresh_token:p.rt });
   if(!ok) return { ok:false, error:"El código expiró o ya se usó. Genera uno nuevo en la instalación vieja justo antes de transferir." };
+  // 2) ya con su sesión, leer sus datos en la nube (perfil + completadas)
+  const prof=await Cloud.pullFriend(p.uid);
   // 3) reconstruir el estado local: base = lo que viajó en el código; las fotos
   //    y las completadas que falten se completan desde la nube.
   const st=p.st||{};

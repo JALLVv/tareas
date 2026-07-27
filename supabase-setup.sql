@@ -31,8 +31,49 @@ drop policy if exists "profiles_read"   on public.profiles;
 drop policy if exists "profiles_insert" on public.profiles;
 drop policy if exists "profiles_update" on public.profiles;
 
--- Cualquier usuario autenticado puede leer perfiles (para ver a los amigos).
-create policy "profiles_read"   on public.profiles for select to authenticated using (true);
+-- ---------------------------------------------------------------------
+-- SEGURIDAD · funciones auxiliares para las políticas
+-- Cualquiera puede crear una cuenta anónima con la clave pública (la app lo
+-- necesita), así que "estar autenticado" NO puede ser el permiso para leer
+-- datos ajenos: hay que exigir una RELACIÓN real. Son security definer para
+-- poder consultar friendships sin chocar con su propia RLS.
+-- ---------------------------------------------------------------------
+create or replace function public.are_friends(a uuid, b uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.friendships
+    where status = 'accepted'
+      and ((requester = a and addressee = b) or (requester = b and addressee = a))
+  );
+$$;
+
+-- Relación de cualquier tipo (pendiente o aceptada): permite ver el nombre de
+-- quien te envió una solicitud, o de quien acabas de solicitar.
+create or replace function public.has_link(a uuid, b uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.friendships
+    where (requester = a and addressee = b) or (requester = b and addressee = a)
+  );
+$$;
+
+-- Buscar a alguien por su ID EXACTO para agregarlo (devuelve solo nombre y
+-- avatar). Sustituye a la lectura libre de la tabla: como el ID es un UUID
+-- imposible de adivinar, se puede buscar a quien te lo dio, pero NADIE puede
+-- listar ni "pescar" los perfiles de todos los usuarios.
+create or replace function public.lookup_profile(target uuid)
+returns table (id uuid, name text, avatar_url text)
+language sql stable security definer set search_path = public as $$
+  select p.id, p.name, p.avatar_url from public.profiles p where p.id = target;
+$$;
+revoke all on function public.lookup_profile(uuid) from public;
+grant execute on function public.lookup_profile(uuid) to authenticated;
+
+-- Perfiles: solo el tuyo y el de tus amigos (o de quien tiene una solicitud
+-- contigo). ANTES era "using (true)": cualquier extraño con una cuenta anónima
+-- podía descargar los perfiles de TODOS los usuarios.
+create policy "profiles_read"   on public.profiles for select to authenticated
+  using (auth.uid() = id or public.has_link(auth.uid(), id));
 -- Solo puedes crear/editar tu propio perfil.
 create policy "profiles_insert" on public.profiles for insert to authenticated with check (auth.uid() = id);
 create policy "profiles_update" on public.profiles for update to authenticated using (auth.uid() = id);
@@ -89,7 +130,11 @@ drop policy if exists "completions_insert" on public.completions;
 drop policy if exists "completions_update" on public.completions;
 drop policy if exists "completions_delete" on public.completions;
 
-create policy "completions_read"   on public.completions for select to authenticated using (true);
+-- Completadas: las tuyas y las de tus AMIGOS (para ver su calendario). Antes
+-- era "using (true)": un extraño podía volcar el historial completo de todos
+-- (títulos, fechas, puntos y las URL de las fotos).
+create policy "completions_read"   on public.completions for select to authenticated
+  using (auth.uid() = user_id or public.are_friends(auth.uid(), user_id));
 create policy "completions_insert" on public.completions for insert to authenticated with check (auth.uid() = user_id);
 create policy "completions_update" on public.completions for update to authenticated using (auth.uid() = user_id);
 create policy "completions_delete" on public.completions for delete to authenticated using (auth.uid() = user_id);
@@ -389,7 +434,17 @@ alter table public.comments enable row level security;
 drop policy if exists "comments_read"   on public.comments;
 drop policy if exists "comments_insert" on public.comments;
 drop policy if exists "comments_delete" on public.comments;
-create policy "comments_read"   on public.comments for select to authenticated using (true);
+-- Comentarios: solo los de una completada que PUEDES ver (tuya o de un amigo),
+-- más los que tú escribiste. Antes era "using (true)".
+create policy "comments_read"   on public.comments for select to authenticated
+  using (
+    author_id = auth.uid()
+    or exists (
+      select 1 from public.completions c
+      where (c.id = comments.completion_key or c.shared_id = comments.completion_key)
+        and (c.user_id = auth.uid() or public.are_friends(auth.uid(), c.user_id))
+    )
+  );
 create policy "comments_insert" on public.comments for insert to authenticated with check (auth.uid() = author_id);
 create policy "comments_delete" on public.comments for delete to authenticated using (auth.uid() = author_id);
 
@@ -472,7 +527,14 @@ drop policy if exists "notif_insert" on public.notifications;
 drop policy if exists "notif_update" on public.notifications;
 drop policy if exists "notif_delete" on public.notifications;
 create policy "notif_read"   on public.notifications for select to authenticated using (auth.uid() = recipient_id);
-create policy "notif_insert" on public.notifications for insert to authenticated with check (auth.uid() = actor_id);   -- el actor crea la del destinatario
+-- El actor crea la notificación del destinatario, pero SOLO si hay relación
+-- (amistad o solicitud) o es para sí mismo: sin esto, cualquier extraño podía
+-- inyectar avisos —y sus push— a cualquier usuario.
+create policy "notif_insert" on public.notifications for insert to authenticated
+  with check (
+    auth.uid() = actor_id
+    and (recipient_id = auth.uid() or public.has_link(auth.uid(), recipient_id))
+  );
 create policy "notif_update" on public.notifications for update to authenticated using (auth.uid() = recipient_id);   -- marcar como leída
 create policy "notif_delete" on public.notifications for delete to authenticated using (auth.uid() = recipient_id);
 
