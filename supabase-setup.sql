@@ -58,11 +58,19 @@ alter table public.app_config enable row level security;
 -- Editor, que corre como administrador).
 revoke all on public.app_config from anon, authenticated;
 
-create or replace function public.push_secret()
+-- La función vive en el esquema PRIVADO (no expuesto en la API). OJO: en
+-- Postgres toda función nace con permiso de ejecución para PUBLIC, así que un
+-- "revoke from anon, authenticated" NO basta: si estuviera en public, cualquiera
+-- podría leer el secreto por RPC y suplantar al servidor. Aquí no se concede a
+-- nadie: solo la usan los triggers/crons, que corren como security definer.
+create schema if not exists private;
+drop function if exists public.push_secret() cascade;
+
+create or replace function private.push_secret()
 returns text language sql stable security definer set search_path = public as $$
   select coalesce((select value from public.app_config where key = 'push_hook_secret'), '');
 $$;
-revoke all on function public.push_secret() from anon, authenticated;
+revoke all on function private.push_secret() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------
 -- SEGURIDAD · funciones auxiliares para las políticas
@@ -686,7 +694,7 @@ begin
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
         'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11dnFmanl6bmVzemtwdHNqeGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDI0NjIsImV4cCI6MjA5ODI3ODQ2Mn0.Ud4QhDc2EsTKPQoHtEaubH3jMTppI4CKDZKZqGf2Uao',
-        'x-push-secret', public.push_secret()   -- identifica esta llamada como "de servidor"
+        'x-push-secret', private.push_secret()   -- identifica esta llamada como "de servidor"
       ),
       -- El "tag" es DETERMINISTA (tipo + referencia + actor): el envío de respaldo
       -- que hace la app del que actuó usa el MISMO tag, así que si el aviso llega
