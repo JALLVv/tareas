@@ -59,7 +59,11 @@ create policy reminders_own on public.reminders
 -- una VENTANA de 60 minutos tras la hora + la marca last_sent (una vez al día):
 -- aunque el cron falle unos minutos, el aviso sale igual, y nunca duplica.
 -- ---------------------------------------------------------------------
-create or replace function public.send_due_reminders()
+-- En el esquema PRIVADO: en public quedaba invocable por cualquiera vía RPC
+-- (un extraño podía disparar los envíos del servidor a voluntad).
+create schema if not exists private;
+drop function if exists public.send_due_reminders() cascade;
+create or replace function private.send_due_reminders()
 returns void
 language plpgsql
 security definer
@@ -111,7 +115,7 @@ begin
                      'Authorization','Bearer ' || anon_key,
                      -- identifica la llamada como "de servidor" ante send-push
                      -- (el secreto vive en app_config, nunca en el repositorio)
-                     'x-push-secret', public.push_secret()),
+                     'x-push-secret', private.push_secret()),
         body    := jsonb_build_object(
                      'recipientId', r.user_id,
                      'title', '🛎️ Recordatorio',
@@ -133,7 +137,9 @@ $$;
 -- la app cerrada. Ventana de 60 min (si el cron se retrasa, no se pierde) e
 -- idempotente por semana (ref_key = lunes de la semana terminada).
 -- ---------------------------------------------------------------------
-create or replace function public.send_weekly_summaries()
+-- Igual que la anterior: fuera del esquema expuesto por la API.
+drop function if exists public.send_weekly_summaries() cascade;
+create or replace function private.send_weekly_summaries()
 returns void
 language plpgsql
 security definer
@@ -177,9 +183,14 @@ $$;
 select cron.unschedule('send_due_reminders')
   where exists (select 1 from cron.job where jobname = 'send_due_reminders');
 
-select cron.schedule('send_due_reminders', '* * * * *', $$ select public.send_due_reminders(); $$);
+select cron.schedule('send_due_reminders', '* * * * *', $$ select private.send_due_reminders(); $$);
 
 select cron.unschedule('send_weekly_summaries')
   where exists (select 1 from cron.job where jobname = 'send_weekly_summaries');
 
-select cron.schedule('send_weekly_summaries', '* * * * *', $$ select public.send_weekly_summaries(); $$);
+select cron.schedule('send_weekly_summaries', '* * * * *', $$ select private.send_weekly_summaries(); $$);
+
+-- Ningún usuario de la API puede invocar estos procesos (solo el cron, que
+-- corre como administrador de la base).
+revoke all on function private.send_due_reminders()    from public, anon, authenticated;
+revoke all on function private.send_weekly_summaries() from public, anon, authenticated;
