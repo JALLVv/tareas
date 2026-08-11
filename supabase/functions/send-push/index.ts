@@ -50,11 +50,53 @@ Deno.serve(async (req) => {
     const { recipientId, title, body, photo, url, tag } = await req.json().catch(() => ({}));
     if (!recipientId) return json({ error: "recipientId requerido" }, 400);
 
-    // 3) Suscripciones del destinatario (service role: salta RLS).
+    // 3) Cliente con service role (salta RLS) para comprobaciones y envío.
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // ---------------------------------------------------------------
+    // AUTORIZACIÓN. Sin esto, cualquiera con la clave pública (que va en la
+    // app) podía mandar notificaciones con CUALQUIER texto a CUALQUIER
+    // usuario: spam y, sobre todo, phishing ("tu cuenta fue bloqueada,
+    // entra aquí"). Dos vías legítimas:
+    //   a) Servidor (cron de recordatorios / trigger de avisos): demuestra
+    //      su identidad con la cabecera x-push-secret.
+    //   b) Un usuario con sesión: solo puede enviarse a SÍ MISMO o a un
+    //      AMIGO aceptado (se verifica contra la base, no se confía en el
+    //      cliente).
+    // ---------------------------------------------------------------
+    const HOOK_SECRET = Deno.env.get("PUSH_HOOK_SECRET") ?? "";
+    const givenSecret = req.headers.get("x-push-secret") ?? "";
+    const trustedServer = !!HOOK_SECRET && givenSecret === HOOK_SECRET;
+
+    if (!trustedServer) {
+      // ¿Hay una sesión de usuario real? (el token del usuario, no la clave anónima)
+      const authHeader = req.headers.get("Authorization") ?? "";
+      const jwt = authHeader.replace(/^Bearer\s+/i, "");
+      const { data: userData } = await admin.auth.getUser(jwt);
+      const caller = userData?.user?.id ?? null;
+
+      if (!caller) {
+        // Ni servidor de confianza ni usuario: solo se permite si aún no se
+        // ha configurado el secreto (para no romper el cron antes de que el
+        // administrador lo establezca). Con el secreto puesto, se rechaza.
+        if (HOOK_SECRET) return json({ error: "No autorizado" }, 401);
+      } else if (caller !== recipientId) {
+        const { data: rel } = await admin
+          .from("friendships")
+          .select("requester")
+          .eq("status", "accepted")
+          .or(`and(requester.eq.${caller},addressee.eq.${recipientId}),and(requester.eq.${recipientId},addressee.eq.${caller})`)
+          .limit(1);
+        if (!rel || rel.length === 0) {
+          return json({ error: "Solo puedes enviar avisos a ti mismo o a tus amigos" }, 403);
+        }
+      }
+    }
+
+    // 4) Suscripciones del destinatario.
     const { data: subs, error } = await admin
       .from("push_subscriptions")
       .select("endpoint, subscription")
@@ -64,7 +106,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, sent: 0, note: "El destinatario no tiene dispositivos suscritos." });
     }
 
-    // 4) Enviar a cada dispositivo. El "tag" permite al service worker fundir
+    // 5) Enviar a cada dispositivo. El "tag" permite al service worker fundir
     //    en UNO los avisos duplicados (mismo aviso llegando por dos caminos).
     const payload = JSON.stringify({
       title: title || "Tareas",

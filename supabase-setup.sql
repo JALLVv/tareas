@@ -32,13 +32,57 @@ drop policy if exists "profiles_insert" on public.profiles;
 drop policy if exists "profiles_update" on public.profiles;
 
 -- ---------------------------------------------------------------------
+-- SECRETO COMPARTIDO servidor ↔ Edge Function (nunca en el repositorio).
+-- La función send-push solo acepta llamadas "de servidor" (cron de
+-- recordatorios y trigger de avisos) si llevan este secreto; así, un extraño
+-- con la clave pública no puede mandar notificaciones falsas a nadie.
+--
+-- CÓMO CONFIGURARLO (una sola vez, con TU propio valor secreto):
+--   1) Genera un valor largo y aleatorio (por ejemplo en el SQL Editor:
+--        select encode(gen_random_bytes(32),'hex');
+--   2) Guárdalo en la Edge Function:
+--        Dashboard → Edge Functions → Secrets → PUSH_HOOK_SECRET = <ese valor>
+--   3) Guárdalo aquí (sustituye <valor> por el mismo):
+--        insert into public.app_config(key, value) values ('push_hook_secret', '<valor>')
+--        on conflict (key) do update set value = excluded.value;
+-- Mientras no lo configures, todo sigue funcionando igual (la protección se
+-- activa sola en cuanto ambos lados tengan el secreto).
+-- ---------------------------------------------------------------------
+create table if not exists public.app_config (
+  key   text primary key,
+  value text not null
+);
+alter table public.app_config enable row level security;
+-- Sin políticas: NADIE puede leerla ni escribirla desde la API (ni anónimos ni
+-- usuarios). Solo el propio servidor (funciones security definer y el SQL
+-- Editor, que corre como administrador).
+revoke all on public.app_config from anon, authenticated;
+
+create or replace function public.push_secret()
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce((select value from public.app_config where key = 'push_hook_secret'), '');
+$$;
+revoke all on function public.push_secret() from anon, authenticated;
+
+-- ---------------------------------------------------------------------
 -- SEGURIDAD · funciones auxiliares para las políticas
 -- Cualquiera puede crear una cuenta anónima con la clave pública (la app lo
 -- necesita), así que "estar autenticado" NO puede ser el permiso para leer
 -- datos ajenos: hay que exigir una RELACIÓN real. Son security definer para
 -- poder consultar friendships sin chocar con su propia RLS.
 -- ---------------------------------------------------------------------
-create or replace function public.are_friends(a uuid, b uuid)
+-- Viven en el esquema "private", que NO está expuesto en la API: así las usan
+-- las políticas pero nadie puede invocarlas desde fuera (en public quedaban
+-- accesibles por RPC y permitían comprobar si dos personas son amigas).
+create schema if not exists private;
+grant usage on schema private to authenticated;
+-- Elimina las versiones anteriores del esquema PÚBLICO (quedaban expuestas por
+-- RPC). CASCADE se lleva por delante las políticas que las usaban; el propio
+-- script las vuelve a crear más abajo apuntando ya a private.
+drop function if exists public.are_friends(uuid, uuid) cascade;
+drop function if exists public.has_link(uuid, uuid) cascade;
+
+create or replace function private.are_friends(a uuid, b uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.friendships
@@ -49,13 +93,14 @@ $$;
 
 -- Relación de cualquier tipo (pendiente o aceptada): permite ver el nombre de
 -- quien te envió una solicitud, o de quien acabas de solicitar.
-create or replace function public.has_link(a uuid, b uuid)
+create or replace function private.has_link(a uuid, b uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.friendships
     where (requester = a and addressee = b) or (requester = b and addressee = a)
   );
 $$;
+grant execute on function private.are_friends(uuid, uuid), private.has_link(uuid, uuid) to authenticated;
 
 -- Buscar a alguien por su ID EXACTO para agregarlo (devuelve solo nombre y
 -- avatar). Sustituye a la lectura libre de la tabla: como el ID es un UUID
@@ -73,7 +118,7 @@ grant execute on function public.lookup_profile(uuid) to authenticated;
 -- contigo). ANTES era "using (true)": cualquier extraño con una cuenta anónima
 -- podía descargar los perfiles de TODOS los usuarios.
 create policy "profiles_read"   on public.profiles for select to authenticated
-  using (auth.uid() = id or public.has_link(auth.uid(), id));
+  using (auth.uid() = id or private.has_link(auth.uid(), id));
 -- Solo puedes crear/editar tu propio perfil.
 create policy "profiles_insert" on public.profiles for insert to authenticated with check (auth.uid() = id);
 create policy "profiles_update" on public.profiles for update to authenticated using (auth.uid() = id);
@@ -134,7 +179,7 @@ drop policy if exists "completions_delete" on public.completions;
 -- era "using (true)": un extraño podía volcar el historial completo de todos
 -- (títulos, fechas, puntos y las URL de las fotos).
 create policy "completions_read"   on public.completions for select to authenticated
-  using (auth.uid() = user_id or public.are_friends(auth.uid(), user_id));
+  using (auth.uid() = user_id or private.are_friends(auth.uid(), user_id));
 create policy "completions_insert" on public.completions for insert to authenticated with check (auth.uid() = user_id);
 create policy "completions_update" on public.completions for update to authenticated using (auth.uid() = user_id);
 create policy "completions_delete" on public.completions for delete to authenticated using (auth.uid() = user_id);
@@ -442,7 +487,7 @@ create policy "comments_read"   on public.comments for select to authenticated
     or exists (
       select 1 from public.completions c
       where (c.id = comments.completion_key or c.shared_id = comments.completion_key)
-        and (c.user_id = auth.uid() or public.are_friends(auth.uid(), c.user_id))
+        and (c.user_id = auth.uid() or private.are_friends(auth.uid(), c.user_id))
     )
   );
 create policy "comments_insert" on public.comments for insert to authenticated with check (auth.uid() = author_id);
@@ -533,7 +578,7 @@ create policy "notif_read"   on public.notifications for select to authenticated
 create policy "notif_insert" on public.notifications for insert to authenticated
   with check (
     auth.uid() = actor_id
-    and (recipient_id = auth.uid() or public.has_link(auth.uid(), recipient_id))
+    and (recipient_id = auth.uid() or private.has_link(auth.uid(), recipient_id))
   );
 create policy "notif_update" on public.notifications for update to authenticated using (auth.uid() = recipient_id);   -- marcar como leída
 create policy "notif_delete" on public.notifications for delete to authenticated using (auth.uid() = recipient_id);
@@ -640,7 +685,8 @@ begin
       url     := 'https://muvqfjyzneszkptsjxgi.supabase.co/functions/v1/send-push',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11dnFmanl6bmVzemtwdHNqeGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDI0NjIsImV4cCI6MjA5ODI3ODQ2Mn0.Ud4QhDc2EsTKPQoHtEaubH3jMTppI4CKDZKZqGf2Uao'
+        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11dnFmanl6bmVzemtwdHNqeGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDI0NjIsImV4cCI6MjA5ODI3ODQ2Mn0.Ud4QhDc2EsTKPQoHtEaubH3jMTppI4CKDZKZqGf2Uao',
+        'x-push-secret', public.push_secret()   -- identifica esta llamada como "de servidor"
       ),
       -- El "tag" es DETERMINISTA (tipo + referencia + actor): el envío de respaldo
       -- que hace la app del que actuó usa el MISMO tag, así que si el aviso llega
