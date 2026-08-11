@@ -108,7 +108,10 @@ begin
         headers := jsonb_build_object(
                      'Content-Type','application/json',
                      'apikey', anon_key,
-                     'Authorization','Bearer ' || anon_key),
+                     'Authorization','Bearer ' || anon_key,
+                     -- identifica la llamada como "de servidor" ante send-push
+                     -- (el secreto vive en app_config, nunca en el repositorio)
+                     'x-push-secret', public.push_secret()),
         body    := jsonb_build_object(
                      'recipientId', r.user_id,
                      'title', '🛎️ Recordatorio',
