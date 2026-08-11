@@ -1005,7 +1005,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v124";
+const APP_VERSION = "v125";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2430,16 +2430,29 @@ const Tasks = (() => {
   function remFired(t){ try{ return (localStorage.getItem("rachas_reminded")||"").split(",").includes(remKey(t)); }catch(e){ return false; } }
   function remMark(t){ try{ let s=(localStorage.getItem("rachas_reminded")||"").split(",").filter(Boolean);
     const k=remKey(t); if(!s.includes(k)){ s.push(k); if(s.length>60) s=s.slice(-60); localStorage.setItem("rachas_reminded", s.join(",")); } }catch(e){} }
+  // UN SOLO EMISOR POR RECORDATORIO. El aviso llegaba DUPLICADO porque salían a
+  // la vez el push del servidor (cron) y el aviso local de la app. La
+  // deduplicación por etiqueta no es fiable en iOS, así que se decide el emisor
+  // ANTES de enviar:
+  //   · El recordatorio está registrado en la nube → lo envía el SERVIDOR. El
+  //     local solo actúa de respaldo si el servidor NO lo mandó (se comprueba
+  //     con last_sent, que el propio cron escribe al enviar).
+  //   · No está en la nube (o no hay nube) → lo envía la app, como siempre.
   function scheduleReminders(){
     reminderTimers.forEach(t=>clearTimeout(t)); reminderTimers=[];
     if(!("Notification" in window) || Notification.permission!=="granted") return;
     if(localStorage.getItem("rachas_notif")==="off") return;
-    // REDUNDANTE: el aviso local a la hora exacta se programa SIEMPRE (con o sin
-    // nube). Con nube, el push del servidor y este local llevan el MISMO tag
-    // ('reminder-<id>') y fireReminder comprueba si ya hay uno visible igual:
-    // si llegan los dos, se queda UNO; si un camino falla, entrega el otro.
     const cloudOn = Cloud.enabled && Cloud.enabled();
+    if(cloudOn && Cloud.listReminders){
+      // qué recordatorios conoce el servidor y cuáles ya envió HOY
+      Cloud.listReminders().then(rows=> planReminders(rows||[])).catch(()=> planReminders(null));
+    } else planReminders(null);
+  }
+  // rows=null → el servidor no interviene (sin nube o sin respuesta): la app se
+  // encarga de todos, como antes.
+  function planReminders(rows){
     const now=new Date(), todayKey=dateKey();
+    const byTask={}; (rows||[]).forEach(r=>{ if(r && r.active!==false) byTask[String(r.task_id)]=r; });
     (Store.get().tasks||[]).forEach(t=>{
       if(!t.reminder || !t.reminder.time) return;
       if(!dueOn(t, todayKey) || isDoneToday(t)) return;
@@ -2449,12 +2462,19 @@ const Tasks = (() => {
       const at=new Date(now); at.setHours(h,m,0,0);
       const delay=at.getTime()-now.getTime();
       if(delay>26*3600*1000) return;
+      const server=rows ? byTask[String(t.id)] : null;   // ¿lo enviará el servidor?
+      if(server){
+        if(server.last_sent===todayKey) { remMark(t); return; }  // el servidor YA avisó hoy
+        // Aún no ha salido: respaldo solo si la hora pasó hace un rato (margen
+        // para que el cron actúe) y la app está delante.
+        const mins=(now.getTime()-at.getTime())/60000;
+        if(mins>=5 && mins<=12*60 && !document.hidden) fireReminder(t);
+        return;                                          // sin temporizador local
+      }
       if(delay<=0){
-        // La hora ya pasó hoy. SIN nube, iOS suspendió el timer con la app
-        // cerrada: al reabrir avisamos (catch-up, hasta 12 h después). CON nube
-        // no: el push del servidor ya avisó a su hora; repetirlo al abrir la app
-        // duplicaría un aviso que quizá ya viste y descartaste.
-        if(!cloudOn && now.getTime()-at.getTime() <= 12*3600*1000 && !document.hidden) fireReminder(t);
+        // Sin respaldo del servidor: iOS suspende los temporizadores con la app
+        // cerrada, así que al reabrir avisamos (hasta 12 h después).
+        if(now.getTime()-at.getTime() <= 12*3600*1000 && !document.hidden) fireReminder(t);
         return;
       }
       reminderTimers.push(setTimeout(()=>fireReminder(t), delay));
@@ -3948,7 +3968,7 @@ const Cloud = (() => {
   // Mis recordatorios registrados en la nube (para el diagnóstico de Ajustes).
   async function listReminders(){
     try{ if(!enabled() || !await init() || !client) return null;
-      const { data, error }=await client.from('reminders').select('task_id,title,hh,mm,active').eq('user_id',uid);
+      const { data, error }=await client.from('reminders').select('task_id,title,hh,mm,active,last_sent').eq('user_id',uid);
       if(error) throw error; return data||[];
     }catch(e){ return null; }
   }
