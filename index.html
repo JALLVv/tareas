@@ -41,50 +41,82 @@
    TOKENS · Lenguaje visual iOS 26 (Dark) — colores, materiales, tipografía
    ========================================================================= */
 :root{
+  /* ---- Fondo y elevación ------------------------------------------------
+     Escalera de profundidad: el fondo es negro real y cada capa que "sube"
+     aclara un punto. Así la jerarquía se lee sin bordes duros. */
   --bg:#000000;
   --bg-2:#0a0a0c;
 
-  /* Materiales translúcidos (glassmorphism) */
-  --mat-thin:rgba(40,40,44,0.55);
-  --mat:rgba(34,34,38,0.72);
-  --mat-thick:rgba(28,28,32,0.86);
-  /* Material de las barras (tab bar / navbar). Antes era rgba(18,18,20,0.7):
-     sobre el fondo negro puro quedaba a ~13/255 de brillo — indistinguible
-     del negro absoluto — y la zona de seguridad bajo los iconos (los ~34pt
-     del home indicator) se veía como una "franja negra que corta la app".
-     Un chrome un poco más claro (como el material de barra nativo de iOS en
-     oscuro) hace que esa zona se lea como parte de la barra. */
+  /* Materiales translúcidos. El PESO codifica jerarquía (Apple HIG): las
+     superficies grandes se leen más gruesas (más blur y sombra) que las
+     pequeñas. Nunca se apila un material claro sobre otro claro. */
+  --mat-thin:rgba(44,44,48,0.55);
+  --mat:rgba(36,36,40,0.72);
+  --mat-thick:rgba(26,26,30,0.88);
   --mat-bar:rgba(38,38,42,0.82);
-  --card:rgba(44,44,48,0.55);
+  --card:rgba(46,46,51,0.52);
   --card-2:rgba(58,58,62,0.5);
 
-  /* Etiquetas */
+  /* Etiquetas (jerarquía de texto iOS) */
   --label:rgba(255,255,255,0.96);
-  --label-2:rgba(235,235,245,0.62);
-  --label-3:rgba(235,235,245,0.34);
-  --label-4:rgba(235,235,245,0.20);
+  --label-2:rgba(235,235,245,0.60);
+  --label-3:rgba(235,235,245,0.32);
+  --label-4:rgba(235,235,245,0.18);
 
   /* Separadores / rellenos */
   --sep:rgba(255,255,255,0.10);
   --hairline:rgba(255,255,255,0.07);
   --fill:rgba(120,120,128,0.24);
-  --fill-2:rgba(120,120,128,0.18);
+  --fill-2:rgba(120,120,128,0.16);
 
   /* Colores del sistema (dark) */
   --blue:#0A84FF; --green:#30D158; --indigo:#5E5CE6; --purple:#BF5AF2;
   --pink:#FF375F; --orange:#FF9F0A; --red:#FF453A; --yellow:#FFD60A;
   --teal:#64D2FF; --mint:#66D4CF; --cyan:#5AC8FA; --brown:#AC8E68;
 
+  /* ---- Sombras neutras (MATE: nunca sombras de color/neón) --------------
+     Escalan con el tamaño de la superficie. --edge es el filo superior que
+     "capta la luz" y da el canto físico del material. */
+  --shadow-sm:0 2px 8px rgba(0,0,0,0.28);
+  --shadow-md:0 8px 24px rgba(0,0,0,0.34);
+  --shadow-lg:0 20px 56px rgba(0,0,0,0.5);
+  --edge:inset 0 0.5px 0 rgba(255,255,255,0.07);
+
+  /* Blur por peso de superficie (chip < tarjeta < hoja) */
+  --blur-sm:saturate(118%) blur(14px);
+  --blur:saturate(120%) blur(24px);
+  --blur-lg:saturate(122%) blur(34px);
+
+  /* ---- Radios ----------------------------------------------------------- */
   --radius:22px; --radius-lg:30px; --radius-sm:14px;
-  --blur:saturate(105%) blur(22px);
   --tabbar-h:54px;
+
+  /* ---- Tipografía -------------------------------------------------------
+     El tracking es ESPECÍFICO POR TAMAÑO: el texto grande necesita tracking
+     negativo (al crecer, las letras se separan ópticamente) y el pequeño lo
+     necesita ligeramente positivo para legibilidad. Un valor único global
+     está mal en algún tamaño — por eso el body ya no lo fija. */
+  --track-display:-0.035em;
+  --track-title:-0.022em;
+  --track-body:0em;
+  --track-caption:0.006em;
 
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","SF Pro",system-ui,"Segoe UI",Roboto,Helvetica,Arial,"Apple Color Emoji",sans-serif;
 
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
-  --ease:cubic-bezier(0.32,0.72,0,1);            /* curva tipo iOS spring */
-  --ease-out:cubic-bezier(0.22,1,0.36,1);
+
+  /* ---- Movimiento -------------------------------------------------------
+     Curvas fuertes: las de serie del navegador son demasiado flojas y restan
+     intención. Nunca ease-in en UI (empieza lento justo cuando el usuario
+     mira). --ease es la curva de drawer de iOS. */
+  --ease:cubic-bezier(0.32,0.72,0,1);
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --ease-in-out:cubic-bezier(0.77,0,0.175,1);
+  /* Duraciones: la respuesta al toque debe ser casi instantánea. */
+  --t-press:120ms;
+  --t-fast:180ms;
+  --t-med:240ms;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -104,7 +136,9 @@ body{
   color:var(--label);
   -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
-  letter-spacing:-0.01em;
+  /* Sin letter-spacing global: cada escala fija el suyo (ver --track-*). */
+  letter-spacing:var(--track-body);
+  font-optical-sizing:auto;
   overscroll-behavior:none;
   position:relative; width:100%; height:100vh; height:100lvh;
   user-select:none; -webkit-user-select:none;
@@ -176,7 +210,7 @@ img{display:block;}
      título grande, para no oscurecerlo. */
   background:linear-gradient(to bottom, rgba(0,0,0,0.5) 0, rgba(0,0,0,0.28) 24px, rgba(0,0,0,0) 56px);
 }
-.tb-title{font-size:17px;font-weight:700;letter-spacing:-0.02em;color:var(--label);
+.tb-title{font-size:17px;font-weight:700;letter-spacing:var(--track-title);color:var(--label);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   /* sombra propia para legibilidad al hacer scroll (el degradado no llega
      hasta aquí, para no tapar el título grande) */
@@ -197,13 +231,16 @@ img{display:block;}
 
 /* Título grande iOS */
 .large-title{
-  font-size:34px;font-weight:800;letter-spacing:-0.03em;
-  margin:6px 0 10px 9px;padding-top:6px;line-height:1.05;
-  transition:transform .3s var(--ease-out), opacity .3s;
+  font-size:34px;font-weight:800;letter-spacing:var(--track-display);
+  margin:6px 0 6px 9px;padding-top:6px;line-height:1.04;
+  transition:transform var(--t-med) var(--ease-out), opacity var(--t-med) var(--ease-out);
 }
-.subtitle{color:var(--label-2);font-size:15px;margin:0 0 18px 9px;font-weight:500;}
+/* El subtítulo cuelga del título: mismo eje óptico y aire proporcional. */
+.subtitle{color:var(--label-2);font-size:15px;line-height:1.35;
+  margin:0 0 20px 9px;font-weight:500;letter-spacing:var(--track-body);}
 
-.section-title{font-size:20px;font-weight:700;letter-spacing:-0.02em;margin:26px 4px 12px;}
+.section-title{font-size:20px;font-weight:700;letter-spacing:var(--track-title);
+  margin:28px 9px 12px;line-height:1.2;}
 .section-title:first-of-type{margin-top:18px;}
 
 /* =========================================================================
@@ -220,6 +257,13 @@ img{display:block;}
   background:var(--mat-bar);
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
   border-top:0.5px solid var(--hairline);
+}
+/* Degradado justo encima de la barra: funde el contenido que pasa por debajo.
+   No intercepta toques. */
+.tabbar::after{
+  content:"";position:absolute;bottom:100%;left:0;right:0;height:28px;
+  background:linear-gradient(to top, rgba(0,0,0,0.5), rgba(0,0,0,0));
+  pointer-events:none;
 }
 .tab{
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
@@ -246,27 +290,29 @@ img{display:block;}
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
   border:0.5px solid var(--hairline);
   border-radius:var(--radius);
-  box-shadow:0 8px 30px rgba(0,0,0,0.35), inset 0 0.5px 0 rgba(255,255,255,0.06);
+  box-shadow:0 -8px 30px rgba(0,0,0,0.35), var(--edge);
 }
 .card{
   background:var(--card);
   -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
   border:0.5px solid var(--hairline);
   border-radius:var(--radius);
-  box-shadow:0 6px 22px rgba(0,0,0,0.3), inset 0 0.5px 0 rgba(255,255,255,0.05);
+  box-shadow:var(--shadow-md), var(--edge);
 }
 
 /* Botón primario (estilo iOS, blue filled) */
 .btn{
   display:flex;align-items:center;justify-content:center;gap:8px;
   width:100%;padding:16px;border-radius:16px;
-  font-size:17px;font-weight:600;letter-spacing:-0.01em;
+  font-size:17px;font-weight:600;letter-spacing:var(--track-body);
   background:var(--blue);color:#fff;
-  transition:transform .12s var(--ease-out), filter .2s, opacity .2s;
-  box-shadow:none;
+  transition:transform var(--t-press) var(--ease-out),
+             filter var(--t-fast) var(--ease-out),
+             opacity var(--t-fast) var(--ease-out);
+  box-shadow:var(--shadow-sm);
 }
 .btn:active{transform:scale(0.97);filter:brightness(0.92);}
-.btn.secondary{background:var(--fill);color:var(--label);box-shadow:none;
+.btn.secondary{background:var(--fill);color:var(--label);box-shadow:var(--edge);
   border:0.5px solid var(--hairline);}
 .btn.secondary:active{background:var(--fill-2);}
 .btn.ghost{background:transparent;color:var(--blue);box-shadow:none;}
@@ -281,9 +327,11 @@ img{display:block;}
   flex:0 0 auto;display:flex;align-items:center;gap:8px;
   padding:11px 16px;border-radius:18px;
   background:var(--card);border:0.5px solid var(--hairline);
-  -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
-  font-size:15px;font-weight:600;color:var(--label);
-  transition:transform .14s var(--ease-out), background .2s, border-color .2s;
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  font-size:15px;font-weight:600;color:var(--label);letter-spacing:var(--track-body);
+  transition:transform var(--t-press) var(--ease-out),
+             background var(--t-fast) var(--ease-out),
+             border-color var(--t-fast) var(--ease-out);
   scroll-snap-align:start;white-space:nowrap;
 }
 .chip .ic{width:22px;height:22px;display:grid;place-items:center;}
@@ -301,14 +349,17 @@ img{display:block;}
 .seg{
   flex:1 0 auto;text-align:center;white-space:nowrap;
   padding:9px 14px;border-radius:11px;font-size:14px;font-weight:600;
-  color:var(--label);transition:transform .12s var(--ease-out), background .2s, box-shadow .2s;
+  color:var(--label);letter-spacing:var(--track-body);
+  transition:transform var(--t-press) var(--ease-out),
+             background var(--t-fast) var(--ease-out),
+             box-shadow var(--t-fast) var(--ease-out);
 }
-.seg.sel{background:var(--blue);color:#fff;font-weight:700;box-shadow:none;}
+.seg.sel{background:var(--blue);color:#fff;font-weight:700;box-shadow:var(--shadow-sm);}
 .seg:active{transform:scale(0.95);}
 
 /* Switch iOS */
 .switch{position:relative;width:51px;height:31px;border-radius:16px;background:var(--fill);
-  transition:background .25s var(--ease-out);flex:0 0 auto;}
+  transition:background var(--t-med) var(--ease-out);flex:0 0 auto;}
 .switch.on{background:var(--green);}
 .switch .knob{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;
   background:#fff;box-shadow:0 3px 8px rgba(0,0,0,0.3);
@@ -349,7 +400,7 @@ img{display:block;}
 
 /* Campos de escritura SIN borde: texto grande, placeholder tenue. */
 .big-input{width:100%;background:transparent;border:none;outline:none;resize:none;
-  color:var(--label);font-family:inherit;letter-spacing:-0.02em;padding:4px 2px;}
+  color:var(--label);font-family:inherit;letter-spacing:var(--track-title);padding:4px 2px;}
 .big-input::placeholder{color:var(--label-4);}
 .big-title{font-size:26px;font-weight:800;line-height:1.15;margin-top:10px;}
 .big-desc{font-size:18px;font-weight:500;line-height:1.3;margin-top:0;overflow:hidden;min-height:0;}
@@ -395,7 +446,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .gen-result .cat-badge{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:20px;
   font-size:13px;font-weight:700;margin-bottom:16px;}
 .gen-result .cat-badge svg{width:16px;height:16px;}
-.gen-result .task-text{font-size:22px;font-weight:700;line-height:1.32;letter-spacing:-0.02em;}
+.gen-result .task-text{font-size:22px;font-weight:700;line-height:1.32;letter-spacing:var(--track-title);}
 .gen-result .meta{display:flex;justify-content:center;gap:10px;margin-top:18px;flex-wrap:wrap;}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:14px;
   background:var(--fill-2);font-size:13px;font-weight:600;color:var(--label-2);}
@@ -416,13 +467,15 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .done-datebar input[type=date]{color-scheme:dark;background:var(--fill-2);border:0.5px solid var(--hairline);
   border-radius:12px;padding:9px 12px;color:var(--label);font-size:15px;flex:1;}
 .done-datebar .mini-btn{flex:0 0 auto;}
-.task-card{display:flex;align-items:center;gap:13px;padding:14px;animation:cardIn .4s var(--ease-out) backwards;}
+.task-card{display:flex;align-items:center;gap:13px;padding:14px;
+  animation:cardIn .34s var(--ease-out) backwards;
+  transition:transform var(--t-press) var(--ease-out);}
 @keyframes cardIn{from{opacity:0;transform:translateY(10px) scale(0.98);}}
 .task-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;}
 .task-icon svg{width:24px;height:24px;color:#fff;stroke-width:1.9;}
 .task-icon .emoji{font-size:22px;}
 .task-body{flex:1;min-width:0;}
-.task-title{font-size:15px;font-weight:600;letter-spacing:-0.01em;line-height:1.25;
+.task-title{font-size:15px;font-weight:600;letter-spacing:var(--track-body);line-height:1.3;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .task-meta{display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;}
 .tag{font-size:12.5px;font-weight:500;color:var(--label-2);}
@@ -449,7 +502,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .del-btn{width:28px;height:28px;border-radius:50%;background:var(--red);display:grid;place-items:center;flex:0 0 auto;
   margin-left:-2px;animation:pop .2s var(--ease-out);}
 .del-btn svg{width:16px;height:16px;color:#fff;stroke-width:3;}
-@keyframes pop{from{transform:scale(0);}}
+@keyframes pop{from{transform:scale(0.92);opacity:0;}}
 
 .tag.ppl{color:#5AC8FA;}
 .task-body[role="button"]{cursor:pointer;}
@@ -457,7 +510,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
   margin:2px 4px 16px;line-height:1.3;}
 .action-list{display:flex;flex-direction:column;gap:10px;}
 .action-btn{display:flex;align-items:center;gap:12px;width:100%;padding:15px 16px;border-radius:14px;
-  background:var(--fill);color:var(--label);font-size:16px;font-weight:600;letter-spacing:-0.01em;
+  background:var(--fill);color:var(--label);font-size:16px;font-weight:600;letter-spacing:var(--track-body);
   border:0.5px solid var(--hairline);transition:transform .12s var(--ease-out), background .2s;}
 .action-btn:active{transform:scale(0.98);background:var(--fill-2);}
 .action-btn svg{width:20px;height:20px;color:var(--blue);flex:0 0 auto;}
@@ -469,10 +522,13 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .photo-modal .ico.danger{background:rgba(255,69,58,0.16);}
 .photo-modal .ico.danger svg{color:var(--red);}
 
-.empty{padding:46px 22px;text-align:center;color:var(--label-3);}
-.empty svg{width:52px;height:52px;margin-bottom:14px;opacity:0.45;}
-.empty p{font-size:15px;font-weight:500;margin:0 0 4px;}
-.empty .sub{font-size:13px;color:var(--label-4);}
+.empty{padding:64px 24px;text-align:center;color:var(--label-3);
+  animation:cardIn .34s var(--ease-out) backwards;}
+.empty svg{width:46px;height:46px;margin-bottom:16px;opacity:0.35;}
+.empty p{font-size:16px;font-weight:600;margin:0 0 6px;color:var(--label-2);
+  letter-spacing:var(--track-body);}
+.empty .sub{font-size:13.5px;color:var(--label-3);line-height:1.4;
+  letter-spacing:var(--track-caption);max-width:26ch;margin:0 auto;}
 
 .list-head{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 14px;}
 
@@ -497,7 +553,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .avatar .edit-badge{position:absolute;bottom:0;right:0;width:30px;height:30px;border-radius:50%;
   background:var(--mat-thick);border:2px solid #000;display:grid;place-items:center;}
 .avatar .edit-badge svg{width:15px;height:15px;color:var(--label);}
-.profile-name{font-size:24px;font-weight:800;letter-spacing:-0.02em;margin:14px 0 4px;
+.profile-name{font-size:24px;font-weight:800;letter-spacing:var(--track-title);margin:14px 0 4px;
   display:inline-flex;align-items:center;gap:7px;}
 .profile-name .pen{width:16px;height:16px;color:var(--label-3);}
 .rank-badge{display:inline-flex;align-items:center;gap:7px;padding:6px 14px;border-radius:16px;
@@ -515,8 +571,10 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 
 .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:14px;}
 .stat{padding:16px;}
-.stat .v{font-size:26px;font-weight:800;letter-spacing:-0.02em;line-height:1;}
-.stat .l{font-size:12.5px;color:var(--label-2);font-weight:600;margin-top:6px;}
+.stat .v{font-size:26px;font-weight:800;letter-spacing:var(--track-title);line-height:1;
+  font-variant-numeric:tabular-nums;}
+.stat .l{font-size:12.5px;color:var(--label-2);font-weight:600;margin-top:6px;
+  letter-spacing:var(--track-caption);line-height:1.3;}
 .stat .v.fire{color:var(--orange);}
 .stat .v.gold{color:var(--yellow);}
 .stat .v.pur{color:var(--purple);}
@@ -534,12 +592,12 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 /* Resumen de la semana */
 .week-card{margin-top:14px;padding:18px 18px 20px;}
 .week-head{display:flex;align-items:baseline;justify-content:space-between;}
-.week-head .t{font-size:16px;font-weight:700;letter-spacing:-0.01em;}
+.week-head .t{font-size:16px;font-weight:700;letter-spacing:var(--track-title);}
 .week-head .range{font-size:12.5px;color:var(--label-2);font-weight:600;}
 .week-vibe{margin-top:10px;font-size:14px;font-weight:700;color:var(--indigo);}
 .week-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:12px;}
 .wk-stat{background:var(--fill-2);border-radius:14px;padding:12px;text-align:center;}
-.wk-stat .v{font-size:22px;font-weight:800;letter-spacing:-0.02em;}
+.wk-stat .v{font-size:22px;font-weight:800;letter-spacing:var(--track-title);font-variant-numeric:tabular-nums;}
 .wk-stat .l{font-size:11.5px;color:var(--label-2);font-weight:600;margin-top:2px;}
 .week-cmp{margin-top:10px;font-size:13px;color:var(--label-2);font-weight:600;line-height:1.4;}
 .week-cmp.muted{font-style:italic;}
@@ -550,7 +608,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 /* Calendario */
 .cal-card{margin-top:14px;padding:18px 16px 20px;overflow:hidden;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:0 4px;}
-.cal-head .m{font-size:18px;font-weight:700;letter-spacing:-0.02em;}
+.cal-head .m{font-size:18px;font-weight:700;letter-spacing:var(--track-title);}
 .cal-nav{display:flex;gap:6px;}
 .cal-nav button{width:34px;height:34px;border-radius:50%;background:var(--fill-2);display:grid;place-items:center;
   transition:transform .12s var(--ease-out);}
@@ -635,7 +693,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .friend-profile-head{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 4px;}
 .friend-profile-head .big-av{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;overflow:hidden;
   font-size:32px;font-weight:800;color:#fff;background:linear-gradient(135deg,#5E5CE6,#0A84FF);}
-.friend-profile-head .fpn{font-size:22px;font-weight:800;letter-spacing:-0.02em;}
+.friend-profile-head .fpn{font-size:22px;font-weight:800;letter-spacing:var(--track-title);}
 
 /* =========================================================================
    SHEETS / MODALES
@@ -658,9 +716,10 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
      indicador de inicio. */
   max-height:min(86dvh, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 12px));display:flex;flex-direction:column;
   background:var(--mat-thick);
-  -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
-  border-radius:22px 22px 0 0;border-top:0.5px solid var(--sep);
-  box-shadow:0 -20px 60px rgba(0,0,0,0.6);
+  -webkit-backdrop-filter:var(--blur-lg);backdrop-filter:var(--blur-lg);
+  border-radius:26px 26px 0 0;border-top:0.5px solid var(--sep);
+  /* Superficie grande = sombra profunda + filo de luz arriba (canto físico) */
+  box-shadow:0 -20px 60px rgba(0,0,0,0.6), var(--edge);
   /* Sin padding-bottom propio: el respiro de la zona segura (home indicator)
      vive DENTRO de .sheet-body para que haga scroll con el contenido. Antes,
      este padding dejaba una franja gris fija (el fondo del sheet) bajo el área
@@ -674,7 +733,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 /* Grid de 3 columnas (1fr · auto · 1fr): el título queda centrado de verdad
    aunque los botones laterales tengan anchos distintos (Cancelar / Guardar…). */
 .sheet-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:8px 18px 12px;flex:0 0 auto;}
-.sheet-head .title{font-size:18px;font-weight:700;letter-spacing:-0.02em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sheet-head .title{font-size:18px;font-weight:700;letter-spacing:var(--track-title);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sheet-head .act{font-size:17px;font-weight:600;color:var(--blue);padding:4px 2px;}
 .sheet-head .act:first-child{justify-self:start;text-align:left;}
 .sheet-head .act:last-child{justify-self:end;text-align:right;}
@@ -695,7 +754,7 @@ input::placeholder,textarea::placeholder{color:var(--label-3);}
 .photo-modal .ico{width:60px;height:60px;border-radius:18px;margin:6px auto 14px;display:grid;place-items:center;
   background:rgba(48,209,88,0.16);}
 .photo-modal .ico svg{width:32px;height:32px;color:var(--green);}
-.photo-modal h3{font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.02em;}
+.photo-modal h3{font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:var(--track-title);}
 .photo-modal p{font-size:14px;color:var(--label-2);margin:0 0 18px;line-height:1.45;}
 .photo-preview{width:100%;aspect-ratio:4/3;border-radius:18px;overflow:hidden;background:var(--fill-2);
   margin-bottom:16px;display:none;position:relative;border:0.5px solid var(--hairline);}
@@ -768,7 +827,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
    ========================================================================= */
 .points-pop{position:absolute;left:50%;top:42%;z-index:300;transform:translate(-50%,-50%);
   font-size:46px;font-weight:900;color:var(--yellow);pointer-events:none;
-  letter-spacing:-0.03em;
+  letter-spacing:var(--track-display);
   animation:ptsPop 1.2s var(--ease-out) forwards;}
 @keyframes ptsPop{
   0%{opacity:0;transform:translate(-50%,-30%) scale(0.4);}
@@ -787,10 +846,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .rankup.show .eyebrow{animation:riIn .5s .15s var(--ease-out) forwards;}
 .rankup .badge{width:130px;height:130px;border-radius:36px;display:grid;place-items:center;margin-bottom:24px;
   background:linear-gradient(135deg,#FFD60A,#FF9F0A);box-shadow:0 8px 24px rgba(0,0,0,0.4);
-  transform:scale(0) rotate(-30deg);}
+  transform:scale(0.92) rotate(-30deg);opacity:0;}
 .rankup.show .badge{animation:riBadge .7s .2s var(--ease) forwards;}
 .rankup .badge svg{width:64px;height:64px;color:#fff;}
-.rankup .rk{font-size:36px;font-weight:900;letter-spacing:-0.03em;opacity:0;transform:translateY(14px);}
+.rankup .rk{font-size:36px;font-weight:900;letter-spacing:var(--track-display);opacity:0;transform:translateY(14px);}
 .rankup.show .rk{animation:riIn .5s .45s var(--ease-out) forwards;}
 .rankup .desc{font-size:15px;color:var(--label-2);margin-top:8px;font-weight:500;opacity:0;}
 .rankup.show .desc{animation:riIn .5s .6s var(--ease-out) forwards;}
@@ -799,7 +858,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .rankup.show .cont{animation:riIn .5s .8s var(--ease-out) forwards;}
 .rankup .cont:active{transform:scale(0.96);}
 @keyframes riIn{to{opacity:1;transform:none;}}
-@keyframes riBadge{0%{transform:scale(0) rotate(-30deg);}60%{transform:scale(1.12) rotate(8deg);}100%{transform:scale(1) rotate(0);}}
+@keyframes riBadge{0%{transform:scale(0.92) rotate(-30deg);opacity:0;}60%{transform:scale(1.12) rotate(8deg);opacity:1;}100%{transform:scale(1) rotate(0);opacity:1;}}
 
 /* Confeti */
 .confetti{position:absolute;inset:0;z-index:319;pointer-events:none;overflow:hidden;}
@@ -827,9 +886,46 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .streak-banner .tx{font-weight:800;font-size:16px;color:#fff;}
 .streak-banner .tx small{display:block;font-weight:600;font-size:11px;opacity:0.9;}
 
+/* =========================================================================
+   ACCESIBILIDAD · adaptaciones del sistema
+   Movimiento reducido NO significa "sin respuesta": significa una respuesta
+   más suave y no vestibular. Se conservan opacidad y color (que ayudan a
+   comprender) y se quitan desplazamientos, rebotes y parallax.
+   ========================================================================= */
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001s !important;transition-duration:.08s !important;}
   .ambient::before,.ambient::after{animation:none;}
+  /* Las hojas entran con fundido, no deslizándose desde abajo. */
+  .sheet{transform:none !important;opacity:0;transition:opacity .16s var(--ease-out) !important;}
+  .sheet.show{opacity:1;}
+  /* Sin desplazamiento en las tarjetas al aparecer. */
+  .task-card,.gal-item,.anim-in{animation:none !important;}
+}
+
+/* Transparencia reducida: los materiales se vuelven sólidos y se quita el
+   desenfoque (caro y, para quien lo pide, molesto). */
+@media (prefers-reduced-transparency:reduce){
+  .card,.chip,.sheet,.tabbar,.topbar,.tb-btn,.glass,.scrim{
+    -webkit-backdrop-filter:none !important;backdrop-filter:none !important;
+  }
+  .card{background:#1c1c1f;}
+  .chip{background:#232327;}
+  .sheet{background:#141417;}
+  .tabbar{background:#151518;}
+  .scrim{background:rgba(0,0,0,0.72);}
+}
+
+/* Más contraste: fondos casi sólidos, bordes definidos y texto secundario
+   más legible. */
+@media (prefers-contrast:more){
+  :root{
+    --label-2:rgba(235,235,245,0.82);
+    --label-3:rgba(235,235,245,0.60);
+    --hairline:rgba(255,255,255,0.22);
+    --sep:rgba(255,255,255,0.28);
+  }
+  .card,.chip,.sheet{border-width:1px;}
+  .btn.secondary{border-color:rgba(255,255,255,0.35);}
 }
 </style>
 </head>
@@ -1005,7 +1101,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v125";
+const APP_VERSION = "v126";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
