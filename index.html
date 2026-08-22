@@ -57,9 +57,9 @@
        3. Nunca se apila relieve sobre relieve: lo que va dentro de una
           pieza elevada va HUNDIDO o plano, jamás elevado otra vez.
      ===================================================================== */
-  --bg:#17171c;            /* material base de toda la app */
-  --bg-2:#1b1b21;          /* material un punto más alto (hojas) */
-  --surface:#17171c;       /* las piezas son del mismo material que el fondo */
+  --bg:#15161c;            /* material base de toda la app */
+  --bg-2:#1a1b22;          /* material un punto más alto (hojas) */
+  --surface:#15161c;       /* las piezas son del mismo material que el fondo */
 
   /* ---- Profundidades ---------------------------------------------------
      La distancia y el desenfoque escalan con el TAMAÑO de la pieza: lo
@@ -96,8 +96,11 @@
   /* ---- Forma -----------------------------------------------------------
      Radios generosos: el relieve suave necesita esquinas suaves; una
      esquina viva delata que es una sombra dibujada. */
-  --radius:26px; --radius-lg:34px; --radius-sm:16px; --radius-pill:999px;
-  --tabbar-h:60px;
+  --radius:24px; --radius-lg:32px; --radius-sm:15px; --radius-pill:999px;
+  /* La navegación es una ISLA que flota, no una barra que toca el borde:
+     alto de la isla + el aire que deja debajo. */
+  --dock-h:66px; --dock-gap:14px;
+  --tabbar-h:calc(var(--dock-h) + var(--dock-gap));
 
   /* ---- Ritmo -----------------------------------------------------------
      Las sombras necesitan aire: si dos piezas se acercan demasiado, sus
@@ -192,7 +195,7 @@ img{display:block;}
   /* 20px de margen, no 16: si la tarjeta se acerca demasiado al borde, su
      sombra se corta contra él y el relieve se deshace justo ahí. */
   padding:0 var(--pad);
-  padding-top:calc(var(--safe-top) + 30px);
+  padding-top:calc(var(--safe-top) + 74px);
   padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom) + var(--gap-xl));
   /* Cambio de sección: entra desde abajo con un desplazamiento pequeño. Sin
      escala —dos vistas que se escalan a la vez parecen zoom, no navegación. */
@@ -216,8 +219,11 @@ img{display:block;}
      centro cae en ~safe-top+52; con este alto y align-items:center el botón
      centra ahí mismo. El degradado usa medidas en px (no %) para que su
      blend quede confinado al borde superior aunque la barra sea alta. */
-  height:calc(var(--safe-top) + 116px);
-  padding:var(--safe-top) 16px 0;
+  /* Cabecera compacta: una sola fila de 56px con el nombre a la izquierda y
+     los controles a la derecha. Antes eran 116px de aire para sostener un
+     título de 34px que ya no existe. */
+  height:calc(var(--safe-top) + 62px);
+  padding:var(--safe-top) var(--pad) 0;
   display:flex;align-items:center;justify-content:flex-end;gap:10px;
   pointer-events:none; /* el degradado no intercepta toques; los botones sí */
   /* Scrim SUAVE (no opaco) en el borde superior: da legibilidad al contenido
@@ -226,7 +232,7 @@ img{display:block;}
      inmersivo edge-to-edge—. Se desvanece del todo a los ~56px, justo antes del
      título grande, para no oscurecerlo. */
   /* Sin scroll basta con fundir la barra de estado. */
-  background:linear-gradient(to bottom, var(--bg) 0, var(--bg) 14px, rgba(23,23,28,0) 60px);
+  background:linear-gradient(to bottom, var(--bg) 0, var(--bg) 42px, rgba(21,22,28,0) 62px);
 }
 /* Con scroll aparece un velo MÁS ALTO: sin él, el contenido que sube se lee
    por detrás del título y se cruzan dos textos. Va en una capa propia con
@@ -234,17 +240,16 @@ img{display:block;}
    distinto número de paradas no se puede animar). */
 .topbar::before{
   content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(to bottom, var(--bg) 0, var(--bg) 74px, rgba(23,23,28,0.86) 96px, rgba(23,23,28,0) 126px);
+  background:linear-gradient(to bottom, var(--bg) 0, var(--bg) 52px, rgba(21,22,28,0.88) 66px, rgba(21,22,28,0) 90px);
   opacity:0;transition:opacity var(--t-med) var(--ease-out);
 }
 .topbar.scrolled::before{opacity:1;}
-.tb-title{font-size:17px;font-weight:700;letter-spacing:var(--track-title);color:var(--label);
+/* El nombre de la sección vive AQUÍ y solo aquí: se eliminó el título gigante
+   que se repetía dentro del contenido. Una cabecera, no dos. */
+.tb-title{font-size:19px;font-weight:800;letter-spacing:var(--track-title);color:var(--label);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  opacity:0;transform:translateY(-5px);
-  transition:opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);}
-.topbar.scrolled .tb-title{opacity:1;transform:none;}
-.tb-title{position:relative;background:var(--surface);border-radius:var(--radius-pill);padding:7px 15px;
-  box-shadow:var(--n-raise-sm);max-width:52vw;}
+  margin-right:auto;}
+.tb-title{position:relative;padding:0 2px;max-width:46vw;}
 /* Botón de la barra: pastilla del MISMO material, elevada. Al pulsar no se
    encoge y ya está: se HUNDE. El encogimiento solo acompaña al hundido, que es
    lo que de verdad comunica el contacto. */
@@ -267,61 +272,68 @@ img{display:block;}
    como se comporta la tipografía bien ajustada ópticamente.
    La sangría de 9px es intencionada: alinea el texto con el eje óptico de las
    tarjetas, no con su borde geométrico. */
-.large-title{
-  font-size:34px;font-weight:800;letter-spacing:var(--track-display);
-  margin:var(--gap-xs) 0 var(--gap-xs) 9px;padding-top:var(--gap-xs);line-height:1.04;
-  transition:transform var(--t-med) var(--ease-out), opacity var(--t-med) var(--ease-out);
-}
-.subtitle{color:var(--label-2);font-size:15px;line-height:1.4;
-  margin:0 0 var(--gap-lg) 9px;font-weight:500;letter-spacing:var(--track-body);}
+/* Sin título gigante dentro del contenido: duplicaba el de la cabecera y se
+   comía el primer tercio de cada pantalla. */
+.large-title{display:none;}
+/* Lo que era subtítulo pasa a ANTETÍTULO: una línea micro en versalitas que
+   presenta la pantalla sin robarle sitio. */
+.subtitle{color:var(--label-3);font-size:11.5px;line-height:1.45;
+  margin:0 0 var(--gap) 2px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.13em;}
 
-.section-title{font-size:20px;font-weight:700;letter-spacing:var(--track-title);
-  margin:var(--gap-xl) 9px var(--gap-sm);line-height:1.2;}
+.section-title{font-size:11px;font-weight:800;color:var(--label-3);
+  text-transform:uppercase;letter-spacing:0.13em;
+  margin:var(--gap-lg) 2px var(--gap-sm);line-height:1.3;}
 .section-title:first-of-type{margin-top:var(--gap);}
 
 /* =========================================================================
    TAB BAR
    ========================================================================= */
 .tabbar{
-  /* absolute dentro del shell de alto real (100lvh): bottom:0 = fondo REAL de la
-     pantalla, así la barra cubre la safe-area del indicador de inicio con su
-     propio material, sin franja negra debajo. */
-  position:absolute;left:0;right:0;bottom:0;z-index:50;
-  height:calc(var(--tabbar-h) + var(--safe-bottom));
-  padding-bottom:var(--safe-bottom);
+  /* ISLA, no barra. Ya no toca los bordes ni cubre la safe-area: flota sobre
+     el contenido, separada del canto de la pantalla. Es la pieza que más
+     define la silueta de la app, y por eso deja de ser un travesaño de borde
+     a borde. Sigue en position:absolute dentro del shell de 100lvh, así que
+     su suelo es el fondo REAL de la pantalla (no el viewport recortado). */
+  position:absolute;left:var(--pad);right:var(--pad);z-index:50;
+  bottom:calc(var(--safe-bottom) + var(--dock-gap));
+  height:var(--dock-h);
+  padding:7px;
   display:flex;align-items:stretch;
-  background:var(--bg);
-  /* La barra es un saliente del propio material: recibe la luz en su canto
-     superior y proyecta sombra hacia arriba, sobre el contenido que pasa por
-     debajo. Un borde de 0.5px sería una línea dibujada, no un canto. */
-  box-shadow:0 -10px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.045);
+  background:var(--surface);
+  border-radius:26px;
+  box-shadow:var(--n-raise-lg);
 }
 /* Degradado justo encima de la barra: funde el contenido que pasa por debajo.
    No intercepta toques. */
+/* Velo que funde el contenido justo antes de llegar a la isla. Se extiende
+   más allá de sus lados porque la isla ya no llega a los bordes. */
 .tabbar::after{
-  content:"";position:absolute;bottom:100%;left:0;right:0;height:26px;
-  background:linear-gradient(to top, rgba(23,23,28,0.9), rgba(23,23,28,0));
+  content:"";position:absolute;bottom:calc(100% + 6px);
+  left:calc(-1 * var(--pad));right:calc(-1 * var(--pad));height:34px;
+  background:linear-gradient(to top, var(--bg), rgba(21,22,28,0));
   pointer-events:none;
 }
 .tab{
-  position:relative;
+  position:relative;border-radius:19px;
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-  color:var(--label-3);font-size:10px;font-weight:600;letter-spacing:0;
+  color:var(--label-3);font-size:9.5px;font-weight:700;letter-spacing:0.02em;
   transition:color var(--t-med) var(--ease-out), transform var(--t-press) var(--ease-out);
 }
-/* La pestaña activa se HUNDE en la barra: es la manera neomórfica de decir
-   "estás aquí" sin añadir una pieza nueva flotando encima. Crece desde el
-   centro con opacidad —nunca desde scale(0), que colapsa en un punto. */
+/* La pestaña activa es una TECLA HUNDIDA que ocupa su celda entera de la
+   isla, no una pastillita centrada. Así la isla se lee como un teclado de
+   tres teclas, una de ellas apretada. */
 .tab::before{
-  content:"";position:absolute;left:50%;top:50%;
-  width:56px;height:40px;margin:-20px 0 0 -28px;border-radius:14px;
+  content:"";position:absolute;inset:0;border-radius:19px;
   box-shadow:var(--n-press-sm);
-  opacity:0;transform:scale(0.86);
+  opacity:0;transform:scale(0.94);
   transition:opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
   pointer-events:none;
 }
 .tab.active::before{opacity:1;transform:none;}
-.tab svg{width:26px;height:26px;stroke-width:1.7;transition:transform var(--t-med) var(--ease-out);}
+.tab svg{width:23px;height:23px;stroke-width:1.8;transition:transform var(--t-med) var(--ease-out);}
+.tab span,.tab{position:relative;}
+.tab svg,.tab .tab-ic{position:relative;z-index:1;}
 .tab.active{color:var(--blue);}
 .tab.active svg{transform:translateY(-1px) scale(1.04);}
 .tab:active{transform:scale(0.92);}
@@ -399,21 +411,24 @@ img{display:block;}
    segmento elegido es la única pieza que sobresale dentro de él. Esto también
    respeta la regla de no apilar relieve sobre relieve: dentro de un hueco,
    elevar sí está permitido. */
+/* Ya no es una barra de borde a borde: un control del ancho que necesita,
+   alineado a la izquierda como cualquier otro mando. */
 .segmented{
-  display:flex;gap:5px;padding:5px;border-radius:var(--radius-sm);
+  display:inline-flex;max-width:100%;gap:5px;padding:5px;border-radius:var(--radius-pill);
   background:var(--surface);box-shadow:var(--n-press-sm);
   overflow-x:auto;scrollbar-width:none;
 }
 .segmented::-webkit-scrollbar{display:none;}
 .seg{
-  flex:1 0 auto;text-align:center;white-space:nowrap;
-  padding:10px 15px;border-radius:12px;font-size:14px;font-weight:600;
+  flex:0 0 auto;text-align:center;white-space:nowrap;
+  padding:9px 18px;border-radius:var(--radius-pill);font-size:13.5px;font-weight:600;
   color:var(--label-2);letter-spacing:var(--track-body);
   transition:transform var(--t-press) var(--ease-out),
              color var(--t-fast) var(--ease-out),
              box-shadow var(--t-med) var(--ease-out);
 }
 .seg.sel{background:var(--surface);color:var(--label);font-weight:700;box-shadow:var(--n-raise-sm);}
+#taskFilter{margin-bottom:var(--gap);}
 .seg:active{transform:scale(0.97);}
 
 /* Interruptor: canal tallado + perilla saliente que corre por dentro. La
@@ -466,9 +481,15 @@ img{display:block;}
   color:var(--label-3);font-size:10px;}
 
 /* Generador: campos verticales con subtítulo encima del desplegable. */
-.gen-field{margin-top:var(--gap);}
-.gen-field .gen-label{font-size:13px;font-weight:600;color:var(--label-2);margin:0 4px 8px;
-  letter-spacing:var(--track-caption);}
+/* Los tres mandos del generador forman un PANEL: estaban sueltos sobre el
+   fondo, sin nada que dijera que se leen juntos. */
+.gen-panel{background:var(--surface);box-shadow:var(--n-press);border-radius:26px;
+  padding:16px 18px 18px;}
+.gen-field{margin-top:var(--gap-sm);display:flex;align-items:center;gap:var(--gap-sm);}
+.gen-field:first-child{margin-top:0;}
+.gen-field .gen-label{flex:1;font-size:10px;font-weight:800;color:var(--label-3);margin:0;
+  text-transform:uppercase;letter-spacing:0.1em;}
+.gen-field .dd{flex:0 0 auto;}
 .gen-field .dd{display:inline-flex;}
 
 /* Campos de escritura SIN borde: texto grande, placeholder tenue. */
@@ -533,20 +554,22 @@ input::placeholder,textarea::placeholder{color:var(--label-4);}
 /* =========================================================================
    GENERADOR
    ========================================================================= */
-.gen-result{margin-top:var(--gap);padding:var(--gap-lg) 22px;text-align:center;position:relative;overflow:hidden;}
-.gen-result .cat-badge{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;
+.gen-result{margin-top:var(--gap-sm);padding:var(--pad);text-align:left;position:relative;overflow:hidden;}
+.gen-result .cat-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;
   border-radius:var(--radius-pill);box-shadow:var(--n-press-sm);
-  font-size:13px;font-weight:700;margin-bottom:var(--gap);}
+  font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.09em;
+  margin-bottom:var(--gap-sm);}
 .gen-result .cat-badge svg{width:16px;height:16px;}
-.gen-result .task-text{font-size:19px;font-weight:700;line-height:1.42;letter-spacing:var(--track-body);
-  max-width:30ch;margin:0 auto;}
-.gen-result .meta{display:flex;justify-content:center;gap:var(--gap-sm);margin-top:var(--gap-lg);flex-wrap:wrap;}
+.gen-result .task-text{font-size:17px;font-weight:600;line-height:1.5;letter-spacing:var(--track-body);
+  color:var(--label);}
+.gen-result .meta{display:flex;justify-content:flex-start;gap:var(--gap-xs);margin-top:var(--gap);flex-wrap:wrap;}
 /* Dentro de una tarjeta ELEVADA no se puede volver a elevar: las etiquetas se
    tallan hacia dentro. Es la tercera regla del sistema y la que evita que la
    pantalla se convierta en un montón de bultos. */
-.pill{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--radius-pill);
+.pill{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:var(--radius-pill);
   background:var(--surface);box-shadow:var(--n-press-sm);
-  font-size:13px;font-weight:600;color:var(--label-2);}
+  font-size:10px;font-weight:800;color:var(--label-3);
+  text-transform:uppercase;letter-spacing:0.085em;}
 .pill.pts{color:var(--yellow);}
 .pill svg{width:15px;height:15px;}
 .gen-actions{display:flex;gap:var(--gap-sm);margin-top:var(--gap);}
@@ -559,35 +582,53 @@ input::placeholder,textarea::placeholder{color:var(--label-4);}
 /* =========================================================================
    TARJETAS DE TAREA
    ========================================================================= */
-/* El relieve necesita AIRE: dos tarjetas demasiado juntas mezclan sus sombras
-   y el borde se ensucia. Por eso el ritmo vertical es más holgado que en una
-   lista plana. */
-.tasklist{display:flex;flex-direction:column;gap:var(--gap-sm);}
+/* La lista deja de ser tarjetas sueltas flotando sobre un campo vacío: es un
+   CANAL tallado en el material, y las tareas son teclas apoyadas dentro. Da a
+   la pantalla un centro de gravedad que antes no tenía. */
+.tasklist{display:flex;flex-direction:column;gap:10px;
+  background:var(--surface);box-shadow:var(--n-press);
+  border-radius:28px;padding:10px;}
 .done-datebar{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
 .done-datebar input[type=date]{color-scheme:dark;background:var(--surface);border:none;
   box-shadow:var(--n-press-sm);
   border-radius:13px;padding:11px 14px;color:var(--label);font-size:15px;font-weight:600;flex:1;}
 .done-datebar .mini-btn{flex:0 0 auto;}
-/* Una tarea pendiente SOBRESALE (pide atención). Completada, se HUNDE: queda
-   guardada dentro del material. Ese solo cambio de sombra cuenta el estado sin
-   necesidad de tachados ni colores nuevos —el tachado se queda solo como
-   refuerzo. La transición es lenta a propósito (240ms): es un cambio de
-   estado, no una respuesta al dedo. */
-.task-card{display:flex;align-items:center;gap:14px;padding:15px 16px;
+/* Tecla dentro del canal. Pendiente sobresale (pide atención); completada se
+   HUNDE, y queda guardada dentro del material. Ese solo cambio de sombra
+   cuenta el estado sin colores nuevos. 240ms: es un cambio de estado, no una
+   respuesta al dedo. */
+.task-card{display:block;position:relative;padding:14px 16px 15px;border-radius:20px;
   animation:cardIn var(--t-slow) var(--ease-out) backwards;
   transition:transform var(--t-press) var(--ease-out),
              box-shadow var(--t-med) var(--ease-out);}
 @keyframes cardIn{from{opacity:0;transform:translateY(10px);}}
-/* Ficha de categoría: se apoya EN el hueco (no se eleva sobre una pieza ya
-   elevada) y conserva su color propio, que es su única señal de identidad. */
-.task-icon{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:0 0 auto;
-  background-image:linear-gradient(145deg, rgba(255,255,255,0.14), rgba(0,0,0,0.20));
-  box-shadow:inset 2px 2px 5px rgba(0,0,0,0.30), inset -1px -1px 3px rgba(255,255,255,0.12),
-             2px 2px 6px rgba(0,0,0,0.35);}
+/* PISO 1 — antetítulo */
+.tc-over{display:flex;align-items:center;gap:7px;margin-bottom:10px;min-width:0;}
+/* La categoría se reduce a un disco de 26px: era una ficha de 44px que pesaba
+   más que el propio título de la tarea. */
+.tc-ic{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+  font-size:14px;line-height:1;
+  background-image:linear-gradient(145deg, rgba(255,255,255,0.18), rgba(0,0,0,0.22));
+  box-shadow:inset 1px 1px 3px rgba(0,0,0,0.30), inset -1px -1px 2px rgba(255,255,255,0.16),
+             1px 1px 4px rgba(0,0,0,0.4);}
+.tc-ic svg{width:14px;height:14px;color:#fff;stroke-width:2.1;}
+.tc-ic .emoji{font-size:13px;}
+.tc-cat,.tc-when,.tc-pts{font-size:9.5px;font-weight:800;text-transform:uppercase;
+  letter-spacing:0.085em;white-space:nowrap;}
+.tc-cat{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+/* Si algo tiene que ceder, cede el "cuándo" antes que el "qué". */
+.tc-when{flex:0 4 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--label-3);}
+.tc-when::before{content:"·";margin-right:7px;color:var(--label-4);}
+.tc-when.today{color:var(--blue);}
+.tc-when.shared{color:var(--indigo);}
+.tc-pts{flex:0 0 auto;margin-left:auto;padding-left:8px;color:var(--yellow);}
+/* PISO 2 — el título, por fin protagonista */
+.task-body{padding-right:0;}
 .task-icon svg{width:24px;height:24px;color:#fff;stroke-width:1.9;}
 .task-icon .emoji{font-size:22px;}
 .task-body{flex:1;min-width:0;}
-.task-title{font-size:15.5px;font-weight:600;letter-spacing:var(--track-body);line-height:1.32;
+.task-title{font-size:17px;font-weight:700;letter-spacing:var(--track-title);line-height:1.3;
+  padding-right:58px;min-height:22px;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   overflow:hidden;overflow-wrap:anywhere;}
 .task-meta{display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;}
@@ -601,25 +642,27 @@ input::placeholder,textarea::placeholder{color:var(--label-4);}
    filo encendido en el canto izquierdo, del grosor de un cable. */
 .task-card{position:relative;}
 .task-card.urgent{padding-left:24px;
-  background-image:linear-gradient(100deg, rgba(255,95,85,0.09), rgba(255,95,85,0) 44%);}
+  background-image:linear-gradient(100deg, rgba(255,95,85,0.10), rgba(255,95,85,0) 46%);}
 .task-card.urgent::before{
-  content:"";position:absolute;left:11px;top:16px;bottom:16px;width:3px;
+  content:"";position:absolute;left:11px;top:15px;bottom:15px;width:3px;
   border-radius:var(--radius-pill);background:var(--red);}
 .task-card.urgent.done{box-shadow:var(--n-press);background-image:none;}
 .task-card.urgent.done::before{background:rgba(255,95,85,0.42);}
 .tag.pts{color:var(--yellow);font-weight:600;}
-/* La casilla es un HUECO redondo tallado en la tarjeta. Al completar, se
-   llena y sale hacia fuera: el gesto de "poner algo" en vez de "marcar algo". */
-.task-check{width:30px;height:30px;border-radius:50%;border:none;flex:0 0 auto;padding:0;
+/* La casilla es un HUECO redondo tallado en la tarjeta, al final de la línea
+   del título. Al completar, se llena y sale hacia fuera: el gesto de "poner
+   algo" en vez de "marcar algo". */
+.task-check{position:absolute;right:15px;bottom:13px;
+  width:36px;height:36px;border-radius:50%;border:none;flex:0 0 auto;padding:0;
   background:var(--surface);
   box-shadow:inset 3px 3px 6px rgba(0,0,0,0.72), inset -2px -2px 5px rgba(255,255,255,0.055);
-  display:grid;place-items:center;position:relative;
+  display:grid;place-items:center;
   transition:transform var(--t-press) var(--ease-out),
              background var(--t-med) var(--ease-out),
              box-shadow var(--t-med) var(--ease-out);}
 /* zona táctil ampliada a ~44px (mínimo iOS) sin agrandar el círculo visible */
 .task-check::after{content:"";position:absolute;inset:-9px;border-radius:50%;}
-.task-check svg{width:18px;height:18px;color:#fff;opacity:0;transform:scale(0.5);
+.task-check svg{width:20px;height:20px;color:#fff;opacity:0;transform:scale(0.5);
   transition:opacity var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);}
 .task-check:active{transform:scale(0.88);}
 .task-card.done{box-shadow:var(--n-press);}
@@ -627,7 +670,7 @@ input::placeholder,textarea::placeholder{color:var(--label-4);}
   box-shadow:2px 2px 5px rgba(0,0,0,0.5), -2px -2px 4px rgba(255,255,255,0.07);}
 .task-card.done .task-check svg{opacity:1;transform:none;}
 .task-card.done .task-title{color:var(--label-3);text-decoration:line-through;text-decoration-color:var(--label-4);}
-.task-card.done .task-icon{filter:saturate(0.42) brightness(0.72);box-shadow:none;}
+.task-card.done .tc-ic{filter:saturate(0.42) brightness(0.72);box-shadow:none;}
 
 .del-btn{width:28px;height:28px;border-radius:50%;background:var(--red);display:grid;place-items:center;flex:0 0 auto;
   margin-left:-2px;animation:pop .22s var(--ease-out);
@@ -671,8 +714,9 @@ input::placeholder,textarea::placeholder{color:var(--label-4);}
 /* El botón flotante es la pieza MÁS elevada de la app: es lo único que de
    verdad flota sobre el material. Por eso lleva la sombra grande. Entra desde
    el 88% —no desde cero— y con la curva blanda: aparece, no salta. */
-.fab{position:absolute;right:20px;bottom:calc(var(--tabbar-h) + var(--safe-bottom) + var(--gap));z-index:45;
-  width:60px;height:60px;border-radius:50%;background:var(--surface);
+.fab{position:absolute;right:var(--pad);z-index:45;
+  bottom:calc(var(--safe-bottom) + var(--dock-gap) + var(--dock-h) + var(--gap-sm));
+  width:58px;height:58px;border-radius:20px;background:var(--surface);
   background-image:linear-gradient(145deg, rgba(76,141,255,0.22), rgba(76,141,255,0.04));
   display:grid;place-items:center;box-shadow:var(--n-raise-lg);
   transition:transform var(--t-med) var(--ease-out),
@@ -687,63 +731,80 @@ input::placeholder,textarea::placeholder{color:var(--label-4);}
 /* =========================================================================
    PERFIL
    ========================================================================= */
-.profile-head{display:flex;flex-direction:column;align-items:center;text-align:center;padding:var(--gap-sm) 0 4px;}
+/* El perfil deja de abrirse con un retrato centrado de 100px y un nombre
+   debajo: eso gastaba media pantalla en decir quién eres, que es lo que menos
+   necesitas saber de ti mismo. Ahora es una FILA —retrato, nombre y rango— y
+   el resto del alto se lo quedan los datos. */
+.profile-head{display:flex;flex-direction:row;align-items:center;text-align:left;
+  gap:var(--gap);padding:0 2px var(--gap);}
+.ph-id{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:9px;}
 /* El retrato se apoya en un aro tallado: el hueco lo abraza y la foto queda
    dentro del material, no pegada encima. */
-.avatar{width:100px;height:100px;border-radius:50%;
+.avatar{width:66px;height:66px;border-radius:50%;flex:0 0 auto;
   background:linear-gradient(145deg,#6663C2,#4265AC);
-  display:grid;place-items:center;font-size:38px;font-weight:800;color:#fff;overflow:hidden;
-  box-shadow:var(--n-raise-lg);position:relative;}
+  display:grid;place-items:center;font-size:26px;font-weight:800;color:#fff;overflow:hidden;
+  box-shadow:var(--n-raise);position:relative;}
 .avatar img{width:100%;height:100%;object-fit:cover;}
-.avatar .edit-badge{position:absolute;bottom:1px;right:1px;width:30px;height:30px;border-radius:50%;
+.avatar .edit-badge{position:absolute;bottom:-1px;right:-1px;width:24px;height:24px;border-radius:50%;
   background:var(--surface);border:none;display:grid;place-items:center;
   box-shadow:2px 2px 5px rgba(0,0,0,0.55), -1px -1px 3px rgba(255,255,255,0.08);}
-.avatar .edit-badge svg{width:15px;height:15px;color:var(--label);}
-.profile-name{font-size:24px;font-weight:800;letter-spacing:var(--track-title);margin:14px 0 4px;
+.avatar .edit-badge svg{width:12px;height:12px;color:var(--label-2);}
+.profile-name{font-size:22px;font-weight:800;letter-spacing:var(--track-title);margin:0;
   display:inline-flex;align-items:center;gap:7px;}
 .profile-name .pen{width:16px;height:16px;color:var(--label-3);}
-.rank-badge{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:var(--radius-pill);
-  background:var(--surface);box-shadow:var(--n-press-sm);color:var(--yellow);font-size:14px;font-weight:700;}
+.rank-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:var(--radius-pill);
+  background:var(--surface);box-shadow:var(--n-press-sm);color:var(--yellow);font-size:12px;font-weight:800;
+  text-transform:uppercase;letter-spacing:0.09em;}
 .rank-badge svg{width:16px;height:16px;}
 
-.rank-card{margin-top:var(--gap-lg);padding:var(--pad);}
-.rank-row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:var(--gap);}
-.rank-row .now{font-size:17px;font-weight:700;letter-spacing:var(--track-title);}
-.rank-row .next{font-size:13px;font-weight:600;color:var(--label-2);}
+.rank-card{margin-top:0;padding:18px var(--pad);}
+.rank-row{display:flex;align-items:baseline;justify-content:flex-start;margin-bottom:12px;}
+.rank-row .now{display:none;}
+.rank-row .next{font-size:10px;font-weight:800;color:var(--label-3);
+  text-transform:uppercase;letter-spacing:0.1em;}
 /* Barra de progreso = canal tallado con una pieza que lo recorre. El relleno
    crece a lo largo de un segundo entero: es una cifra que se lee, no un
    parpadeo. */
-.progress{height:14px;border-radius:var(--radius-pill);background:var(--surface);
+.progress{height:10px;border-radius:var(--radius-pill);background:var(--surface);
   box-shadow:var(--n-press-sm);overflow:hidden;position:relative;}
 .progress .bar{height:100%;border-radius:var(--radius-pill);
   background:linear-gradient(145deg,#F5C842,#E09A2E);
   box-shadow:1px 1px 3px rgba(0,0,0,0.35);
   width:0;transition:width 1s var(--ease-out);}
-.rank-foot{display:flex;justify-content:space-between;margin-top:var(--gap-sm);font-size:12.5px;
-  color:var(--label-2);font-weight:600;letter-spacing:var(--track-caption);}
+.rank-foot{display:flex;justify-content:space-between;margin-top:11px;font-size:10px;
+  color:var(--label-3);font-weight:800;text-transform:uppercase;letter-spacing:0.1em;}
 
-.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap);}
-.stat{padding:18px;}
-.stat .v{font-size:28px;font-weight:800;letter-spacing:var(--track-title);line-height:1;
+/* Cuatro cuadrados idénticos dicen que las cuatro cifras valen lo mismo, y no
+   es verdad. La rejilla se rompe: los puntos totales —lo que de verdad mide el
+   progreso— ocupan una banda entera y a mayor escala; el desglose va debajo,
+   en piezas pequeñas. */
+.stat-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:var(--gap);}
+.stat{padding:14px 12px;grid-column:span 2;}
+.stat:first-child{grid-column:span 6;padding:20px;}
+.stat .v{font-size:26px;font-weight:800;letter-spacing:var(--track-title);line-height:1;
   font-variant-numeric:tabular-nums;}
-.stat .l{font-size:12.5px;color:var(--label-2);font-weight:600;margin-top:7px;
-  letter-spacing:var(--track-caption);line-height:1.3;}
+.stat:first-child .v{font-size:44px;letter-spacing:var(--track-display);}
+.stat .l{font-size:9px;color:var(--label-3);font-weight:800;margin-top:8px;
+  text-transform:uppercase;letter-spacing:0.08em;line-height:1.35;}
+.stat:first-child .l{font-size:10px;letter-spacing:0.11em;}
 .stat .v.fire{color:var(--orange);}
 .stat .v.gold{color:var(--yellow);}
 .stat .v.pur{color:var(--purple);}
 .stat .v.grn{color:var(--green);}
 
-.streak-card{margin-top:var(--gap);padding:var(--gap) var(--pad);display:flex;align-items:center;gap:var(--gap);}
-.streak-flame{font-size:40px;}
+.streak-card{margin-top:10px;padding:16px var(--pad);display:flex;align-items:center;gap:var(--gap-sm);}
+.streak-flame{font-size:32px;}
 .streak-info{flex:1;}
 .streak-info .big{font-size:22px;font-weight:800;}
-.streak-info .small{font-size:13px;color:var(--label-2);font-weight:600;margin-top:2px;}
+.streak-info .small{font-size:10px;color:var(--label-3);font-weight:800;margin-top:4px;
+  text-transform:uppercase;letter-spacing:0.1em;}
 .streak-best{text-align:right;}
 .streak-best .v{font-size:20px;font-weight:800;color:var(--orange);}
-.streak-best .l{font-size:11px;color:var(--label-2);font-weight:600;}
+.streak-best .l{font-size:9.5px;color:var(--label-3);font-weight:800;
+  text-transform:uppercase;letter-spacing:0.1em;}
 
 /* Resumen de la semana */
-.week-card{margin-top:var(--gap);padding:var(--gap) var(--gap) var(--pad);}
+.week-card{margin-top:10px;padding:var(--gap) var(--gap) var(--pad);}
 .week-head{display:flex;align-items:baseline;justify-content:space-between;}
 .week-head .t{font-size:16px;font-weight:700;letter-spacing:var(--track-title);}
 .week-head .range{font-size:12.5px;color:var(--label-2);font-weight:600;}
@@ -761,7 +822,7 @@ input::placeholder,textarea::placeholder{color:var(--label-4);}
 .week-empty{margin-top:10px;font-size:13.5px;color:var(--label-2);font-weight:500;line-height:1.4;}
 
 /* Calendario */
-.cal-card{margin-top:var(--gap);padding:var(--gap) var(--gap-sm) var(--pad);overflow:hidden;}
+.cal-card{margin-top:10px;padding:var(--gap) var(--gap-sm) var(--pad);overflow:hidden;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--gap);padding:0 6px;}
 .cal-head .m{font-size:18px;font-weight:700;letter-spacing:var(--track-title);}
 .cal-nav{display:flex;gap:var(--gap-xs);}
@@ -928,8 +989,9 @@ input::placeholder,textarea::placeholder{color:var(--label-4);}
    cuerpo llena el espacio disponible y hace scroll DENTRO de la hoja. */
 .sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;
   padding:6px var(--pad) calc(var(--gap-lg) + var(--safe-bottom));flex:1 1 auto;min-height:0;}
-.sheet-body .lbl-sm{font-size:13px;font-weight:600;color:var(--label-2);margin:var(--gap) 4px var(--gap-xs);
-  text-transform:none;letter-spacing:var(--track-caption);}
+.sheet-body .lbl-sm{font-size:10.5px;font-weight:800;color:var(--label-3);
+  margin:var(--gap) 4px var(--gap-xs);
+  text-transform:uppercase;letter-spacing:0.12em;}
 .sheet-body .lbl-sm:first-child{margin-top:var(--gap-xs);}
 .hint{font-size:12.5px;color:var(--label-3);margin:var(--gap-xs) 4px 0;line-height:1.45;
   letter-spacing:var(--track-caption);}
@@ -956,8 +1018,9 @@ input[type=file]{display:none;}
 input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 
 /* Galería del día */
-.day-gallery{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--gap-sm);}
-.gal-item{display:flex;gap:14px;align-items:center;padding:12px;min-width:0;}
+.day-gallery{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;
+  background:var(--surface);box-shadow:var(--n-press);border-radius:28px;padding:10px;}
+.gal-item{display:flex;gap:13px;align-items:center;padding:11px;min-width:0;border-radius:20px;}
 .gal-item.anim-in{animation:cardIn var(--t-slow) var(--ease-out) backwards;}
 /* respuesta táctil (estilo iOS) solo en las tarjetas que abren algo al tocarlas */
 .gal-item.tappable{cursor:pointer;
@@ -968,8 +1031,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   background:var(--surface);box-shadow:var(--n-press-sm);}
 .gal-thumb img{width:100%;height:100%;object-fit:cover;}
 .gal-info{flex:1;min-width:0;}
-.gal-info .t{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.gal-info .m{font-size:12.5px;color:var(--label-2);margin-top:3px;}
+.gal-info .t{font-size:16px;font-weight:700;letter-spacing:var(--track-title);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gal-info .m{font-size:9.5px;color:var(--label-3);margin-top:6px;font-weight:800;
+  text-transform:uppercase;letter-spacing:0.085em;}
 .gal-info .m .pts{color:var(--yellow);font-weight:600;}
 
 /* Lightbox */
@@ -1172,22 +1237,24 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   <!-- ===================== GENERADOR ===================== -->
   <section class="view" id="view-gen" data-title="Generador">
     <h1 class="large-title">Generador</h1>
-    <p class="subtitle">Crea una tarea a tu medida y gana el doble de puntos.</p>
+    <p class="subtitle">Un reto a tu medida · doble de puntos</p>
 
-    <div class="gen-field">
-      <div class="gen-label">Categoría</div>
-      <div class="dd"><select id="genCat" aria-label="Categoría"></select><span class="dd-chev">▾</span></div>
-    </div>
-    <div class="gen-field">
-      <div class="gen-label">Personas</div>
-      <div class="dd"><select id="genPeople" aria-label="Personas"></select><span class="dd-chev">▾</span></div>
-    </div>
-    <div class="gen-field">
-      <div class="gen-label">Duración</div>
-      <div class="dd"><select id="genDur" aria-label="Duración"></select><span class="dd-chev">▾</span></div>
+    <div class="gen-panel">
+      <div class="gen-field">
+        <div class="gen-label">Categoría</div>
+        <div class="dd"><select id="genCat" aria-label="Categoría"></select><span class="dd-chev">▾</span></div>
+      </div>
+      <div class="gen-field">
+        <div class="gen-label">Personas</div>
+        <div class="dd"><select id="genPeople" aria-label="Personas"></select><span class="dd-chev">▾</span></div>
+      </div>
+      <div class="gen-field">
+        <div class="gen-label">Duración</div>
+        <div class="dd"><select id="genDur" aria-label="Duración"></select><span class="dd-chev">▾</span></div>
+      </div>
     </div>
 
-    <button class="btn" id="genBtn" style="margin-top:20px;">
+    <button class="btn" id="genBtn" style="margin-top:14px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 4l1.6 4.4L20 10l-4.4 1.6L14 16l-1.6-4.4L8 10l4.4-1.6zM6 4v3M4.5 5.5h3M6 17v3M4.5 18.5h3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Generar tarea
     </button>
@@ -1198,14 +1265,14 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   <!-- ===================== TAREAS ===================== -->
   <section class="view active" id="view-tasks" data-title="Tareas">
     <h1 class="large-title">Tareas</h1>
-    <p class="subtitle">Tus retos de hoy. Completa para sumar puntos.</p>
+    <p class="subtitle">Tus retos de hoy</p>
 
     <div class="segmented" id="taskFilter" style="margin-top:6px;">
       <div class="seg sel" data-f="pending">Pendientes</div>
       <div class="seg" data-f="done">Completadas</div>
     </div>
 
-    <div id="taskListWrap" style="margin-top:18px;"></div>
+    <div id="taskListWrap" style="margin-top:4px;"></div>
   </section>
 
   <!-- ===================== PERFIL ===================== -->
@@ -1217,8 +1284,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
         <span id="avatarInitial">A</span>
         <div class="edit-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 18l-1 3 3-1L19 8l-2-2zM15 5l2 2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       </div>
-      <div class="profile-name" id="profileName">Atleta <svg class="pen" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 18l-1 3 3-1L19 8l-2-2zM15 5l2 2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-      <div class="rank-badge" id="rankBadge"></div>
+      <div class="ph-id">
+        <div class="profile-name" id="profileName">Atleta <svg class="pen" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 18l-1 3 3-1L19 8l-2-2zM15 5l2 2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="rank-badge" id="rankBadge"></div>
+      </div>
     </div>
 
     <div class="card rank-card">
@@ -1244,9 +1313,9 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 
     <div class="stat-grid">
       <div class="card stat"><div class="v gold" id="stPts">0</div><div class="l">Puntos totales</div></div>
-      <div class="card stat"><div class="v" id="stTotal">0</div><div class="l">Tareas completadas</div></div>
-      <div class="card stat"><div class="v pur" id="stRandom">0</div><div class="l">Tareas aleatorias</div></div>
-      <div class="card stat"><div class="v grn" id="stNormal">0</div><div class="l">Tareas normales</div></div>
+      <div class="card stat"><div class="v" id="stTotal">0</div><div class="l">Completadas</div></div>
+      <div class="card stat"><div class="v pur" id="stRandom">0</div><div class="l">Aleatorias</div></div>
+      <div class="card stat"><div class="v grn" id="stNormal">0</div><div class="l">Normales</div></div>
     </div>
 
     <div id="weekCardWrap"></div>
@@ -1321,7 +1390,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v127";
+const APP_VERSION = "v128";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3050,17 +3119,26 @@ const Tasks = (() => {
   function cardHtml(t,i){
     const color = catColor(t.category);
     const pts = taskPoints(t.minutes,t.random);
-    const meta = [];
-    // solo el día (recurrencia) y los puntos
-    meta.push(`<span class="tag${recurLabel(t)==="Hoy"?" today":""}">${esc(recurLabel(t))}</span>`);
-    if(t.shared && t.partnerName) meta.push(`<span class="tag dot shared">con ${esc(t.partnerName)}</span>`);
-    meta.push(`<span class="tag dot pts">${pts} pts</span>`);
+    // La tarea se compone en DOS PISOS, no en una fila:
+    //   1) antetítulo en versalitas — de qué va y cuándo toca — con la ficha de
+    //      categoría reducida a un disco pequeño y los puntos al otro extremo;
+    //   2) el TÍTULO como protagonista, a tamaño de lectura, con la casilla
+    //      grande al final de la línea.
+    // Antes el título iba a 15px encogido entre un icono de 44px y una casilla,
+    // y era lo único que de verdad importaba de la tarjeta.
+    const over = [];
+    over.push(`<span class="tc-cat" style="color:${color}">${esc(t.category)}</span>`);
+    over.push(`<span class="tc-when${recurLabel(t)==="Hoy"?" today":""}">${esc(recurLabel(t))}</span>`);
+    if(t.shared && t.partnerName) over.push(`<span class="tc-when shared">con ${esc(t.partnerName)}</span>`);
     return `
       <div class="card task-card${t.urgent?" urgent":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
-        <div class="task-icon" style="background:${color}">${Icons.get(t.category)}</div>
         <div class="task-body" data-tap="${t.id}" role="button">
+          <div class="tc-over">
+            <span class="tc-ic" style="background:${color}">${Icons.get(t.category)}</span>
+            ${over.join("")}
+            <span class="tc-pts">${pts} pts</span>
+          </div>
           <div class="task-title">${esc(t.title)}</div>
-          <div class="task-meta">${meta.join("")}</div>
         </div>
         <button class="task-check" data-check="${t.id}">${checkSvg()}</button>
       </div>`;
@@ -4569,9 +4647,9 @@ const Friends = (() => {
         </div>
         <div class="stat-grid">
           <div class="card stat"><div class="v gold">${fv.points}</div><div class="l">Puntos totales</div></div>
-          <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Tareas completadas</div></div>
-          <div class="card stat"><div class="v pur">${(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Tareas aleatorias</div></div>
-          <div class="card stat"><div class="v grn">${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Tareas normales</div></div>
+          <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Completadas</div></div>
+          <div class="card stat"><div class="v pur">${(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Aleatorias</div></div>
+          <div class="card stat"><div class="v grn">${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Normales</div></div>
         </div>
         ${fpWs.available?'<button class="btn secondary" id="fpWeekBtn" style="margin-top:14px;">Ver resumen semanal</button>':''}
         <div class="card cal-card" style="margin-top:14px;">
