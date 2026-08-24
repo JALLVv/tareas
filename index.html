@@ -1199,7 +1199,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v131";
+const APP_VERSION = "v132";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1884,8 +1884,10 @@ const taskPoints = (m,random) => basePoints(m) * (random?2:1);
    intervalo tras el cual VENCE. De ahí sale el anillo. El mes se toma como
    30 días: es una barra de tiempo, no un calendario.
    --------------------------------------------------------------------- */
-const endOfDayMs = (key)=>{ const [y,m,d]=key.split("-").map(Number);
+const endOfDayMs   = (key)=>{ const [y,m,d]=key.split("-").map(Number);
   return new Date(y, m-1, d, 23, 59, 59, 999).getTime(); };
+const startOfDayMs = (key)=>{ const [y,m,d]=key.split("-").map(Number);
+  return new Date(y, m-1, d, 0, 0, 0, 0).getTime(); };
 const weekdayOf  = (key)=>{ const [y,m,d]=key.split("-").map(Number);
   return (new Date(y,m-1,d).getDay()+6)%7; };            // 0=Lunes
 const domOfKey   = (key)=> parseInt(key.split("-")[2],10);
@@ -1906,48 +1908,72 @@ function defaultDueFields(rec){
   const repeats = (ty!=="once" && ty!=="date");
   const dueUnit = ty==="monthly" ? "month" : (ty==="weekly"||ty==="custom") ? "week" : "day";
   const startAt = Date.now();
-  const base = { startAt, dueN:1, dueUnit, repeats, repeatFrom:"fixed", endMode:false, dueVer:2, recurrence:rec };
-  base.dueAt = computeDueFrom(base, startAt, false);
+  const base = { startAt, dueN:1, dueUnit, repeats, repeatFrom:"fixed", endMode:false, dueVer:3, recurrence:rec };
+  base.dueAt   = computeDueFrom(base, startAt, false);
+  base.startAt = computeStartFor(base, base.dueAt);
   return base;
 }
-/* Cuándo vence, contando DESDE un instante dado.
-   Si la tarea tiene días marcados (lunes/miércoles/viernes, o días del mes),
-   son ELLOS los que mandan: vence al acabar el próximo día marcado, no al
-   sumar el intervalo. Antes se sumaba la semana entera y una tarea de los
-   lunes, miércoles y viernes decía "vence en 4 días" estando a martes. */
-function computeDueFrom(t, fromMs, strict){
+/* ---------------------------------------------------------------------
+   DÍAS MARCADOS
+   Una tarea puede fijar SU RITMO de dos maneras excluyentes:
+     a) por INTERVALO — "vence 1 día / 3 semanas después de empezar";
+     b) por DÍAS MARCADOS — "lunes, miércoles y viernes".
+   Con días marcados, la ventana de la tarea ES ESE DÍA: nace a las 00:00 y
+   vence a las 23:59:59 del mismo día. Así el anillo empieza lleno justo
+   cuando la tarea aparece en la lista y se vacía a lo largo del día.
+   Antes la ventana iba desde que se creó la tarea hasta el próximo día
+   marcado, así que el día en que por fin aparecía el anillo ya venía medio
+   gastado: el círculo y la lista contaban cosas distintas.
+   --------------------------------------------------------------------- */
+function markedDays(t){
   const r = (t && t.recurrence) || {};
-  const fromKey = dateKey(new Date(fromMs));
-  const fits = (k)=> strict ? true : (endOfDayMs(k) > fromMs);
-  if(t && t.repeats && t.dueUnit === "week" && r.days && r.days.length){
-    for(let i = strict?1:0; i<=21; i++){
-      const k = addDaysKey(fromKey,i);
-      if(r.days.includes(weekdayOf(k)) && fits(k)) return endOfDayMs(k);
-    }
+  if(!t || !t.repeats) return null;
+  if(r.days  && r.days.length)  return { kind:"week",  set:r.days  };
+  if(r.dates && r.dates.length) return { kind:"month", set:r.dates };
+  return null;
+}
+function nextMarkedKey(t, fromKey, strict){
+  const m = markedDays(t); if(!m) return null;
+  for(let i = strict?1:0; i<=400; i++){
+    const k = addDaysKey(fromKey,i);
+    const hit = m.kind==="week" ? m.set.includes(weekdayOf(k)) : m.set.includes(domOfKey(k));
+    if(hit) return k;
   }
-  if(t && t.repeats && t.dueUnit === "month" && r.dates && r.dates.length){
-    for(let i = strict?1:0; i<=62; i++){
-      const k = addDaysKey(fromKey,i);
-      if(r.dates.includes(domOfKey(k)) && fits(k)) return endOfDayMs(k);
-    }
+  return null;
+}
+function computeDueFrom(t, fromMs, strict){
+  if(markedDays(t)){
+    const k = nextMarkedKey(t, dateKey(new Date(fromMs)), !!strict);
+    if(k) return endOfDayMs(k);
   }
   return fromMs + taskPeriod(t||{});
+}
+// Arranque de la ventana que termina en dueMs.
+function computeStartFor(t, dueMs){
+  if(markedDays(t)) return startOfDayMs(dateKey(new Date(dueMs)));
+  return dueMs - taskPeriod(t||{});
 }
 function taskDueAt(t){
   if(t && typeof t.dueAt === "number") return t.dueAt;
   const start = (t && (t.startAt || t.createdAt)) || Date.now();
   return computeDueFrom(t, start, false);
 }
+/* La VENTANA es la única fuente de verdad: de ella salen el anillo, la
+   etiqueta de tiempo, la penalización y el momento en que la tarea aparece.
+   Mientras se calculaban por separado, podían contradecirse. */
+function taskWindow(t){
+  const due = taskDueAt(t);
+  let start = (t && typeof t.startAt === "number") ? t.startAt : computeStartFor(t, due);
+  if(!(start < due)) start = computeStartFor(t, due);   // datos incoherentes
+  return { start, due, period: Math.max(60000, due - start) };
+}
 // Al completar, el siguiente vencimiento. "intervalo fijo" mantiene el ritmo
 // original (aunque la hagas tarde); "última finalización" cuenta desde ahora.
 function nextDueAfter(t, completedAt){
   if(!t.repeats) return null;
-  const r = t.recurrence || {};
-  const byDays = (t.dueUnit==="week"  && r.days  && r.days.length)
-              || (t.dueUnit==="month" && r.dates && r.dates.length);
-  // Con días marcados, el siguiente vencimiento es el próximo día marcado
-  // DESPUÉS de hoy (ya la hiciste hoy), venga de donde venga el ritmo.
-  if(byDays) return computeDueFrom(t, completedAt, true);
+  // Con días marcados manda el próximo día marcado DESPUÉS de hoy (ya la
+  // hiciste hoy); el intervalo y "repetir desde" no pintan nada.
+  if(markedDays(t)) return computeDueFrom(t, completedAt, true);
   const period = taskPeriod(t);
   if(t.repeatFrom === "completion") return completedAt + period;
   let next = taskDueAt(t) + period;
@@ -2316,12 +2342,20 @@ const Store = (() => {
           return new Date(y,m-1,d,23,59,59,999).getTime(); })() : 0;
         t.startAt = Math.max(t.createdAt || Date.now(), last);
       }
-      // dueVer 2: la primera versión sumaba el intervalo a secas, y una tarea
-      // marcada solo lunes/miércoles/viernes decía "vence en 7 días" estando a
-      // martes. Ahora mandan los días marcados. Se recalcula una sola vez.
-      if(t.dueVer !== 2 || typeof t.dueAt !== "number"){
-        t.dueAt  = computeDueFrom(t, t.startAt, false);
-        t.dueVer = 2;
+      /* dueVer 3: la ventana de una tarea con días marcados es AHORA ese día
+         entero (00:00 → 23:59), no el hueco desde que se creó. Se recalcula
+         una sola vez por tarea.
+         Importante: un recálculo NO debe cobrarte puntos por días que ya
+         pasaron. Si el vencimiento nuevo cae en el pasado se marca como ya
+         cobrado, así la migración nunca resta nada; a partir de aquí las
+         penalizaciones vuelven a contar con normalidad. */
+      if(t.dueVer !== 3 || typeof t.dueAt !== "number"){
+        const anchor  = (typeof t.startAt === "number") ? t.startAt : (t.createdAt || Date.now());
+        const newDue  = computeDueFrom(t, anchor, false);
+        t.dueAt   = newDue;
+        t.startAt = computeStartFor(t, newDue);
+        if(newDue < Date.now()) t.penalizedFor = newDue;
+        t.dueVer  = 3;
       }
     });
     if(typeof state.penalties!=='number') state.penalties=0;
@@ -2721,10 +2755,8 @@ const Tasks = (() => {
      llena otra vez, midiendo el retraso: un intervalo entero de retraso deja
      el anillo rojo completo. */
   function ringState(t){
-    const now    = Date.now();
-    const period = taskPeriod(t);
-    const due    = taskDueAt(t);
-    const start  = due - period;
+    const now = Date.now();
+    const { start, due, period } = taskWindow(t);
     if(now <= due){
       // Antes de que empiece su ciclo el anillo se ve lleno, no vacío.
       const frac = now <= start ? 1 : (due - now) / period;
@@ -2780,14 +2812,7 @@ const Tasks = (() => {
     return t.lastDone === dateKey();   // respaldo para datos antiguos
   };
   // ¿la tarea aparece hoy en tu lista? Solo limita si "Mostrar solo esos días" está activo.
-  const scheduledToday = (t)=>{
-    if(!t.onlyOnDays) return true;
-    const r=t.recurrence; if(!r) return true;
-    if(r.type==="date") return r.date===dateKey();
-    if(r.type==="weekly"||r.type==="custom") return (r.days&&r.days.length) ? r.days.includes(weekdayOf(dateKey())) : true;
-    if(r.type==="monthly") return (r.dates&&r.dates.length) ? r.dates.includes(domOf(dateKey())) : true;
-    return true;
-  };
+  const scheduledToday = (t)=> Date.now() >= taskWindow(t).start;
 
   /* ---------- RECORDATORIOS ----------
      Programa una notificación local a la hora elegida para las tareas con
@@ -2824,7 +2849,9 @@ const Tasks = (() => {
     const byTask={}; (rows||[]).forEach(r=>{ if(r && r.active!==false) byTask[String(r.task_id)]=r; });
     (Store.get().tasks||[]).forEach(t=>{
       if(!t.reminder || !t.reminder.time) return;
-      if(!dueOn(t, todayKey) || isDoneToday(t)) return;
+      // Solo avisa si la tarea está VIVA hoy: su ventana abierta y sin hacer.
+      if(!scheduledToday(t) || isDoneToday(t)) return;
+      if(dateKey(new Date(taskWindow(t).due)) !== todayKey) return;
       if(remFired(t)) return;                            // ya avisado hoy
       const p=String(t.reminder.time).split(":"), h=+p[0], m=+p[1];
       if(isNaN(h)||isNaN(m)) return;
@@ -3259,7 +3286,8 @@ const Tasks = (() => {
     let emoji = editing ? (existing.emoji||"") : "";   // "" = hereda el de la categoría
     let days  = editing && existing.recurrence && existing.recurrence.days ? existing.recurrence.days.slice() : [];
     let monthDays = editing && existing.recurrence && existing.recurrence.dates ? existing.recurrence.dates.slice() : [];
-    let onlyDays = editing ? !!existing.onlyOnDays : false;
+    // "Solo ciertos días" está activo si la tarea ya tiene días marcados.
+    let byDays = editing ? !!(days.length || monthDays.length) : false;
     // --- intervalo de vencimiento ---
     let mode       = editing && existing.endMode ? "enddate" : "interval";
     let dueN       = editing && existing.dueN ? existing.dueN : 1;
@@ -3318,7 +3346,7 @@ const Tasks = (() => {
           <input type="time" class="chipv" id="ctStartTime" value="${esc(startTime)}"/>
         </span>
       </div>
-      <div class="frow" id="ctIntervalRow" style="display:${mode==="interval"?"flex":"none"}">
+      <div class="frow" id="ctIntervalRow" style="display:${(mode==="interval"&&!byDays)?"flex":"none"}">
         <span class="fl">Vence después de</span>
         <span class="fval">
           <span class="fsel"><select class="chipv" id="ctDueN" aria-label="Cantidad">
@@ -3340,7 +3368,18 @@ const Tasks = (() => {
         <span class="fl">Se repite</span>
         <div class="switch${repeats?" on":""}" id="ctRepeats"><div class="knob"></div></div>
       </div>
-      <div class="frow" id="ctRepeatFromRow" style="display:${(mode==="interval"&&repeats)?"flex":"none"}">
+      <!-- Días marcados: un ritmo ALTERNATIVO al intervalo. Con ellos activos
+           la tarea nace a las 00:00 del día marcado y vence a las 23:59 del
+           mismo día, así que el intervalo deja de tener sentido y se oculta. -->
+      <div class="frow" id="ctByDaysRow" style="display:${(mode==="interval"&&repeats)?"flex":"none"}">
+        <span class="fl">Solo ciertos días</span>
+        <div class="switch${byDays?" on":""}" id="ctByDays"><div class="knob"></div></div>
+      </div>
+      <div id="ctDaysPick" style="display:${(mode==="interval"&&repeats&&byDays)?"block":"none"};padding:2px 2px 14px;">
+        <div class="daypicker" id="ctDays"></div>
+        <div class="hint">Aparecerá esos días a las 00:00 y vencerá a las 23:59 del mismo día.</div>
+      </div>
+      <div class="frow" id="ctRepeatFromRow" style="display:${(mode==="interval"&&repeats&&!byDays)?"flex":"none"}">
         <span class="fl">Repetir desde</span>
         <span class="fval">
           <span class="fsel"><select class="chipv" id="ctRepeatFrom" aria-label="Repetir desde">
@@ -3373,20 +3412,6 @@ const Tasks = (() => {
           ${DURATIONS.map(m=>`<option value="${m}"${editing&&m===dur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("")}
         </select><span class="dd-chev">▾</span></div>
       </div>
-      <div id="ctDaysWrap" style="display:${(repeats&&dueUnit==="week")?"block":"none"};">
-        <div class="lbl-sm">Días de la semana</div><div class="daypicker" id="ctDays"></div>
-        <div class="form-group" style="margin-top:14px;">
-          <div class="row"><span class="lbl">Mostrar solo esos días</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyDays"><div class="knob"></div></div></div>
-        </div>
-        <div class="hint">Se repite cada semana esos días. Si no la completas un día programado, pierdes sus puntos.</div>
-      </div>
-      <div id="ctDatesWrap" style="display:${(repeats&&dueUnit==="month")?"block":"none"};">
-        <div class="lbl-sm">Días del mes</div><div class="monthpicker" id="ctMonthDays"></div>
-        <div class="form-group" style="margin-top:14px;">
-          <div class="row"><span class="lbl">Mostrar solo esas fechas</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyMonth"><div class="knob"></div></div></div>
-        </div>
-        <div class="hint">Se repite cada mes esas fechas. Si no la completas una fecha programada, pierdes sus puntos.</div>
-      </div>
       ${(!editing && Cloud.configured())?`<div id="ctShareWrap"><div class="lbl-sm">Compartir con un amigo</div><div class="chips" id="ctShare"></div><div class="hint" id="ctShareHint" style="display:none">Si tú o tu amigo la completáis o la borráis, se hace para los dos.</div></div>`:""}
       <button class="btn" id="ctSave" style="margin-top:24px;">Guardar</button>
       ${editing?`<button class="btn danger ghost" id="ctDelete" style="margin-top:12px;">${trashSvg()} Eliminar tarea</button>`:""}
@@ -3405,12 +3430,29 @@ const Tasks = (() => {
 
     // La vista previa se repinta con CADA cambio: es la única forma de que el
     // intervalo se entienda sin leer una explicación.
-    function periodNow(){
-      return mode==="enddate"
-        ? Math.max(60000, endMs - startMs)
-        : Math.max(60000, dueN * (UNIT_MS[dueUnit]||UNIT_MS.day));
+    /* La vista previa NO recalcula por su cuenta: arma la tarea tal y como se
+       guardaría y pregunta a las mismas funciones que usa la lista. Cuando
+       tenía su propia fórmula, decía "vence en 23 h 59 min" mientras la tarea
+       ya guardada decía otra cosa. */
+    function previewFields(){
+      const useDays = (mode!=="enddate" && repeats && byDays);
+      return {
+        repeats: mode==="enddate" ? false : repeats,
+        dueN, dueUnit, repeatFrom,
+        recurrence: { type: useDays ? (days.length?"weekly":"monthly") : (repeats?"daily":"once"),
+                      days: useDays ? days.slice() : [],
+                      dates: useDays ? monthDays.slice() : [] }
+      };
     }
-    function dueNow(){ return mode==="enddate" ? endMs : startMs + periodNow(); }
+    function dueNow(){
+      if(mode==="enddate") return endMs;
+      return computeDueFrom(previewFields(), startMs, false);
+    }
+    function periodNow(){
+      if(mode==="enddate") return Math.max(60000, endMs - startMs);
+      const f=previewFields(), due=dueNow();
+      return Math.max(60000, due - computeStartFor(f, due));
+    }
     function paintPreview(){
       // Sin emoji propio, el campo muestra el de la categoría (y solo si no
       // lo estás escribiendo en ese momento).
@@ -3467,8 +3509,11 @@ const Tasks = (() => {
       $("#ctEndRow",sheet).style.display        = mode==="enddate"?"flex":"none";
       $("#ctRepeatRow",sheet).style.display     = mode==="interval"?"flex":"none";
       $("#ctRepeatFromRow",sheet).style.display = (mode==="interval"&&repeats)?"flex":"none";
-      $("#ctDaysWrap",sheet).style.display      = (mode==="interval"&&repeats&&dueUnit==="week")?"block":"none";
-      $("#ctDatesWrap",sheet).style.display     = (mode==="interval"&&repeats&&dueUnit==="month")?"block":"none";
+      const on = (mode==="interval"&&repeats);
+      $("#ctIntervalRow",sheet).style.display   = (mode==="interval"&&!byDays)?"flex":"none";
+      $("#ctByDaysRow",sheet).style.display     = on?"flex":"none";
+      $("#ctDaysPick",sheet).style.display      = (on&&byDays)?"block":"none";
+      $("#ctRepeatFromRow",sheet).style.display = (on&&!byDays)?"flex":"none";
     }
     $$(".seg",modeWrap).forEach(el=> el.onclick=()=>{
       mode=el.getAttribute("data-m"); haptic();
@@ -3522,11 +3567,13 @@ const Tasks = (() => {
     swR.onclick = ()=>{ remind=!remind; swR.classList.toggle("on",remind); haptic();
       rWrap.style.display = remind?"block":"none"; };
     rTime.onchange = ()=>{ remindTime = rTime.value || "09:00"; };
-    const syncToggles = ()=>{ ["#ctOnlyDays","#ctOnlyMonth"].forEach(sel=>{ const e=$(sel,sheet); if(e) e.classList.toggle("on",onlyDays); }); };
-    const swOnly = $("#ctOnlyDays",sheet);
-    if(swOnly) swOnly.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
-    const swOnlyMonth = $("#ctOnlyMonth",sheet);
-    if(swOnlyMonth) swOnlyMonth.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
+    const swByDays = $("#ctByDays",sheet);
+    if(swByDays) swByDays.onclick = ()=>{
+      byDays=!byDays; swByDays.classList.toggle("on",byDays); haptic();
+      // Activar sin elegir nada no sirve de nada: se marca el día de hoy.
+      if(byDays && !days.length && !monthDays.length){ days=[weekdayOf(dateKey())]; renderDays(); }
+      syncRows(); paintPreview(); validate();
+    };
 
     const titleInput = $("#ctTitle",sheet);
     const saveBtn = $("#ctSave",sheet);
@@ -3555,20 +3602,27 @@ const Tasks = (() => {
       const periodMs = endMode ? Math.max(60000, endMs - startMs)
                                : Math.max(60000, dueN * (UNIT_MS[dueUnit]||UNIT_MS.day));
       const willRepeat = endMode ? false : repeats;
+      // Los días marcados solo cuentan si el interruptor está activo y la
+      // tarea se repite: si no, se guardan vacíos para que nada quede a medias.
+      const useDays  = (!endMode && willRepeat && byDays);
+      const outDays  = useDays ? days.slice() : [];
+      const outDates = useDays ? monthDays.slice() : [];
       const recType = !willRepeat ? "once"
-                    : (dueUnit==="week"  && days.length)      ? "weekly"
-                    : (dueUnit==="month" && monthDays.length) ? "monthly"
+                    : outDays.length  ? "weekly"
+                    : outDates.length ? "monthly"
                     : "daily";
-      const rec = {type:recType, days:days.slice(), dates:monthDays.slice()};
+      const rec = {type:recType, days:outDays, dates:outDates};
       const dueFields = {
         emoji: emoji || null,
-        startAt:startMs, repeats:willRepeat, repeatFrom, endMode, dueVer:2,
+        startAt:startMs, repeats:willRepeat, repeatFrom, endMode, dueVer:3,
         dueN: endMode ? Math.max(1,Math.round(periodMs/60000)) : dueN,
         dueUnit: endMode ? "minute" : dueUnit,
         recurrence: rec
       };
-      // Con días marcados manda el próximo día marcado, no la suma del intervalo.
-      dueFields.dueAt = endMode ? endMs : computeDueFrom(dueFields, startMs, false);
+      // Con días marcados manda el próximo día marcado (00:00 → 23:59), no la
+      // suma del intervalo; y el arranque se ajusta a esa misma ventana.
+      dueFields.dueAt   = endMode ? endMs : computeDueFrom(dueFields, startMs, false);
+      dueFields.startAt = endMode ? startMs : computeStartFor(dueFields, dueFields.dueAt);
       const reminder = remind ? { time: (remindTime||"09:00") } : null;
       const newId = uid();
       setTimeout(()=>{
@@ -3579,14 +3633,14 @@ const Tasks = (() => {
           if(editing){
             const t = s.tasks.find(x=>x.id===existing.id);
             if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent;
-                   t.recurrence=rec; t.onlyOnDays=onlyDays; t.reminder=reminder;
+                   t.recurrence=rec; t.onlyOnDays=useDays; t.reminder=reminder;
                    Object.assign(t, dueFields);
                    // vencimiento nuevo = castigo nuevo: se olvida el ya cobrado
                    if(t.penalizedFor !== t.dueAt) delete t.penalizedFor;
                    delete t.doneUntil; }
           } else {
             s.tasks.unshift(Object.assign({ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
-              recurrence:rec, onlyOnDays:onlyDays, reminder, random:false, createdAt:Date.now(), done:false, lastDone:null },
+              recurrence:rec, onlyOnDays:useDays, reminder, random:false, createdAt:Date.now(), done:false, lastDone:null },
               dueFields));
           }
         });
@@ -3601,7 +3655,7 @@ const Tasks = (() => {
       if(!editing && partner){
         const meName=Store.get().profile.name||"Atleta";
         Cloud.createShared({ id:newId, owner_id:Cloud.myId(), owner_name:meName, partner_id:partner.cloudId, partner_name:partner.name,
-          title, descr:desc, category:cat, minutes:dur, people:ppl, urgent, recurrence:rec, only_on_days:onlyDays });
+          title, descr:desc, category:cat, minutes:dur, people:ppl, urgent, recurrence:rec, only_on_days:useDays });
       }
       render();
       UI.toast(editing?"Cambios guardados":(partner?`Invitación enviada a ${esc(partner.name)}`:"Tarea creada"),"check","var(--green)");
@@ -3711,7 +3765,7 @@ const Tasks = (() => {
             // "última finalización", ahora mismo).
             const next = nextDueAfter(t, at);
             t.dueAt     = next;
-            t.startAt   = next - taskPeriod(t);
+            t.startAt   = computeStartFor(t, next);
             t.doneUntil = t.startAt;
           } else {
             t.done = true;
@@ -3725,6 +3779,9 @@ const Tasks = (() => {
         // llegan los dos caminos se funden en uno; si uno falla, llega el otro).
         if (Cloud.enabled()){
           Cloud.pushCompletion(entry, photoData, true); Cloud.pushProfile();
+          // Ciclo nuevo = fecha de aviso nueva (ver syncReminder).
+          const upd = Store.get().tasks.find(x=>x.id===task.id);
+          if(upd && upd.reminder && upd.reminder.time) Cloud.syncReminder(upd);
         }
         // tarea compartida: subir la foto y marcar la fila como hecha (para ambos)
         if (task.shared && task.sharedId && Cloud.enabled() && photoData){
@@ -4604,12 +4661,21 @@ const Cloud = (() => {
       const p=String(t.reminder.time).split(":"); const hh=+p[0]||0, mm=+p[1]||0;
       const r=t.recurrence||{type:'once'};
       let kind='daily', dow=[], dom=[], on_date=null;
-      // La app usa 0=Lunes; Postgres extract(dow) usa 0=Domingo → convertimos.
-      if(r.type==='weekly'||r.type==='custom'){ kind='weekly'; dow=(r.days||[]).map(d=>(d+1)%7); }
-      else if(r.type==='monthly'){ kind='monthly'; dom=(r.dates||[]).slice(); }
-      else if(r.type==='date'){ kind='date'; on_date=r.date||dateKey(); }
-      else if(r.type==='once'){ kind='once'; on_date=dateKey(new Date(t.createdAt||Date.now())); }
-      else { kind='daily'; }
+      // Con DÍAS MARCADOS el servidor puede repetir solo. La app usa 0=Lunes;
+      // Postgres extract(dow) usa 0=Domingo → se convierte.
+      if((r.type==='weekly'||r.type==='custom') && (r.days||[]).length){
+        kind='weekly'; dow=(r.days||[]).map(d=>(d+1)%7);
+      } else if(r.type==='monthly' && (r.dates||[]).length){
+        kind='monthly'; dom=(r.dates||[]).slice();
+      } else {
+        /* Sin días marcados el ritmo es un INTERVALO ("cada 3 días", "cada 2
+           semanas"), y la tabla de la nube no sabe expresarlo: registrarlo
+           como 'daily' hacía que el aviso sonara TODOS los días aunque la
+           tarea venciera cada tres. Se registra como una fecha concreta —la
+           del vencimiento en curso— y se vuelve a registrar cada vez que la
+           tarea abre ciclo nuevo. */
+        kind='date'; on_date=dateKey(new Date(taskDueAt(t)));
+      }
       await client.from('reminders').upsert({ user_id:uid, task_id:String(t.id), title:t.title, hh, mm,
         kind, dow, dom, on_date, tz_offset:new Date().getTimezoneOffset(), active:true, updated_at:new Date().toISOString() });
     }catch(e){ console.warn("syncReminder:", e && e.message); }
@@ -5995,7 +6061,7 @@ window.addEventListener("pageshow",(e)=>{ if(e.persisted) repaintNudge(); });
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) repaintNudge(); });
 
 // exponer para depuración
-window.RachasApp = { Store, Router, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, nextDueAfter };
+window.RachasApp = { Store, Router, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
 })();
 </script>
 </body>
