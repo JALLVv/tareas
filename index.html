@@ -165,6 +165,10 @@ img{display:block;}
 .large-title{display:none;}
 .subtitle{color:var(--label-2);font-size:14px;line-height:1.4;
   margin:0 0 var(--gap) 2px;font-weight:500;letter-spacing:var(--track-body);}
+/* En la lista de tareas el subtítulo no describe la sección: DICE CÓMO VAS.
+   Por eso pesa más que un subtítulo cualquiera. */
+.status-head{font-size:23px;font-weight:800;color:var(--label-2);
+  letter-spacing:var(--track-title);margin-bottom:var(--gap);}
 .section-title{font-size:17px;font-weight:700;letter-spacing:var(--track-title);
   color:var(--label);margin:var(--gap-lg) 2px var(--gap-sm);line-height:1.3;}
 .section-title:first-of-type{margin-top:var(--gap);}
@@ -209,7 +213,82 @@ img{display:block;}
 .tab.active svg,.tab.active .tab-ic{transform:translateY(-1px);}
 .tab:active{transform:scale(0.95);}
 
-/* Botón de crear: círculo verde, el único botón de acción permanente. */
+/* Pastilla de la cabecera: dos acciones sobre la lista, juntas. */
+.tb-group{pointer-events:auto;flex:0 0 auto;display:flex;align-items:stretch;
+  background:var(--card);border-radius:var(--radius-pill);overflow:hidden;height:38px;}
+.tb-gbtn{width:46px;display:grid;place-items:center;color:var(--label);
+  transition:background var(--t-fast);}
+.tb-gbtn:active{background:var(--card-2);}
+.tb-gbtn svg{width:19px;height:19px;}
+
+/* Menú de vista: se despliega bajo la pastilla, anclado a la derecha. Crece
+   desde su esquina superior derecha —de donde sale— y nunca desde scale(0). */
+.vmenu-scrim{position:absolute;inset:0;z-index:60;opacity:0;pointer-events:none;}
+.vmenu-scrim.show{opacity:1;pointer-events:auto;}
+.vmenu{position:absolute;z-index:61;right:var(--pad);top:calc(var(--safe-top) + 52px);
+  min-width:236px;max-width:76vw;background:var(--card);border-radius:var(--radius);
+  padding:6px;box-shadow:0 16px 44px rgba(0,0,0,0.7);
+  opacity:0;transform:scale(0.9);transform-origin:100% 0;pointer-events:none;
+  transition:opacity var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);}
+.vmenu.show{opacity:1;transform:none;pointer-events:auto;}
+.vm-item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:12px 12px;border-radius:var(--radius-sm);color:var(--label);
+  font-size:15.5px;font-weight:500;transition:background var(--t-fast);}
+.vm-item:active{background:var(--card-2);}
+.vm-check{width:18px;flex:0 0 auto;display:grid;place-items:center;color:var(--label);}
+.vm-check svg{width:15px;height:15px;stroke-width:3;}
+.vm-ic{width:20px;flex:0 0 auto;display:grid;place-items:center;color:var(--label-2);}
+.vm-ic svg{width:17px;height:17px;}
+.vm-lbl{flex:1;min-width:0;}
+.vm-chev{color:var(--label-3);flex:0 0 auto;font-size:17px;line-height:1;}
+.vm-sep{height:1px;background:var(--hairline);margin:5px 10px;}
+
+/* Vista LISTA: la misma información en una fila, con el anillo reducido. */
+.tilelist{display:flex;flex-direction:column;gap:10px;}
+.tilerow{position:relative;display:flex;align-items:center;gap:14px;
+  background:var(--card);border-radius:var(--radius);padding:12px 14px;
+  animation:cardIn var(--t-slow) var(--ease-out) backwards;
+  transition:transform var(--t-press) var(--ease-out);}
+.tilerow:active{transform:scale(0.985);}
+.tilerow .ring{width:52px;height:52px;flex:0 0 auto;margin:0;}
+.tilerow .ring-track,.tilerow .ring-arc{stroke-width:9;}
+.tilerow .ring-ic,.tilerow .ring-ic .emoji{font-size:19px;}
+.tilerow .rowbody{flex:1;min-width:0;}
+.tilerow .tile-title{margin-top:0;text-align:left;font-size:16px;}
+.tilerow .tile-due{margin-top:3px;text-align:left;}
+.tilerow .tile-menu{position:static;flex:0 0 auto;}
+.tilerow.urgent{box-shadow:inset 0 0 0 1.5px rgba(255,159,10,0.6);}
+.tilerow.done,.tile.done{opacity:0.45;}
+
+/* Inspiraciones: emoji en ficha, título, y el botón de añadir a la derecha. */
+.insp-list{display:flex;flex-direction:column;gap:10px;}
+.insp-row{display:flex;align-items:center;gap:14px;padding:10px 12px;
+  background:var(--card);border-radius:var(--radius);
+  animation:cardIn var(--t-slow) var(--ease-out) backwards;}
+.insp-ic{width:56px;height:56px;border-radius:var(--radius-sm);flex:0 0 auto;
+  background:var(--card-2);display:grid;place-items:center;font-size:26px;}
+.insp-t{flex:1;min-width:0;font-size:16px;font-weight:700;letter-spacing:var(--track-title);
+  line-height:1.25;}
+.insp-add{flex:0 0 auto;padding:9px 18px;border-radius:var(--radius-pill);
+  background:var(--card-2);color:var(--label);font-size:15px;font-weight:600;
+  transition:transform var(--t-press) var(--ease-out), background var(--t-fast);}
+.insp-add:active{transform:scale(0.94);background:var(--card-3);}
+.insp-add.added{background:var(--green);color:#000;}
+
+/* Selector de emoji de la hoja: fila horizontal, "Auto" primero. */
+.emj-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 6px;}
+.emj-row::-webkit-scrollbar{display:none;}
+.emj{flex:0 0 auto;width:42px;height:42px;border-radius:var(--radius-sm);
+  background:var(--card-2);display:grid;place-items:center;font-size:21px;
+  transition:transform var(--t-press) var(--ease-out), background var(--t-fast);}
+.emj:active{transform:scale(0.9);}
+.emj.sel{background:var(--card-3);box-shadow:inset 0 0 0 2px var(--green);}
+.emj.auto{font-size:11px;font-weight:800;color:var(--label-2);letter-spacing:0.06em;}
+
+/* Botón de crear: círculo verde. Con el "+" ya en la cabecera queda oculto,
+   pero se conserva porque el resto del código lo muestra y lo esconde. */
+.fab{display:none !important;}
+.fab-legacy{}
 .fab{position:absolute;right:var(--pad);z-index:45;
   bottom:calc(var(--safe-bottom) + var(--dock-gap) + var(--dock-h) + var(--gap-sm));
   width:54px;height:54px;border-radius:50%;background:var(--green);
@@ -700,13 +779,40 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .sheet-body .lbl-sm{font-size:13px;font-weight:600;color:var(--label-2);margin:var(--gap) 4px var(--gap-xs);}
 .sheet-body .lbl-sm:first-child{margin-top:6px;}
 
-/* Anillo de la hoja de crear: el emoji de la categoría dentro de un aro de
-   trazo discontinuo. Es la vista previa de la ficha que vas a crear. */
-.emoji-ring{width:104px;height:104px;margin:6px auto var(--gap-sm);border-radius:50%;
-  background:var(--card-2);display:grid;place-items:center;position:relative;}
-.emoji-ring::after{content:"";position:absolute;inset:9px;border-radius:50%;
-  border:2px dashed var(--label-4);}
-.emoji-ring .emoji,.emoji-ring span{font-size:34px;line-height:1;}
+/* Vista previa de la hoja: la MISMA pieza que verás en la lista, con su
+   anillo real. El aro discontinuo de dentro marca que todavía es un hueco por
+   rellenar. Ver el anillo mientras lo configuras es lo que hace entendible el
+   intervalo sin explicarlo. */
+.pv{display:flex;flex-direction:column;align-items:center;margin:2px 0 var(--gap-lg);}
+.pv-ring{position:relative;width:120px;height:120px;}
+.pv-ring svg{width:100%;height:100%;display:block;transform:rotate(-90deg);}
+.pv-ring .dash{position:absolute;inset:17px;border-radius:50%;
+  border:2px dashed var(--label-4);pointer-events:none;}
+.pv-ring .ring-ic{font-size:36px;}
+.pv-ring .ring-ic .emoji{font-size:36px;}
+.pv-title{margin-top:15px;font-size:19px;font-weight:800;color:var(--label);
+  text-align:center;letter-spacing:var(--track-title);word-break:break-word;}
+.pv-due{margin-top:4px;font-size:14px;color:var(--label-2);}
+.pv.over .pv-due{color:var(--red);font-weight:600;}
+/* Fila de ajuste: rótulo a la izquierda, valor en pastilla a la derecha. */
+.frow{display:flex;align-items:center;gap:10px;padding:13px 2px;min-height:56px;}
+.frow + .frow{border-top:1px solid var(--hairline);}
+.frow .fl{flex:1;min-width:0;font-size:16px;font-weight:500;color:var(--label);}
+.fval{display:flex;align-items:center;gap:7px;flex:0 0 auto;}
+.chipv{background:var(--card-2);border-radius:var(--radius-pill);border:none;
+  padding:8px 13px;font-size:14px;font-weight:600;color:var(--label);
+  font-family:inherit;color-scheme:dark;transition:background var(--t-fast);
+  min-width:0;}
+.chipv:active{background:var(--card-3);}
+input.chipv{max-width:132px;}
+input.chipv::-webkit-calendar-picker-indicator{display:none;-webkit-appearance:none;}
+input.chipv::-webkit-date-and-time-value{text-align:left;}
+.frow .fl{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fval{min-width:0;}
+.fsel{position:relative;display:inline-flex;}
+.fsel select{appearance:none;-webkit-appearance:none;padding-right:26px;text-align:left;}
+.fsel .dd-chev{right:11px;}
+.fsep{height:1px;background:var(--hairline);margin:var(--gap) 0;}
 
 .photo-modal{text-align:center;}
 .photo-modal .ico{width:60px;height:60px;border-radius:50%;margin:6px auto var(--gap);
@@ -899,7 +1005,22 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   <button class="tb-btn" id="settingsBtn" aria-label="Ajustes" style="display:none">
     <span class="emoji">⚙️</span>
   </button>
+  <!-- Crear y opciones de vista viven juntos en una pastilla: son las dos
+       acciones sobre LA LISTA, y separarlas en dos círculos sueltos las hacía
+       parecer cosas de distinto rango. -->
+  <div class="tb-group" id="tbGroup" style="display:none">
+    <button class="tb-gbtn" id="addBtn" aria-label="Nueva tarea">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button class="tb-gbtn" id="viewBtn" aria-label="Opciones de vista">
+      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+    </button>
+  </div>
 </div>
+
+<!-- Menú de vista (cuadrícula/lista, completados, orden) -->
+<div class="vmenu-scrim" id="vmenuScrim"></div>
+<div class="vmenu" id="vmenu"></div>
 
 <div id="app">
   <!-- ===================== GENERADOR ===================== -->
@@ -933,7 +1054,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   <!-- ===================== TAREAS ===================== -->
   <section class="view active" id="view-tasks" data-title="Tareas">
     <h1 class="large-title">Tareas</h1>
-    <p class="subtitle">Tus retos de hoy</p>
+    <p class="subtitle status-head" id="tasksStatus">Nada que hacer 🙌</p>
 
     <div class="segmented" id="taskFilter" style="margin-top:6px;">
       <div class="seg sel" data-f="pending">Pendientes</div>
@@ -941,6 +1062,12 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
     </div>
 
     <div id="taskListWrap" style="margin-top:4px;"></div>
+  </section>
+
+  <!-- ===================== INSPIRACIONES ===================== -->
+  <section class="view" id="view-insp" data-title="Inspiraciones">
+    <p class="subtitle">Tareas listas para añadir de un toque</p>
+    <div class="insp-list" id="inspList"></div>
   </section>
 
   <!-- ===================== PERFIL ===================== -->
@@ -1016,6 +1143,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h11M4.5 12h11M4.5 17.5h7"/><path d="M18.5 15.6l1.7 1.7 3-3.4"/></svg>
     Tareas
   </button>
+  <button class="tab" data-view="insp">
+    <span class="tab-ic emoji">💡</span>
+    Ideas
+  </button>
   <button class="tab" data-view="profile">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.7"/><path d="M5.5 19.6a6.6 6.6 0 0113 0"/></svg>
     Perfil
@@ -1058,7 +1189,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v129";
+const APP_VERSION = "v130";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1075,6 +1206,12 @@ const Icons = (() => {
   const emoji = (k)=> map[k] || map._default;
   return { get:(k)=> `<span class="emoji">${emoji(k)}</span>`, raw:emoji };
 })();
+// Cada tarea puede llevar SU emoji; si no, hereda el de su categoría. Es lo
+// que permite que "Regar plantas" sea 🌱 y no el icono genérico de Naturaleza.
+const taskEmoji = (t)=> `<span class="emoji">${(t && t.emoji) || Icons.raw(t && t.category)}</span>`;
+// Emojis para elegir en la hoja de crear.
+const EMOJI_PICK = ["🌱","📚","🧺","💾","💊","⚡","🪟","💻","📬","🛏️","☕","🏋️","🚿","🗑️","🚗","💰",
+  "🏃","🧘","🎨","🎵","📖","✍️","🍳","🧽","💡","❤️","😌","🗣️","📷","🌳","⏰","🔔","🐕","🌊","🍎","🧴"];
 
 /* ---------------------------------------------------------------------
    Categorías (color de acento por categoría)
@@ -1735,6 +1872,46 @@ const basePoints = (m) => m>=120 ? 240 : m*2;   // 5→10, 10→20, … 60→120
 const taskPoints = (m,random) => basePoints(m) * (random?2:1);
 
 /* ---------------------------------------------------------------------
+   INTERVALO DE VENCIMIENTO
+   Una tarea ya no "toca un día": tiene un instante en que EMPIEZA y un
+   intervalo tras el cual VENCE. De ahí sale el anillo. El mes se toma como
+   30 días: es una barra de tiempo, no un calendario.
+   --------------------------------------------------------------------- */
+const UNIT_MS = { minute:60000, hour:3600000, day:86400000, week:604800000, month:2592000000 };
+const UNITS   = [["minute","Minuto"],["hour","Hora"],["day","Día"],["week","Semana"],["month","Mes"]];
+const unitLabel = (u,n)=>{ const l=(UNITS.find(x=>x[0]===u)||UNITS[2])[1];
+  if(n===1) return l;
+  return l==="Mes" ? "Meses" : l+"s"; };
+const taskPeriod = (t)=> Math.max(60000, (t.dueN||1) * (UNIT_MS[t.dueUnit||"day"] || UNIT_MS.day));
+// Cuándo vence de verdad. Si la tarea es antigua y aún no tiene dueAt, se
+// deduce; así el anillo funciona desde el primer momento, sin migrar a mano.
+// Valores de vencimiento por defecto para las tareas que no nacen en el
+// formulario (generador, compartidas): un día desde ahora, sin repetir.
+function defaultDueFields(rec){
+  const ty = (rec && rec.type) || "once";
+  const repeats = (ty!=="once" && ty!=="date");
+  const dueUnit = ty==="monthly" ? "month" : (ty==="weekly"||ty==="custom") ? "week" : "day";
+  const startAt = Date.now();
+  return { startAt, dueN:1, dueUnit, repeats, repeatFrom:"fixed", endMode:false,
+           dueAt: startAt + UNIT_MS[dueUnit] };
+}
+function taskDueAt(t){
+  if(t && typeof t.dueAt === "number") return t.dueAt;
+  const start = (t && (t.startAt || t.createdAt)) || Date.now();
+  return start + taskPeriod(t||{});
+}
+// Al completar, el siguiente vencimiento. "intervalo fijo" mantiene el ritmo
+// original (aunque la hagas tarde); "última finalización" cuenta desde ahora.
+function nextDueAfter(t, completedAt){
+  if(!t.repeats) return null;
+  const period = taskPeriod(t);
+  if(t.repeatFrom === "completion") return completedAt + period;
+  let next = taskDueAt(t) + period;
+  while(next <= completedAt) next += period;   // muy retrasada: salta al próximo
+  return next;
+}
+
+/* ---------------------------------------------------------------------
    Personas (para el generador y la adaptación de tareas en grupo)
    --------------------------------------------------------------------- */
 const PEOPLE = [
@@ -2078,6 +2255,28 @@ const Store = (() => {
     if(!Array.isArray(state.notifs)) state.notifs=[];
     if(!Array.isArray(state.notifSeen)) state.notifSeen=[];
     if(!Array.isArray(state.deletedShared)) state.deletedShared=[];
+    // Las tareas guardadas antes del intervalo no tienen ni inicio ni
+    // vencimiento. Se deducen de su repetición para que estrenen anillo sin
+    // que tengas que volver a crear nada.
+    (state.tasks||[]).forEach(t=>{
+      if(typeof t.dueN !== "number"){
+        const ty = (t.recurrence && t.recurrence.type) || "once";
+        t.dueN = 1;
+        t.dueUnit = ty==="monthly" ? "month" : (ty==="weekly"||ty==="custom") ? "week" : "day";
+        t.repeats = (ty!=="once" && ty!=="date");
+        t.repeatFrom = "fixed";
+      }
+      if(typeof t.startAt !== "number"){
+        // el ciclo en curso arranca en la última vez que la hiciste
+        const last = t.lastDone ? (()=>{ const [y,m,d]=t.lastDone.split("-").map(Number);
+          return new Date(y,m-1,d,23,59,59,999).getTime(); })() : 0;
+        t.startAt = Math.max(t.createdAt || Date.now(), last);
+      }
+      if(typeof t.dueAt !== "number"){
+        const per = Math.max(60000, (t.dueN||1) * (UNIT_MS[t.dueUnit||"day"] || UNIT_MS.day));
+        t.dueAt = t.startAt + per;
+      }
+    });
     if(typeof state.penalties!=='number') state.penalties=0;
     // Las recurrentes antiguas arrancan su contador de penalización desde ayer,
     // para no descontar retroactivamente días pasados antes de esta función.
@@ -2228,11 +2427,11 @@ const Generator = (() => {
     // se añade a tu lista todavía; se añadirá a ambas listas cuando la acepte.
     if(!partner){
       Store.update(s=>{
-        s.tasks.unshift({
+        s.tasks.unshift(Object.assign({
           id:newId, title:current.title, desc:"", category:current.category,
           minutes:current.minutes, people:current.people||1, urgent:false, recurrence:rec,
           random:true, createdAt:Date.now(), done:false, lastDone:null
-        });
+        }, defaultDueFields(rec)));
       });
     }
     if(partner){
@@ -2291,7 +2490,9 @@ const Gamify = (() => {
       }
     });
 
-    UI.pointsPop("+"+entry.points);
+    // Sin puntos (tarea vencida) no hay nada que anunciar: el "+0" flotando
+    // en mitad de la pantalla solo subrayaría lo que ya dice el anillo rojo.
+    if(entry.points > 0) UI.pointsPop("+"+entry.points);
     const after = rankFor(Store.get().points).index;
 
     // racha primero (banner), luego rango si subió
@@ -2467,43 +2668,38 @@ const Tasks = (() => {
      medianoche y el anillo volvía a verde entero, así que el rojo no llegaba
      a aparecer nunca. Anclada en la última vez, el vencimiento se queda fijo
      donde está y el retraso se acumula hasta que la completas. */
-  function taskWindow(t){
-    const created    = t.createdAt || Date.now();
-    const createdKey = dateKey(new Date(created));
-    const r          = t.recurrence || {type:"once"};
-    const lastMs     = t.lastDone ? endOfDay(t.lastDone) : 0;
-    const anchorMs   = Math.max(created, lastMs);
-    const anchorKey  = dateKey(new Date(anchorMs));
-    let dueKey;
-    if(r.type === "once")      dueKey = createdKey;          // su día es el de su creación
-    else if(r.type === "date") dueKey = r.date || createdKey;
-    else {
-      // Primer día programado DESDE EL ANCLA. Si ya la hiciste ese día, el
-      // siguiente vencimiento empieza a contar al día siguiente.
-      const from = lastMs ? addDays(anchorKey,1) : anchorKey;
-      dueKey = null;
-      for(let i=0;i<400;i++){ const k=addDays(from,i); if(dueOn(t,k)){ dueKey=k; break; } }
-      if(!dueKey) dueKey = from;
-    }
-    return { start: anchorMs, due: endOfDay(dueKey) };
-  }
-
+  /* El anillo arranca SIEMPRE lleno —al crear la tarea o al empezar su ciclo—
+     y se vacía según pasa el tiempo. Al llegar a cero se vuelve rojo y se
+     llena otra vez, midiendo el retraso: un intervalo entero de retraso deja
+     el anillo rojo completo. */
   function ringState(t){
-    const w = taskWindow(t), now = Date.now();
-    const total = Math.max(w.due - w.start, 60000);   // nunca dividir por cero
-    if(now <= w.due) return { over:false, frac: Math.max(0, Math.min(1, (w.due-now)/total)), due:w.due };
+    const now    = Date.now();
+    const period = taskPeriod(t);
+    const due    = taskDueAt(t);
+    const start  = due - period;
+    if(now <= due){
+      // Antes de que empiece su ciclo el anillo se ve lleno, no vacío.
+      const frac = now <= start ? 1 : (due - now) / period;
+      return { over:false, frac: Math.max(0, Math.min(1, frac)), due };
+    }
     // Vencida: el rojo arranca con un trocito visible, no desde la nada.
-    return   { over:true,  frac: Math.max(0.05, Math.min(1, (now-w.due)/total)), due:w.due };
+    return { over:true, frac: Math.max(0.05, Math.min(1, (now - due) / period)), due };
   }
   const ringOffset = (frac)=> (RING_C * (1 - frac)).toFixed(2);
 
+  // "1d 23 h", "3 h 20 min", "12 min": la unidad grande manda y la pequeña
+  // matiza. Con una sola unidad, "vence en 1d" no dice si son 25 h o 47 h.
+  function spanLabel(ms){
+    const d = Math.floor(ms/86400000);
+    const h = Math.floor((ms%86400000)/3600000);
+    const m = Math.floor((ms%3600000)/60000);
+    if(d > 0) return h > 0 ? d+"d "+h+" h" : d+"d";
+    if(h > 0) return m > 0 ? h+" h "+m+" min" : h+" h";
+    return Math.max(1,m) + " min";
+  }
   function dueLabel(due){
-    const diff = due - Date.now(), a = Math.abs(diff);
-    let txt;
-    if      (a < 3600000)  { const m=Math.max(1,Math.round(a/60000));  txt = m + " min"; }
-    else if (a < 86400000) { const h=Math.max(1,Math.round(a/3600000)); txt = h + " h"; }
-    else                   { const d=Math.round(a/86400000);            txt = d + (d===1?" día":" días"); }
-    return diff >= 0 ? "vence en " + txt : "vencida hace " + txt;
+    const diff = due - Date.now();
+    return diff >= 0 ? "vence en " + spanLabel(diff) : "vencida hace " + spanLabel(-diff);
   }
 
   function recurLabel(t){
@@ -2524,10 +2720,16 @@ const Tasks = (() => {
     }
     return "Solo hoy";
   }
+  /* Con intervalos, "hecha hoy" ya no significa nada: una tarea puede vencer
+     cada 3 horas o cada 2 semanas. Al completarla se guarda hasta cuándo
+     queda cubierta (doneUntil = arranque de su PRÓXIMO ciclo) y se oculta de
+     la lista hasta entonces. Con "intervalo fijo" eso es justo el final del
+     ciclo actual; con "última finalización", ahora mismo, y por eso reaparece
+     al instante con el anillo lleno. */
   const isDoneToday = (t)=>{
-    const ty = t.recurrence && t.recurrence.type;
-    if (ty && ty!=="once" && ty!=="date") return t.lastDone===dateKey(); // recurrentes: por día
-    return !!t.done; // "solo hoy" y "fecha" son de una vez
+    if(!t.repeats) return !!t.done;
+    if(typeof t.doneUntil === "number") return Date.now() < t.doneUntil;
+    return t.lastDone === dateKey();   // respaldo para datos antiguos
   };
   // ¿la tarea aparece hoy en tu lista? Solo limita si "Mostrar solo esos días" está activo.
   const scheduledToday = (t)=>{
@@ -2620,38 +2822,31 @@ const Tasks = (() => {
   /* ---------- AUTO-ELIMINACIÓN (solo de una vez) ----------
      "Solo hoy" y "Fecha" se borran al pasar su día sin completar. Las
      recurrentes NO se borran: solo penalizan los días programados sin hacer. */
-  function isExpired(t, today){
-    const r=t.recurrence;
-    const created = dateKey(new Date(t.createdAt||Date.now()));
-    if(!r || r.type==="once") return !t.done && created < today;
-    if(r.type==="date")        return !t.done && r.date && r.date < today;
-    return false; // daily / weekly / monthly / custom no caducan
-  }
+  /* Ninguna tarea se borra sola por vencer. Antes las de "solo hoy" y "fecha"
+     desaparecían al día siguiente; ahora se quedan en la lista con el anillo
+     rojo creciendo hasta que las hagas (o las borres tú). */
+  function isExpired(){ return false; }
   /* ---------- PENALIZACIÓN por tareas no completadas ----------
      Cada día/fecha programada que pasa sin completarse resta los MISMOS puntos
      que habría dado la tarea. Aplica a TODOS los tipos. */
+  /* Cada vencimiento que pasa sin completar resta los MISMOS puntos que habría
+     dado la tarea, UNA sola vez por vencimiento (penalizedFor guarda cuál ya
+     se cobró). Antes se recorría el calendario día a día; ahora el castigo va
+     atado al mismo instante que dibuja el anillo, así lo que ves y lo que se
+     cobra no pueden discrepar. */
   function cleanupExpired(){
-    const s=Store.get(); const today=dateKey(); const yesterday=addDays(today,-1);
-    const expired = s.tasks.filter(t=>isExpired(t,today));            // una-vez vencidas (se borran)
-    let penalty = expired.reduce((a,t)=> a + taskPoints(t.minutes, t.random), 0);
-    const updates=[]; // {id, upTo} para recordar hasta qué día ya penalizamos
-    s.tasks.forEach(t=>{
-      const r=t.recurrence; if(!r || r.type==="once" || r.type==="date") return; // una-vez ya contadas
-      const created=dateKey(new Date(t.createdAt||Date.now()));
-      let start = t.penalizedUpTo ? addDays(t.penalizedUpTo,1) : created;
-      if(start<created) start=created;
-      const cap = addDays(today,-45); if(start<cap) start=cap;          // tope de seguridad
-      let missed=0;
-      for(let d=start; d<=yesterday; d=addDays(d,1)){
-        if(dueOn(t,d) && !completedOn(t,d)) missed++;
+    const s=Store.get(); const now=Date.now();
+    let penalty=0; const marks=[];
+    (s.tasks||[]).forEach(t=>{
+      const due = taskDueAt(t);
+      if(now > due && t.penalizedFor !== due && !isDoneToday(t)){
+        penalty += taskPoints(t.minutes, t.random);
+        marks.push({ id:t.id, due });
       }
-      if(missed>0) penalty += missed * taskPoints(t.minutes, t.random);
-      if(start<=yesterday) updates.push({ id:t.id, upTo:yesterday });
     });
-    if(!expired.length && !penalty && !updates.length) return;
+    if(!penalty && !marks.length) return;
     Store.update(st=>{
-      if(expired.length) st.tasks = st.tasks.filter(t=>!isExpired(t,today));
-      updates.forEach(u=>{ const t=st.tasks.find(x=>x.id===u.id); if(t) t.penalizedUpTo=u.upTo; });
+      marks.forEach(m=>{ const t=st.tasks.find(x=>x.id===m.id); if(t) t.penalizedFor=m.due; });
       if(penalty>0){
         const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
         st.penalties=Math.min((st.penalties||0)+penalty, sum); // topada en lo ganado
@@ -2712,10 +2907,11 @@ const Tasks = (() => {
       if(r.status==='done' || r.status==='invited') return;
       if(tasks.some(t=>t.sharedId===r.id)) return;
       const amOwner=r.owner_id===myId;
-      tasks.unshift({ id:r.id, title:r.title, desc:r.descr||"", category:r.category, minutes:r.minutes||10, people:r.people||1,
+      tasks.unshift(Object.assign({ id:r.id, title:r.title, desc:r.descr||"", category:r.category, minutes:r.minutes||10, people:r.people||1,
         urgent:!!r.urgent, recurrence:r.recurrence||{type:'once',days:[]}, onlyOnDays:!!r.only_on_days,
         random:false, createdAt:Date.now(), done:false, lastDone:null,
-        shared:true, sharedId:r.id, ownerId:r.owner_id, partnerId:amOwner?r.partner_id:r.owner_id, partnerName:amOwner?r.partner_name:r.owner_name });
+        shared:true, sharedId:r.id, ownerId:r.owner_id, partnerId:amOwner?r.partner_id:r.owner_id, partnerName:amOwner?r.partner_name:r.owner_name },
+        defaultDueFields(r.recurrence)));
       changed=true;
     });
     // C) actualizar nombre/estado y procesar completadas
@@ -2806,8 +3002,18 @@ const Tasks = (() => {
     if(filter==="done"){ renderDone(); return; }
     const wrap = $("#taskListWrap");
     const s = Store.get();
-    let list = s.tasks.filter(t=>!isDoneToday(t) && scheduledToday(t));
-    list.sort((a,b)=>{ const ua=a.urgent?0:1, ub=b.urgent?0:1; return ua-ub; }); // urgentes primero
+    let list = s.tasks.filter(t=> (View.showDone || !isDoneToday(t)) && scheduledToday(t));
+    // Urgentes primero SIEMPRE; dentro de cada grupo, el orden que hayas elegido.
+    const cmp = {
+      due:     (a,b)=> taskDueAt(a) - taskDueAt(b),
+      name:    (a,b)=> (a.title||"").localeCompare(b.title||"","es",{sensitivity:"base"}),
+      created: (a,b)=> (b.createdAt||0) - (a.createdAt||0)
+    }[View.sort] || ((a,b)=> taskDueAt(a) - taskDueAt(b));
+    list.sort((a,b)=>{ const ua=a.urgent?0:1, ub=b.urgent?0:1; return ua!==ub ? ua-ub : cmp(a,b); });
+    // Encabezado de estado: dice de un vistazo si te queda algo o no.
+    const pend = list.filter(t=>!isDoneToday(t)).length;
+    const sub = $("#tasksStatus");
+    if(sub) sub.textContent = pend ? (pend===1 ? "1 por hacer" : pend+" por hacer") : "Nada que hacer 🙌";
 
     if (!s.tasks.length){
       wrap.innerHTML = emptyState("Aún no tienes tareas","Genera una o crea la tuya con el botón +");
@@ -2821,7 +3027,9 @@ const Tasks = (() => {
       wrap.innerHTML = emptyState("Nada por hacer 🙌","Has completado todo lo de hoy");
       return;
     }
-    wrap.innerHTML = `<div class="tilegrid">${list.map((t,i)=>cardHtml(t,i)).join("")}</div>`;
+    wrap.innerHTML = View.mode==="list"
+      ? `<div class="tilelist">${list.map((t,i)=>rowHtml(t,i)).join("")}</div>`
+      : `<div class="tilegrid">${list.map((t,i)=>cardHtml(t,i)).join("")}</div>`;
     bind(wrap);
     startRingClock();
   }
@@ -2857,18 +3065,35 @@ const Tasks = (() => {
     // tocar el anillo signifique siempre lo mismo y nada más.
     const st = ringState(t);
     return `
-      <div class="tile${t.urgent?" urgent":""}${st.over?" over":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
+      <div class="tile${t.urgent?" urgent":""}${st.over?" over":""}${isDoneToday(t)?" done":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
         <button class="tile-menu" data-tap="${t.id}" aria-label="Opciones de la tarea">•••</button>
-        <button class="ring" data-check="${t.id}" data-ring="${t.id}" aria-label="Completar ${esc(t.title)}">
+        ${ringHtml(t,st)}
+        <div class="tile-title">${esc(t.title)}</div>
+        <div class="tile-due">${esc(dueLabel(st.due))}</div>
+      </div>`;
+  }
+  function ringHtml(t,st){
+    return `<button class="ring" data-check="${t.id}" data-ring="${t.id}" aria-label="Completar ${esc(t.title)}">
           <svg viewBox="0 0 100 100" aria-hidden="true">
             <circle class="ring-track" cx="50" cy="50" r="${RING_R}"/>
             <circle class="ring-arc" cx="50" cy="50" r="${RING_R}"
                     stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${ringOffset(st.frac)}"/>
           </svg>
-          <span class="ring-ic">${Icons.get(t.category)}</span>
-        </button>
-        <div class="tile-title">${esc(t.title)}</div>
-        <div class="tile-due">${esc(dueLabel(st.due))}</div>
+          <span class="ring-ic">${taskEmoji(t)}</span>
+        </button>`;
+  }
+  // Misma información, otra forma: en lista el anillo se reduce y el texto se
+  // alinea a la izquierda, que es lo que hace que quepan más de un vistazo.
+  function rowHtml(t,i){
+    const st = ringState(t);
+    return `
+      <div class="tilerow${t.urgent?" urgent":""}${st.over?" over":""}${isDoneToday(t)?" done":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
+        ${ringHtml(t,st)}
+        <div class="rowbody" data-tap="${t.id}" role="button">
+          <div class="tile-title">${esc(t.title)}</div>
+          <div class="tile-due">${esc(dueLabel(st.due))}</div>
+        </div>
+        <button class="tile-menu" data-tap="${t.id}" aria-label="Opciones de la tarea">•••</button>
       </div>`;
   }
   /* El anillo tiene que MOVERSE, o no es un reloj. Cada 30 s se recalcula sin
@@ -2885,7 +3110,7 @@ const Tasks = (() => {
       const st  = ringState(t);
       const arc = el.querySelector(".ring-arc");
       if(arc) arc.setAttribute("stroke-dashoffset", ringOffset(st.frac));
-      const tile = el.parentElement;
+      const tile = el.closest(".tile, .tilerow");
       if(tile){
         tile.classList.toggle("over", st.over);
         const due = tile.querySelector(".tile-due");
@@ -2984,19 +3209,114 @@ const Tasks = (() => {
     let dur   = editing ? existing.minutes  : 10;
     let ppl   = editing ? (existing.people||1) : 1;
     let urgent= editing ? !!existing.urgent : false;
-    let recur = editing && existing.recurrence ? existing.recurrence.type : "once";
-    if(recur==="custom") recur="weekly"; // "personalizado" antiguo = semanal con días
+    let emoji = editing ? (existing.emoji||"") : "";   // "" = hereda el de la categoría
     let days  = editing && existing.recurrence && existing.recurrence.days ? existing.recurrence.days.slice() : [];
     let monthDays = editing && existing.recurrence && existing.recurrence.dates ? existing.recurrence.dates.slice() : [];
     let onlyDays = editing ? !!existing.onlyOnDays : false;
-    let taskDate = editing && existing.recurrence && existing.recurrence.date ? existing.recurrence.date : "";
+    // --- intervalo de vencimiento ---
+    let mode       = editing && existing.endMode ? "enddate" : "interval";
+    let dueN       = editing && existing.dueN ? existing.dueN : 1;
+    let dueUnit    = editing && existing.dueUnit ? existing.dueUnit : "day";
+    let repeats    = editing ? !!existing.repeats : true;
+    let repeatFrom = editing && existing.repeatFrom ? existing.repeatFrom : "fixed";
+    // Por defecto empieza AHORA (redondeado al minuto) y vence en un día.
+    let startMs    = editing && existing.startAt ? existing.startAt : Date.now();
+    let endMs      = editing && existing.endMode ? (existing.dueAt || startMs + 86400000) : startMs + 86400000;
+    const pad2 = (n)=> String(n).padStart(2,"0");
+    const dPart = (ms)=>{ const d=new Date(ms); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); };
+    const tPart = (ms)=>{ const d=new Date(ms); return pad2(d.getHours())+":"+pad2(d.getMinutes()); };
+    const joinDT = (dStr,tStr,fallback)=>{
+      if(!dStr) return fallback;
+      const [y,m,d]=dStr.split("-").map(Number);
+      const [hh,mm]=(tStr||"00:00").split(":").map(Number);
+      const ms = new Date(y,m-1,d,hh||0,mm||0,0,0).getTime();
+      return isNaN(ms) ? fallback : ms;
+    };
+    let startDate = dPart(startMs), startTime = tPart(startMs);
+    let endDate   = dPart(endMs),   endTime   = tPart(endMs);
     let remind = editing && existing.reminder && existing.reminder.time ? true : false;
     let remindTime = editing && existing.reminder && existing.reminder.time ? existing.reminder.time : "09:00";
     let partner = null; // amigo con quien se comparte (solo al crear)
     if(!CATEGORIES.some(c=>c.name===cat)) cat = CATEGORIES[0].name;
 
     const body = `
-      <div class="emoji-ring" id="ctEmoji"><span class="emoji">${editing?Icons.raw(cat):"⭐"}</span></div>
+      <div class="pv" id="ctPv">
+        <div class="pv-ring">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="ring-track" cx="50" cy="50" r="44"/>
+            <circle class="ring-arc" id="ctPvArc" cx="50" cy="50" r="44"
+                    stroke-dasharray="${(2*Math.PI*44).toFixed(2)}" stroke-dashoffset="0"/>
+          </svg>
+          <div class="dash"></div>
+          <span class="ring-ic" id="ctEmoji"><span class="emoji">${emoji||Icons.raw(cat)}</span></span>
+        </div>
+        <div class="pv-title" id="ctPvTitle">${editing?esc(existing.title):"Nueva tarea"}</div>
+        <div class="pv-due" id="ctPvDue"></div>
+      </div>
+      <!-- El emoji es lo que de verdad identifica la tarea de un vistazo en la
+           cuadrícula, más que su categoría. Por eso se elige aparte. -->
+      <div class="emj-row" id="ctEmjRow">
+        <button class="emj auto${emoji?"":" sel"}" data-e="">AUTO</button>
+        ${EMOJI_PICK.map(e=>`<button class="emj${emoji===e?" sel":""}" data-e="${e}"><span class="emoji">${e}</span></button>`).join("")}
+      </div>
+
+      <div class="segmented" id="ctMode">
+        <div class="seg${mode==="interval"?" sel":""}" data-m="interval">Intervalo</div>
+        <div class="seg${mode==="enddate"?" sel":""}" data-m="enddate">Fecha de finalización</div>
+      </div>
+
+      <div class="frow">
+        <span class="fl">Empieza</span>
+        <span class="fval">
+          <input type="date" class="chipv" id="ctStartDate" value="${esc(startDate)}"/>
+          <input type="time" class="chipv" id="ctStartTime" value="${esc(startTime)}"/>
+        </span>
+      </div>
+      <div class="frow" id="ctIntervalRow" style="display:${mode==="interval"?"flex":"none"}">
+        <span class="fl">Vence después de</span>
+        <span class="fval">
+          <span class="fsel"><select class="chipv" id="ctDueN" aria-label="Cantidad">
+            ${Array.from({length:60},(_,i)=>i+1).map(n=>`<option value="${n}"${n===dueN?" selected":""}>${n}</option>`).join("")}
+          </select><span class="dd-chev">▾</span></span>
+          <span class="fsel"><select class="chipv" id="ctDueUnit" aria-label="Unidad">
+            ${UNITS.map(u=>`<option value="${u[0]}"${u[0]===dueUnit?" selected":""}>${esc(unitLabel(u[0],dueN))}</option>`).join("")}
+          </select><span class="dd-chev">▾</span></span>
+        </span>
+      </div>
+      <div class="frow" id="ctEndRow" style="display:${mode==="enddate"?"flex":"none"}">
+        <span class="fl">Termina</span>
+        <span class="fval">
+          <input type="date" class="chipv" id="ctEndDate" value="${esc(endDate)}"/>
+          <input type="time" class="chipv" id="ctEndTime" value="${esc(endTime)}"/>
+        </span>
+      </div>
+      <div class="frow" id="ctRepeatRow" style="display:${mode==="interval"?"flex":"none"}">
+        <span class="fl">Se repite</span>
+        <div class="switch${repeats?" on":""}" id="ctRepeats"><div class="knob"></div></div>
+      </div>
+      <div class="frow" id="ctRepeatFromRow" style="display:${(mode==="interval"&&repeats)?"flex":"none"}">
+        <span class="fl">Repetir desde</span>
+        <span class="fval">
+          <span class="fsel"><select class="chipv" id="ctRepeatFrom" aria-label="Repetir desde">
+            <option value="fixed"${repeatFrom==="fixed"?" selected":""}>intervalo fijo</option>
+            <option value="completion"${repeatFrom==="completion"?" selected":""}>última finalización</option>
+          </select><span class="dd-chev">▾</span></span>
+        </span>
+      </div>
+      <div class="frow">
+        <span class="fl">Urgente</span>
+        <div class="switch${urgent?" on":""}" id="ctUrgent"><div class="knob"></div></div>
+      </div>
+      <div class="frow">
+        <span class="fl">Recordatorio</span>
+        <div class="switch${remind?" on":""}" id="ctRemind"><div class="knob"></div></div>
+      </div>
+      <div id="ctRemindWrap" style="display:${remind?"block":"none"};padding:0 2px 12px;">
+        <input type="time" class="chipv" id="ctRemindTime" value="${esc(remindTime)}"/>
+        <div class="hint">Recibirás una notificación a esa hora los días en que toque la tarea.</div>
+      </div>
+
+      <div class="fsep"></div>
       <div class="dd-row" id="ctDD">
         <div class="dd"><select id="ctCat" aria-label="Categoría">
           <option value="" disabled${editing?"":" selected"}>Categoría</option>
@@ -3006,45 +3326,25 @@ const Tasks = (() => {
           <option value="" disabled${editing?"":" selected"}>Tiempo</option>
           ${DURATIONS.map(m=>`<option value="${m}"${editing&&m===dur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("")}
         </select><span class="dd-chev">▾</span></div>
-        <div class="dd"><select id="ctRecur" aria-label="Repetición">
-          <option value="" disabled${editing?"":" selected"}>Repetición</option>
-          ${RECUR.map(r=>`<option value="${r.k}"${editing&&r.k===recur?" selected":""}>🔁  ${esc(r.l)}</option>`).join("")}
-        </select><span class="dd-chev">▾</span></div>
       </div>
       <input class="big-input big-title" id="ctTitle" placeholder="Título" maxlength="120" value="${editing?esc(existing.title):""}"/>
       <textarea class="big-input big-desc" id="ctDesc" rows="1" placeholder="Descripción (opcional)">${editing?esc(existing.desc||""):""}</textarea>
-      <div class="tg-list">
-        <div class="tg-row"><span class="tg-ic emoji">‼️</span><span class="tg-lbl">Urgente</span><div class="switch${urgent?" on":""}" id="ctUrgent"><div class="knob"></div></div></div>
-        <div class="tg-row"><span class="tg-ic emoji">🛎️</span><span class="tg-lbl">Recordatorio</span><div class="switch${remind?" on":""}" id="ctRemind"><div class="knob"></div></div></div>
-        <div id="ctRemindWrap" style="display:${remind?"block":"none"};">
-          <input type="time" class="time-field" id="ctRemindTime" value="${esc(remindTime)}"/>
-          <div class="hint">Recibirás una notificación a esa hora los días en que toque la tarea.</div>
-        </div>
-      </div>
-      <div id="ctDaysWrap" style="display:${recur==="weekly"?"block":"none"};">
+      <div id="ctDaysWrap" style="display:${(repeats&&dueUnit==="week")?"block":"none"};">
         <div class="lbl-sm">Días de la semana</div><div class="daypicker" id="ctDays"></div>
         <div class="form-group" style="margin-top:14px;">
           <div class="row"><span class="lbl">Mostrar solo esos días</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyDays"><div class="knob"></div></div></div>
         </div>
         <div class="hint">Se repite cada semana esos días. Si no la completas un día programado, pierdes sus puntos.</div>
       </div>
-      <div id="ctDatesWrap" style="display:${recur==="monthly"?"block":"none"};">
+      <div id="ctDatesWrap" style="display:${(repeats&&dueUnit==="month")?"block":"none"};">
         <div class="lbl-sm">Días del mes</div><div class="monthpicker" id="ctMonthDays"></div>
         <div class="form-group" style="margin-top:14px;">
           <div class="row"><span class="lbl">Mostrar solo esas fechas</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyMonth"><div class="knob"></div></div></div>
         </div>
         <div class="hint">Se repite cada mes esas fechas. Si no la completas una fecha programada, pierdes sus puntos.</div>
       </div>
-      <div id="ctDateWrap" style="display:${recur==="date"?"block":"none"};">
-        <div class="lbl-sm">Fecha</div>
-        <div class="field-block well"><input type="date" class="field" id="ctDate" value="${esc(taskDate)}" min="${dateKey()}"/></div>
-        <div class="form-group" style="margin-top:14px;">
-          <div class="row"><span class="lbl">Mostrar solo ese día</span><div style="flex:1"></div><div class="switch${onlyDays?" on":""}" id="ctOnlyDate"><div class="knob"></div></div></div>
-        </div>
-        <div class="hint">Si está activado, la tarea solo aparecerá en tu lista el día de su fecha. Si pasa sin completarla, se elimina sola.</div>
-      </div>
       ${(!editing && Cloud.configured())?`<div id="ctShareWrap"><div class="lbl-sm">Compartir con un amigo</div><div class="chips" id="ctShare"></div><div class="hint" id="ctShareHint" style="display:none">Si tú o tu amigo la completáis o la borráis, se hace para los dos.</div></div>`:""}
-      <button class="btn" id="ctSave" style="margin-top:24px;">${editing?"Guardar cambios":"Guardar tarea"}</button>
+      <button class="btn" id="ctSave" style="margin-top:24px;">Guardar</button>
       ${editing?`<button class="btn danger ghost" id="ctDelete" style="margin-top:12px;">${trashSvg()} Eliminar tarea</button>`:""}
     `;
     const head = `
@@ -3057,16 +3357,86 @@ const Tasks = (() => {
     // (evita el "temblor" de reflow al rellenarlas tras abrir la hoja).
     const catSel=$("#ctCat",sheet);
     const emojiRing=$("#ctEmoji",sheet);
-    const paintEmoji=()=>{ if(emojiRing) emojiRing.innerHTML=`<span class="emoji">${cat?Icons.raw(cat):"⭐"}</span>`; };
-    catSel.onchange=()=>{ cat=catSel.value; haptic(); fitSelectWidth(catSel); paintEmoji(); };
+    const RC = 2*Math.PI*44;
+
+    // La vista previa se repinta con CADA cambio: es la única forma de que el
+    // intervalo se entienda sin leer una explicación.
+    function periodNow(){
+      return mode==="enddate"
+        ? Math.max(60000, endMs - startMs)
+        : Math.max(60000, dueN * (UNIT_MS[dueUnit]||UNIT_MS.day));
+    }
+    function dueNow(){ return mode==="enddate" ? endMs : startMs + periodNow(); }
+    function paintPreview(){
+      if(emojiRing) emojiRing.innerHTML = `<span class="emoji">${emoji || (cat?Icons.raw(cat):"⭐")}</span>`;
+      const pv=$("#ctPv",sheet), arc=$("#ctPvArc",sheet);
+      const due=dueNow(), period=periodNow(), now=Date.now();
+      const start=due-period;
+      const over = now>due;
+      const frac = over ? Math.max(0.05,Math.min(1,(now-due)/period))
+                        : (now<=start ? 1 : Math.max(0,Math.min(1,(due-now)/period)));
+      if(arc) arc.setAttribute("stroke-dashoffset", (RC*(1-frac)).toFixed(2));
+      if(pv) pv.classList.toggle("over", over);
+      const t=$("#ctPvTitle",sheet), d=$("#ctPvDue",sheet);
+      const ti=$("#ctTitle",sheet);
+      if(t) t.textContent = (ti && ti.value.trim()) || (editing?existing.title:"Nueva tarea");
+      if(d) d.textContent = (over?"vencida hace ":"vence en ")
+                          + (()=>{ const ms=Math.abs(due-now), dd=Math.floor(ms/86400000),
+                                   hh=Math.floor((ms%86400000)/3600000), mm=Math.floor((ms%3600000)/60000);
+                                   if(dd>0) return hh>0?dd+"d "+hh+" h":dd+"d";
+                                   if(hh>0) return mm>0?hh+" h "+mm+" min":hh+" h";
+                                   return Math.max(1,mm)+" min"; })();
+    }
+
+    catSel.onchange=()=>{ cat=catSel.value; haptic(); fitSelectWidth(catSel); paintPreview(); };
+    const emjRow=$("#ctEmjRow",sheet);
+    if(emjRow) $$(".emj",emjRow).forEach(b=> b.onclick=()=>{
+      emoji=b.getAttribute("data-e"); haptic();
+      $$(".emj",emjRow).forEach(x=>x.classList.toggle("sel",x===b));
+      paintPreview();
+    });
     const durSel=$("#ctDur",sheet);
     durSel.onchange=()=>{ dur=+durSel.value; haptic(); fitSelectWidth(durSel); };
-    const recurSel=$("#ctRecur",sheet);
-    recurSel.onchange=()=>{ recur=recurSel.value; haptic(); fitSelectWidth(recurSel);
-      $("#ctDaysWrap",sheet).style.display = recur==="weekly"?"block":"none";
-      $("#ctDatesWrap",sheet).style.display = recur==="monthly"?"block":"none";
-      $("#ctDateWrap",sheet).style.display = recur==="date"?"block":"none"; validate(); };
-    [catSel,durSel,recurSel].forEach(fitSelectWidth);
+    [catSel,durSel].forEach(fitSelectWidth);
+
+    // ---- modo: intervalo / fecha de finalización ----
+    const modeWrap=$("#ctMode",sheet);
+    function syncRows(){
+      $("#ctIntervalRow",sheet).style.display   = mode==="interval"?"flex":"none";
+      $("#ctEndRow",sheet).style.display        = mode==="enddate"?"flex":"none";
+      $("#ctRepeatRow",sheet).style.display     = mode==="interval"?"flex":"none";
+      $("#ctRepeatFromRow",sheet).style.display = (mode==="interval"&&repeats)?"flex":"none";
+      $("#ctDaysWrap",sheet).style.display      = (mode==="interval"&&repeats&&dueUnit==="week")?"block":"none";
+      $("#ctDatesWrap",sheet).style.display     = (mode==="interval"&&repeats&&dueUnit==="month")?"block":"none";
+    }
+    $$(".seg",modeWrap).forEach(el=> el.onclick=()=>{
+      mode=el.getAttribute("data-m"); haptic();
+      $$(".seg",modeWrap).forEach(x=>x.classList.toggle("sel",x===el));
+      syncRows(); paintPreview(); validate();
+    });
+
+    const sD=$("#ctStartDate",sheet), sT=$("#ctStartTime",sheet);
+    const eD=$("#ctEndDate",sheet),   eT=$("#ctEndTime",sheet);
+    const readStart=()=>{ startMs = joinDT(sD.value, sT.value, startMs); };
+    const readEnd  =()=>{ endMs   = joinDT(eD.value, eT.value, endMs); };
+    [sD,sT].forEach(i=> i.onchange=()=>{ readStart(); paintPreview(); validate(); });
+    [eD,eT].forEach(i=> i.onchange=()=>{ readEnd();   paintPreview(); validate(); });
+
+    const nSel=$("#ctDueN",sheet), uSel=$("#ctDueUnit",sheet);
+    const repaintUnits=()=>{ // "1 Día" / "3 Días": el plural depende del número
+      Array.from(uSel.options).forEach(o=> o.textContent = unitLabel(o.value, dueN));
+      fitSelectWidth(uSel);
+    };
+    nSel.onchange=()=>{ dueN=+nSel.value; haptic(); fitSelectWidth(nSel); repaintUnits(); paintPreview(); };
+    uSel.onchange=()=>{ dueUnit=uSel.value; haptic(); fitSelectWidth(uSel); syncRows(); paintPreview(); validate(); };
+    [nSel,uSel].forEach(fitSelectWidth); repaintUnits();
+
+    const swRep=$("#ctRepeats",sheet);
+    swRep.onclick=()=>{ repeats=!repeats; swRep.classList.toggle("on",repeats); haptic(); syncRows(); validate(); };
+    const rfSel=$("#ctRepeatFrom",sheet);
+    rfSel.onchange=()=>{ repeatFrom=rfSel.value; haptic(); fitSelectWidth(rfSel); };
+    fitSelectWidth(rfSel);
+    syncRows();
     const renderDays = ()=>{ const w=$("#ctDays",sheet); if(!w) return; w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
         cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
@@ -3091,15 +3461,11 @@ const Tasks = (() => {
     swR.onclick = ()=>{ remind=!remind; swR.classList.toggle("on",remind); haptic();
       rWrap.style.display = remind?"block":"none"; };
     rTime.onchange = ()=>{ remindTime = rTime.value || "09:00"; };
-    const syncToggles = ()=>{ ["#ctOnlyDays","#ctOnlyMonth","#ctOnlyDate"].forEach(sel=>{ const e=$(sel,sheet); if(e) e.classList.toggle("on",onlyDays); }); };
+    const syncToggles = ()=>{ ["#ctOnlyDays","#ctOnlyMonth"].forEach(sel=>{ const e=$(sel,sheet); if(e) e.classList.toggle("on",onlyDays); }); };
     const swOnly = $("#ctOnlyDays",sheet);
     if(swOnly) swOnly.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
     const swOnlyMonth = $("#ctOnlyMonth",sheet);
     if(swOnlyMonth) swOnlyMonth.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
-    const swOnlyDate = $("#ctOnlyDate",sheet);
-    if(swOnlyDate) swOnlyDate.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
-    const dateInput = $("#ctDate",sheet);
-    if(dateInput) dateInput.onchange = ()=>{ taskDate=dateInput.value; validate(); };
 
     const titleInput = $("#ctTitle",sheet);
     // Descripción de una línea que CRECE con el texto (sin dejar hueco vacío).
@@ -3108,9 +3474,13 @@ const Tasks = (() => {
       descInput.addEventListener("input",grow); requestAnimationFrame(grow); }
     const saveBtn = $("#ctSave",sheet);
     // "Cada semana" exige ≥1 día; "Cada mes" exige ≥1 fecha; "Fecha" exige una fecha
-    function validate(){ saveBtn.disabled = !titleInput.value.trim() || (recur==="weekly" && days.length===0) || (recur==="monthly" && monthDays.length===0) || (recur==="date" && !taskDate); }
-    titleInput.addEventListener("input", validate);
-    validate();
+    // La fecha de finalización tiene que ir DESPUÉS del inicio; si no, el
+    // intervalo sería negativo y el anillo no significaría nada.
+    function validate(){
+      saveBtn.disabled = !titleInput.value.trim() || (mode==="enddate" && endMs<=startMs);
+    }
+    titleInput.addEventListener("input", ()=>{ validate(); paintPreview(); });
+    validate(); paintPreview();
 
     $("#ctCancel",sheet).onclick = Sheets.close;
     saveBtn.onclick = ()=>{
@@ -3122,8 +3492,25 @@ const Tasks = (() => {
       haptic(15);
       Sheets.close();
       saveBtn.disabled = true;
-      const rec = {type:recur, days:days.slice(), dates:monthDays.slice()};
-      if(recur==="date") rec.date = taskDate; // fecha concreta (YYYY-MM-DD)
+      // El campo `recurrence` sigue existiendo porque de él dependen los
+      // recordatorios (qué días toca), el calendario y las tareas compartidas.
+      // Ahora se DEDUCE del intervalo en vez de elegirse a mano.
+      const endMode = (mode==="enddate");
+      const periodMs = endMode ? Math.max(60000, endMs - startMs)
+                               : Math.max(60000, dueN * (UNIT_MS[dueUnit]||UNIT_MS.day));
+      const willRepeat = endMode ? false : repeats;
+      const dueAt = endMode ? endMs : startMs + periodMs;
+      const recType = !willRepeat ? "once"
+                    : (dueUnit==="week"  && days.length)      ? "weekly"
+                    : (dueUnit==="month" && monthDays.length) ? "monthly"
+                    : "daily";
+      const rec = {type:recType, days:days.slice(), dates:monthDays.slice()};
+      const dueFields = {
+        emoji: emoji || null,
+        startAt:startMs, dueAt, repeats:willRepeat, repeatFrom, endMode,
+        dueN: endMode ? Math.max(1,Math.round(periodMs/60000)) : dueN,
+        dueUnit: endMode ? "minute" : dueUnit
+      };
       const reminder = remind ? { time: (remindTime||"09:00") } : null;
       const newId = uid();
       setTimeout(()=>{
@@ -3133,10 +3520,16 @@ const Tasks = (() => {
         Store.update(s=>{
           if(editing){
             const t = s.tasks.find(x=>x.id===existing.id);
-            if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent; t.recurrence=rec; t.onlyOnDays=onlyDays; t.reminder=reminder; }
+            if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent;
+                   t.recurrence=rec; t.onlyOnDays=onlyDays; t.reminder=reminder;
+                   Object.assign(t, dueFields);
+                   // vencimiento nuevo = castigo nuevo: se olvida el ya cobrado
+                   if(t.penalizedFor !== t.dueAt) delete t.penalizedFor;
+                   delete t.doneUntil; }
           } else {
-            s.tasks.unshift({ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
-              recurrence:rec, onlyOnDays:onlyDays, reminder, random:false, createdAt:Date.now(), done:false, lastDone:null });
+            s.tasks.unshift(Object.assign({ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
+              recurrence:rec, onlyOnDays:onlyDays, reminder, random:false, createdAt:Date.now(), done:false, lastDone:null },
+              dueFields));
           }
         });
       }
@@ -3163,14 +3556,20 @@ const Tasks = (() => {
   /* ---------- COMPLETAR + FOTO ---------- */
   function openComplete(task){
     let photoData = null;
-    const pts = taskPoints(task.minutes,task.random);
+    // Fuera de plazo la tarea sigue pudiendo hacerse —y hay que hacerla— pero
+    // ya no da puntos: los suyos se descontaron al vencer. Si además los diera
+    // al completarla tarde, el castigo se anularía solo.
+    const late = ringState(task).over;
+    const pts  = late ? 0 : taskPoints(task.minutes,task.random);
     const head = `
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="pcCancel">Cancelar</span><span class="title">Completar</span><span class="act" style="opacity:0">•</span></div>
       <div class="sheet-body photo-modal">
         <div class="ico">${checkSvg()}</div>
         <h3>${esc(task.title)}</h3>
-        <p>Sube una foto como evidencia para completar la tarea y ganar <b style="color:var(--yellow)">${pts} pts</b>.</p>
+        <p>${late
+          ? `Esta tarea está <b style="color:var(--red)">vencida</b>. Puedes completarla, pero ya no suma puntos.`
+          : `Sube una foto como evidencia para completar la tarea y ganar <b style="color:var(--yellow)">${pts} pts</b>.`}</p>
         <div class="photo-preview" id="pcPreview"><img id="pcImg" alt="evidencia"/><div class="retake" id="pcRetake">Cambiar foto</div></div>
         <div class="photo-btns">
           <button class="btn secondary" id="pcCam">${camSvg()} Cámara</button>
@@ -3218,7 +3617,21 @@ const Tasks = (() => {
         // marcar la tarea
         Store.update(s=>{
           const t=s.tasks.find(x=>x.id===task.id);
-          if(t){ if(t.recurrence && t.recurrence.type!=="once") t.lastDone=dateKey(now); else t.done=true; }
+          if(!t) return;
+          const at = now.getTime();
+          t.lastDone   = dateKey(now);
+          t.lastDoneAt = at;
+          if(t.repeats){
+            // Se abre el siguiente ciclo y la tarea se oculta hasta que ese
+            // ciclo ARRANQUE (con intervalo fijo, al acabar el actual; con
+            // "última finalización", ahora mismo).
+            const next = nextDueAfter(t, at);
+            t.dueAt     = next;
+            t.startAt   = next - taskPeriod(t);
+            t.doneUntil = t.startAt;
+          } else {
+            t.done = true;
+          }
         });
         Gamify.awardCompletion(entry);
         render(); UI.renderProfile();
@@ -4683,10 +5096,11 @@ const Notifs = (() => {
         const myId=Cloud.myId(), amOwner=row.owner_id===myId;
         Store.update(s=>{
           if(!s.tasks.some(t=>t.sharedId===sid)){
-            s.tasks.unshift({ id:sid, title:row.title, desc:row.descr||"", category:row.category, minutes:row.minutes||10, people:row.people||1,
+            s.tasks.unshift(Object.assign({ id:sid, title:row.title, desc:row.descr||"", category:row.category, minutes:row.minutes||10, people:row.people||1,
               urgent:!!row.urgent, recurrence:row.recurrence||{type:'once',days:[]}, onlyOnDays:!!row.only_on_days,
               random:false, createdAt:Date.now(), done:false, lastDone:null,
-              shared:true, sharedId:sid, ownerId:row.owner_id, partnerId:amOwner?row.partner_id:row.owner_id, partnerName:amOwner?row.partner_name:row.owner_name });
+              shared:true, sharedId:sid, ownerId:row.owner_id, partnerId:amOwner?row.partner_id:row.owner_id, partnerName:amOwner?row.partner_name:row.owner_name },
+              defaultDueFields(row.recurrence)));
           }
           s.notifs=(s.notifs||[]).filter(n=>n.id!==nid);
         });
@@ -5112,7 +5526,7 @@ const Lightbox = (() => {
    ===================================================================== */
 const Router = (() => {
   let cur="tasks";
-  const views={gen:"#view-gen",tasks:"#view-tasks",profile:"#view-profile"};
+  const views={gen:"#view-gen",tasks:"#view-tasks",insp:"#view-insp",profile:"#view-profile"};
 
   function go(name){
     if(name===cur) { scrollTop(); return; }
@@ -5136,6 +5550,8 @@ const Router = (() => {
     $("#notifBtn").style.display   = cur==="tasks"   ? "grid" : "none";
     $("#friendsBtn").style.display = cur==="profile" ? "grid" : "none";
     $("#settingsBtn").style.display= cur==="profile" ? "grid" : "none";
+    $("#tbGroup").style.display    = cur==="tasks"   ? "flex" : "none";
+    if(cur==="insp" && typeof Inspirations!=="undefined") Inspirations.render();
     // el nombre aparece al hacer scroll; al cambiar de sección la vista nueva
     // empieza arriba, así que se sincroniza aquí para que no quede "pegado".
     $("#topbar").classList.toggle("scrolled", v.scrollTop>30);
@@ -5143,13 +5559,125 @@ const Router = (() => {
   function onScroll(){
     $("#topbar").classList.toggle("scrolled", $(views[cur]).scrollTop>30);
   }
+  /* Menú de vista. Se construye cada vez que se abre para que las marcas
+     reflejen el estado real, y se cierra al elegir o al tocar fuera. */
+  function buildMenu(){
+    const check = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>`;
+    const gridIc = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></svg>`;
+    const listIc = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>`;
+    const eyeIc  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>`;
+    const row = (on,ic,lbl,attr,extra="") =>
+      `<button class="vm-item" ${attr}><span class="vm-check">${on?check:""}</span><span class="vm-ic">${ic}</span><span class="vm-lbl">${lbl}</span>${extra}</button>`;
+    return row(View.mode==="grid", gridIc, "Cuadrícula", 'data-set="mode" data-val="grid"')
+         + row(View.mode==="list", listIc, "Lista",      'data-set="mode" data-val="list"')
+         + `<div class="vm-sep"></div>`
+         + row(View.showDone, eyeIc, "Mostrar completados", 'data-toggle="showDone"')
+         + row(false, "", "Orden: "+esc(View.sortLabel()), 'data-sort="1"', '<span class="vm-chev">›</span>');
+  }
+  function buildSortMenu(){
+    const check = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>`;
+    return `<button class="vm-item" data-back="1"><span class="vm-check"></span><span class="vm-ic"><span class="vm-chev">‹</span></span><span class="vm-lbl">Orden</span></button>`
+         + `<div class="vm-sep"></div>`
+         + View.SORTS.map(([k,l])=>
+            `<button class="vm-item" data-set="sort" data-val="${k}"><span class="vm-check">${View.sort===k?check:""}</span><span class="vm-ic"></span><span class="vm-lbl">${esc(l)}</span></button>`).join("");
+  }
+  function openMenu(html){
+    const m=$("#vmenu"), sc=$("#vmenuScrim");
+    m.innerHTML = html || buildMenu();
+    sc.classList.add("show"); m.classList.add("show"); haptic();
+    sc.onclick = closeMenu;
+    $$(".vm-item",m).forEach(b=> b.onclick = ()=>{
+      if(b.getAttribute("data-sort")){ haptic(); openMenu(buildSortMenu()); return; }
+      if(b.getAttribute("data-back")){ haptic(); openMenu(buildMenu()); return; }
+      const k=b.getAttribute("data-set"), t=b.getAttribute("data-toggle");
+      if(k) View.set(k, b.getAttribute("data-val"));
+      if(t) View.set(t, !View[t]);
+      haptic(); closeMenu(); Tasks.render();
+    });
+  }
+  function closeMenu(){ $("#vmenu").classList.remove("show"); $("#vmenuScrim").classList.remove("show"); }
+
   function init(){
     $$(".tab").forEach(t=> t.onclick=()=> go(t.getAttribute("data-view")) );
+    $("#addBtn").onclick = ()=>{ haptic(); Tasks.openCreate(); };
+    $("#viewBtn").onclick = ()=>{ openMenu(); };
     Object.values(views).forEach(sel=> $(sel).addEventListener("scroll", onScroll, {passive:true}));
     $("#fab").classList.toggle("show", cur==="tasks");
     updateTopbar();
   }
   return { init, go };
+})();
+
+/* =====================================================================
+   VISTA — cómo se mira la lista (cuadrícula/lista, completadas, orden)
+   Se guarda aparte del estado de las tareas: es una preferencia de quien
+   mira, no un dato de lo que hay que hacer.
+   ===================================================================== */
+const View = (() => {
+  const KEY="rachas_view_v1";
+  const def={ mode:"grid", showDone:false, sort:"due" };
+  let v;
+  try{ v = Object.assign({}, def, JSON.parse(localStorage.getItem(KEY))||{}); }
+  catch(e){ v = Object.assign({}, def); }
+  const save = ()=>{ try{ localStorage.setItem(KEY, JSON.stringify(v)); }catch(e){} };
+  const SORTS = [["due","Fecha de vencimiento"],["name","Nombre"],["created","Creación"]];
+  return {
+    get mode(){return v.mode;}, get showDone(){return v.showDone;}, get sort(){return v.sort;},
+    sortLabel(){ return (SORTS.find(x=>x[0]===v.sort)||SORTS[0])[1]; },
+    SORTS,
+    set(k,val){ v[k]=val; save(); }
+  };
+})();
+
+/* =====================================================================
+   INSPIRACIONES — tareas hechas, listas para añadir de un toque
+   ===================================================================== */
+const Inspirations = (() => {
+  const LIST = [
+    {e:"🌱", t:"Regar plantas",           c:"Naturaleza",    n:3, u:"day"},
+    {e:"📚", t:"Estudiar para examen",    c:"Estudio",       n:1, u:"day"},
+    {e:"🧺", t:"Lavar la ropa",           c:"Limpieza",      n:1, u:"week"},
+    {e:"💾", t:"Hacer copia de seguridad",c:"Programación",  n:1, u:"week"},
+    {e:"💊", t:"Tomar medicación",        c:"Salud",         n:1, u:"day"},
+    {e:"⚡", t:"Leer contador",           c:"Productividad", n:1, u:"month"},
+    {e:"🪟", t:"Limpiar ventanas",        c:"Limpieza",      n:1, u:"month"},
+    {e:"🛏️", t:"Cambiar las sábanas",     c:"Limpieza",      n:2, u:"week"},
+    {e:"🗑️", t:"Sacar la basura",         c:"Limpieza",      n:2, u:"day"},
+    {e:"🏋️", t:"Ir al gimnasio",          c:"Deporte",       n:2, u:"day"},
+    {e:"🚿", t:"Limpiar el baño",         c:"Limpieza",      n:1, u:"week"},
+    {e:"☕", t:"Limpiar la cafetera",     c:"Cocina",        n:2, u:"week"},
+    {e:"📬", t:"Revisar el buzón",        c:"Productividad", n:2, u:"day"},
+    {e:"💰", t:"Revisar gastos",          c:"Productividad", n:1, u:"month"},
+    {e:"🚗", t:"Revisar el coche",        c:"Productividad", n:3, u:"month"},
+    {e:"🧘", t:"Meditar",                 c:"Meditación",    n:1, u:"day"}
+  ];
+  function add(item, btn){
+    const now=Date.now();
+    const period = (item.n||1) * (UNIT_MS[item.u] || UNIT_MS.day);
+    const rec = { type: item.u==="week" ? "weekly" : item.u==="month" ? "monthly" : "daily", days:[], dates:[] };
+    Store.update(s=>{
+      s.tasks.unshift({ id:uid(), title:item.t, desc:"", category:item.c, emoji:item.e,
+        minutes:15, people:1, urgent:false, recurrence:rec, onlyOnDays:false, reminder:null,
+        random:false, createdAt:now, done:false, lastDone:null,
+        startAt:now, dueAt:now+period, dueN:item.n, dueUnit:item.u,
+        repeats:true, repeatFrom:"fixed", endMode:false });
+    });
+    haptic(12);
+    if(btn){ btn.classList.add("added"); btn.textContent="Añadida"; }
+    Tasks.render();
+    UI.toast("Tarea añadida","check","var(--green)");
+  }
+  function render(){
+    const wrap=$("#inspList"); if(!wrap) return;
+    wrap.innerHTML = LIST.map((it,i)=>`
+      <div class="insp-row" style="animation-delay:${Math.min(i*30,240)}ms">
+        <div class="insp-ic"><span class="emoji">${it.e}</span></div>
+        <div class="insp-t">${esc(it.t)}</div>
+        <button class="insp-add" data-i="${i}">Añadir</button>
+      </div>`).join("");
+    $$(".insp-add",wrap).forEach(b=> b.onclick=()=> add(LIST[+b.getAttribute("data-i")], b));
+  }
+  return { render };
 })();
 
 /* =====================================================================
