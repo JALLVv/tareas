@@ -189,12 +189,7 @@ img{display:block;}
   display:flex;align-items:stretch;
   background:var(--card);border-radius:var(--radius-lg);
 }
-.tabbar::after{
-  content:"";position:absolute;bottom:calc(100% + 4px);
-  left:calc(-1 * var(--pad));right:calc(-1 * var(--pad));height:32px;
-  background:linear-gradient(to top, var(--bg), rgba(0,0,0,0));
-  pointer-events:none;
-}
+.tabbar::after{content:none;}
 .tab{
   position:relative;border-radius:var(--radius);
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
@@ -207,11 +202,22 @@ img{display:block;}
 .tab::before{content:none;}
 .tab.active::before{content:none;}
 .tab svg,.tab .tab-ic,.tab span{position:relative;}
-.tab svg{width:22px;height:22px;stroke-width:1.9;transition:transform var(--t-med) var(--ease-out);}
+.tab svg{width:23px;height:23px;transition:transform var(--t-med) var(--ease-out);
+  transform-origin:50% 60%;}
 .tab .tab-ic{font-size:20px;transition:transform var(--t-med) var(--ease-out);}
 .tab.active{color:var(--label);}
-.tab.active svg,.tab.active .tab-ic{transform:translateY(-1px);}
-.tab:active{transform:scale(0.95);}
+/* Al activarse el icono da un saltito y se queda un punto más grande: el
+   rebote confirma el toque; el tamaño final dice dónde estás. Nunca arranca
+   desde scale(0) —una pieza que nace de un punto no llega, aparece—. */
+.tab.active svg,.tab.active .tab-ic{animation:tabPop 420ms var(--ease-out);}
+@keyframes tabPop{
+  0%{transform:scale(1) translateY(0);}
+  38%{transform:scale(1.28) translateY(-3px);}
+  70%{transform:scale(0.98) translateY(0);}
+  100%{transform:scale(1.08) translateY(-1px);}
+}
+.tab.active svg,.tab.active .tab-ic{transform:scale(1.08) translateY(-1px);}
+.tab:active{transform:scale(0.94);}
 
 /* Pastilla de la cabecera: dos acciones sobre la lista, juntas. */
 .tb-group{pointer-events:auto;flex:0 0 auto;display:flex;align-items:stretch;
@@ -276,14 +282,6 @@ img{display:block;}
 .insp-add.added{background:var(--green);color:#000;}
 
 /* Selector de emoji de la hoja: fila horizontal, "Auto" primero. */
-.emj-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 6px;}
-.emj-row::-webkit-scrollbar{display:none;}
-.emj{flex:0 0 auto;width:42px;height:42px;border-radius:var(--radius-sm);
-  background:var(--card-2);display:grid;place-items:center;font-size:21px;
-  transition:transform var(--t-press) var(--ease-out), background var(--t-fast);}
-.emj:active{transform:scale(0.9);}
-.emj.sel{background:var(--card-3);box-shadow:inset 0 0 0 2px var(--green);}
-.emj.auto{font-size:11px;font-weight:800;color:var(--label-2);letter-spacing:0.06em;}
 
 /* Botón de crear: círculo verde. Con el "+" ya en la cabecera queda oculto,
    pero se conserva porque el resto del código lo muestra y lo esconde. */
@@ -323,9 +321,9 @@ img{display:block;}
   position:absolute;top:10px;right:10px;z-index:2;
   width:28px;height:28px;border-radius:50%;background:var(--card-2);
   display:grid;place-items:center;color:var(--label-2);
-  font-size:15px;line-height:1;letter-spacing:0.06em;font-weight:800;
   transition:transform var(--t-press) var(--ease-out), background var(--t-fast);
 }
+.tile-menu svg{width:15px;height:15px;display:block;}
 .tile-menu::after{content:"";position:absolute;inset:-8px;border-radius:50%;}
 .tile-menu:active{transform:scale(0.88);background:var(--card-3);}
 
@@ -790,8 +788,17 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   border:2px dashed var(--label-4);pointer-events:none;}
 .pv-ring .ring-ic{font-size:36px;}
 .pv-ring .ring-ic .emoji{font-size:36px;}
-.pv-title{margin-top:15px;font-size:19px;font-weight:800;color:var(--label);
-  text-align:center;letter-spacing:var(--track-title);word-break:break-word;}
+.pv-title{margin-top:15px;font-size:20px;font-weight:800;color:var(--label);
+  text-align:center;letter-spacing:var(--track-title);word-break:break-word;
+  background:none;border:none;outline:none;width:100%;max-width:300px;
+  font-family:inherit;padding:2px 0;}
+.pv-title::placeholder{color:var(--label-4);}
+/* El emoji vive DENTRO del anillo y se edita ahí mismo. */
+.ring-emj{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:66px;height:52px;border:none;outline:none;background:none;
+  text-align:center;font-size:36px;line-height:1;padding:0;
+  font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",inherit;
+  caret-color:transparent;}
 .pv-due{margin-top:4px;font-size:14px;color:var(--label-2);}
 .pv.over .pv-due{color:var(--red);font-weight:600;}
 /* Fila de ajuste: rótulo a la izquierda, valor en pastilla a la derecha. */
@@ -1064,12 +1071,6 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
     <div id="taskListWrap" style="margin-top:4px;"></div>
   </section>
 
-  <!-- ===================== INSPIRACIONES ===================== -->
-  <section class="view" id="view-insp" data-title="Inspiraciones">
-    <p class="subtitle">Tareas listas para añadir de un toque</p>
-    <div class="insp-list" id="inspList"></div>
-  </section>
-
   <!-- ===================== PERFIL ===================== -->
   <section class="view" id="view-profile" data-title="Perfil">
     <h1 class="large-title">Perfil</h1>
@@ -1135,20 +1136,29 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 
 <!-- Tab bar -->
 <nav class="tabbar">
+  <!-- Iconos de trazo grueso y remates redondos: a 22px, un trazo fino con
+       esquinas vivas se ve sucio y frío. Las chispas van macizas para que el
+       generador se distinga de un vistazo de los otros dos, que son huecos. -->
   <button class="tab" data-view="gen">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5l9-9"/><path d="M12.3 6.2l1.8 1.8"/><path d="M16.5 3.2l.85 2.3 2.3.85-2.3.85-.85 2.3-.85-2.3L13.4 6.35l2.25-.85z"/><path d="M6.4 4.2l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4L4.5 6.1l1.4-.5z"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4.8 19.2L13 11"/>
+      <path d="M16.8 3c0 2.6.9 3.5 3.5 3.5-2.6 0-3.5.9-3.5 3.5 0-2.6-.9-3.5-3.5-3.5 2.6 0 3.5-.9 3.5-3.5z" fill="currentColor" stroke-width="1.4"/>
+      <path d="M6.6 3.6c0 1.5.5 2 2 2-1.5 0-2 .5-2 2 0-1.5-.5-2-2-2 1.5 0 2-.5 2-2z" fill="currentColor" stroke-width="1.2"/>
+    </svg>
     Generador
   </button>
   <button class="tab active" data-view="tasks">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h11M4.5 12h11M4.5 17.5h7"/><path d="M18.5 15.6l1.7 1.7 3-3.4"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3.4" y="3.4" width="17.2" height="17.2" rx="6.2"/>
+      <path d="M8.3 12.2l2.6 2.6 4.8-5.3"/>
+    </svg>
     Tareas
   </button>
-  <button class="tab" data-view="insp">
-    <span class="tab-ic emoji">💡</span>
-    Ideas
-  </button>
   <button class="tab" data-view="profile">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.7"/><path d="M5.5 19.6a6.6 6.6 0 0113 0"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="8.4" r="3.9"/>
+      <path d="M4.9 19.8c1.3-3.4 3.9-5.1 7.1-5.1s5.8 1.7 7.1 5.1"/>
+    </svg>
     Perfil
   </button>
 </nav>
@@ -1189,7 +1199,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v130";
+const APP_VERSION = "v131";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1209,9 +1219,6 @@ const Icons = (() => {
 // Cada tarea puede llevar SU emoji; si no, hereda el de su categoría. Es lo
 // que permite que "Regar plantas" sea 🌱 y no el icono genérico de Naturaleza.
 const taskEmoji = (t)=> `<span class="emoji">${(t && t.emoji) || Icons.raw(t && t.category)}</span>`;
-// Emojis para elegir en la hoja de crear.
-const EMOJI_PICK = ["🌱","📚","🧺","💾","💊","⚡","🪟","💻","📬","🛏️","☕","🏋️","🚿","🗑️","🚗","💰",
-  "🏃","🧘","🎨","🎵","📖","✍️","🍳","🧽","💡","❤️","😌","🗣️","📷","🌳","⏰","🔔","🐕","🌊","🍎","🧴"];
 
 /* ---------------------------------------------------------------------
    Categorías (color de acento por categoría)
@@ -1877,6 +1884,13 @@ const taskPoints = (m,random) => basePoints(m) * (random?2:1);
    intervalo tras el cual VENCE. De ahí sale el anillo. El mes se toma como
    30 días: es una barra de tiempo, no un calendario.
    --------------------------------------------------------------------- */
+const endOfDayMs = (key)=>{ const [y,m,d]=key.split("-").map(Number);
+  return new Date(y, m-1, d, 23, 59, 59, 999).getTime(); };
+const weekdayOf  = (key)=>{ const [y,m,d]=key.split("-").map(Number);
+  return (new Date(y,m-1,d).getDay()+6)%7; };            // 0=Lunes
+const domOfKey   = (key)=> parseInt(key.split("-")[2],10);
+const addDaysKey = (key,n)=>{ const [y,m,d]=key.split("-").map(Number);
+  const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()+n); return dateKey(dt); };
 const UNIT_MS = { minute:60000, hour:3600000, day:86400000, week:604800000, month:2592000000 };
 const UNITS   = [["minute","Minuto"],["hour","Hora"],["day","Día"],["week","Semana"],["month","Mes"]];
 const unitLabel = (u,n)=>{ const l=(UNITS.find(x=>x[0]===u)||UNITS[2])[1];
@@ -1892,18 +1906,48 @@ function defaultDueFields(rec){
   const repeats = (ty!=="once" && ty!=="date");
   const dueUnit = ty==="monthly" ? "month" : (ty==="weekly"||ty==="custom") ? "week" : "day";
   const startAt = Date.now();
-  return { startAt, dueN:1, dueUnit, repeats, repeatFrom:"fixed", endMode:false,
-           dueAt: startAt + UNIT_MS[dueUnit] };
+  const base = { startAt, dueN:1, dueUnit, repeats, repeatFrom:"fixed", endMode:false, dueVer:2, recurrence:rec };
+  base.dueAt = computeDueFrom(base, startAt, false);
+  return base;
+}
+/* Cuándo vence, contando DESDE un instante dado.
+   Si la tarea tiene días marcados (lunes/miércoles/viernes, o días del mes),
+   son ELLOS los que mandan: vence al acabar el próximo día marcado, no al
+   sumar el intervalo. Antes se sumaba la semana entera y una tarea de los
+   lunes, miércoles y viernes decía "vence en 4 días" estando a martes. */
+function computeDueFrom(t, fromMs, strict){
+  const r = (t && t.recurrence) || {};
+  const fromKey = dateKey(new Date(fromMs));
+  const fits = (k)=> strict ? true : (endOfDayMs(k) > fromMs);
+  if(t && t.repeats && t.dueUnit === "week" && r.days && r.days.length){
+    for(let i = strict?1:0; i<=21; i++){
+      const k = addDaysKey(fromKey,i);
+      if(r.days.includes(weekdayOf(k)) && fits(k)) return endOfDayMs(k);
+    }
+  }
+  if(t && t.repeats && t.dueUnit === "month" && r.dates && r.dates.length){
+    for(let i = strict?1:0; i<=62; i++){
+      const k = addDaysKey(fromKey,i);
+      if(r.dates.includes(domOfKey(k)) && fits(k)) return endOfDayMs(k);
+    }
+  }
+  return fromMs + taskPeriod(t||{});
 }
 function taskDueAt(t){
   if(t && typeof t.dueAt === "number") return t.dueAt;
   const start = (t && (t.startAt || t.createdAt)) || Date.now();
-  return start + taskPeriod(t||{});
+  return computeDueFrom(t, start, false);
 }
 // Al completar, el siguiente vencimiento. "intervalo fijo" mantiene el ritmo
 // original (aunque la hagas tarde); "última finalización" cuenta desde ahora.
 function nextDueAfter(t, completedAt){
   if(!t.repeats) return null;
+  const r = t.recurrence || {};
+  const byDays = (t.dueUnit==="week"  && r.days  && r.days.length)
+              || (t.dueUnit==="month" && r.dates && r.dates.length);
+  // Con días marcados, el siguiente vencimiento es el próximo día marcado
+  // DESPUÉS de hoy (ya la hiciste hoy), venga de donde venga el ritmo.
+  if(byDays) return computeDueFrom(t, completedAt, true);
   const period = taskPeriod(t);
   if(t.repeatFrom === "completion") return completedAt + period;
   let next = taskDueAt(t) + period;
@@ -2272,9 +2316,12 @@ const Store = (() => {
           return new Date(y,m-1,d,23,59,59,999).getTime(); })() : 0;
         t.startAt = Math.max(t.createdAt || Date.now(), last);
       }
-      if(typeof t.dueAt !== "number"){
-        const per = Math.max(60000, (t.dueN||1) * (UNIT_MS[t.dueUnit||"day"] || UNIT_MS.day));
-        t.dueAt = t.startAt + per;
+      // dueVer 2: la primera versión sumaba el intervalo a secas, y una tarea
+      // marcada solo lunes/miércoles/viernes decía "vence en 7 días" estando a
+      // martes. Ahora mandan los días marcados. Se recalcula una sola vez.
+      if(t.dueVer !== 2 || typeof t.dueAt !== "number"){
+        t.dueAt  = computeDueFrom(t, t.startAt, false);
+        t.dueVer = 2;
       }
     });
     if(typeof state.penalties!=='number') state.penalties=0;
@@ -2463,6 +2510,7 @@ function clockSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="current
 function starSvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.5 6.3L21 10l-5 4.2L17.5 21 12 17.3 6.5 21 8 14.2 3 10l6.5-.7z"/></svg>';}
 function refreshSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 005.3 6.3L3 8.5M4 13a8 8 0 0014.7 4.7L21 15.5M3 4v4.5h4.5M21 20v-4.5h-4.5"/></svg>';}
 function plusSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';}
+function dotsSvg(){return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';}
 function checkSvg(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';}
 function hexA(hex,a){ const h=hex.replace('#',''); const n=parseInt(h.length===3?h.split('').map(x=>x+x).join(''):h,16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
 
@@ -3065,35 +3113,36 @@ const Tasks = (() => {
     // tocar el anillo signifique siempre lo mismo y nada más.
     const st = ringState(t);
     return `
-      <div class="tile${t.urgent?" urgent":""}${st.over?" over":""}${isDoneToday(t)?" done":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
-        <button class="tile-menu" data-tap="${t.id}" aria-label="Opciones de la tarea">•••</button>
+      <div class="tile${t.urgent?" urgent":""}${st.over?" over":""}${isDoneToday(t)?" done":""}" data-id="${t.id}" data-check="${t.id}" role="button" style="animation-delay:${Math.min(i*40,240)}ms">
+        <button class="tile-menu" data-tap="${t.id}" aria-label="Opciones de la tarea">${dotsSvg()}</button>
         ${ringHtml(t,st)}
         <div class="tile-title">${esc(t.title)}</div>
         <div class="tile-due">${esc(dueLabel(st.due))}</div>
       </div>`;
   }
   function ringHtml(t,st){
-    return `<button class="ring" data-check="${t.id}" data-ring="${t.id}" aria-label="Completar ${esc(t.title)}">
+    // El anillo ya no lleva su propio disparador: lo lleva la tarjeta entera.
+    return `<span class="ring" data-ring="${t.id}" aria-hidden="true">
           <svg viewBox="0 0 100 100" aria-hidden="true">
             <circle class="ring-track" cx="50" cy="50" r="${RING_R}"/>
             <circle class="ring-arc" cx="50" cy="50" r="${RING_R}"
                     stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${ringOffset(st.frac)}"/>
           </svg>
           <span class="ring-ic">${taskEmoji(t)}</span>
-        </button>`;
+        </span>`;
   }
   // Misma información, otra forma: en lista el anillo se reduce y el texto se
   // alinea a la izquierda, que es lo que hace que quepan más de un vistazo.
   function rowHtml(t,i){
     const st = ringState(t);
     return `
-      <div class="tilerow${t.urgent?" urgent":""}${st.over?" over":""}${isDoneToday(t)?" done":""}" data-id="${t.id}" style="animation-delay:${Math.min(i*40,240)}ms">
+      <div class="tilerow${t.urgent?" urgent":""}${st.over?" over":""}${isDoneToday(t)?" done":""}" data-id="${t.id}" data-check="${t.id}" role="button" style="animation-delay:${Math.min(i*40,240)}ms">
         ${ringHtml(t,st)}
-        <div class="rowbody" data-tap="${t.id}" role="button">
+        <div class="rowbody">
           <div class="tile-title">${esc(t.title)}</div>
           <div class="tile-due">${esc(dueLabel(st.due))}</div>
         </div>
-        <button class="tile-menu" data-tap="${t.id}" aria-label="Opciones de la tarea">•••</button>
+        <button class="tile-menu" data-tap="${t.id}" aria-label="Opciones de la tarea">${dotsSvg()}</button>
       </div>`;
   }
   /* El anillo tiene que MOVERSE, o no es un reloj. Cada 30 s se recalcula sin
@@ -3127,14 +3176,12 @@ const Tasks = (() => {
 
   function bind(wrap){
     $$("[data-check]",wrap).forEach(b=> b.onclick = (e)=>{
-      e.stopPropagation();
       const id=b.getAttribute("data-check");
       const t=Store.get().tasks.find(x=>x.id===id);
-      if(!t) return;
-      if(isDoneToday(t)){ UI.toast("Ya completada hoy","check","var(--green)"); return; }
-      openComplete(t);
+      if(t) quickComplete(t);
     });
-    $$("[data-tap]",wrap).forEach(b=> b.onclick = ()=>{
+    $$("[data-tap]",wrap).forEach(b=> b.onclick = (e)=>{
+      e.stopPropagation();                 // el menú NO debe abrir la cámara
       const id=b.getAttribute("data-tap");
       const t=Store.get().tasks.find(x=>x.id===id);
       if(t){ haptic(); openTaskActions(t); }
@@ -3248,16 +3295,15 @@ const Tasks = (() => {
                     stroke-dasharray="${(2*Math.PI*44).toFixed(2)}" stroke-dashoffset="0"/>
           </svg>
           <div class="dash"></div>
-          <span class="ring-ic" id="ctEmoji"><span class="emoji">${emoji||Icons.raw(cat)}</span></span>
+          <!-- El emoji se escribe con el teclado: tocar el centro del anillo
+               abre el teclado y el último carácter que pongas es el icono de la
+               tarea. Una rejilla de emojis fijos siempre se queda corta. -->
+          <input class="ring-emj" id="ctEmoji" value="${emoji||Icons.raw(cat)}"
+                 maxlength="8" aria-label="Emoji de la tarea" autocomplete="off"/>
         </div>
-        <div class="pv-title" id="ctPvTitle">${editing?esc(existing.title):"Nueva tarea"}</div>
+        <input class="pv-title" id="ctTitle" placeholder="Nueva tarea" maxlength="120"
+               value="${editing?esc(existing.title):""}"/>
         <div class="pv-due" id="ctPvDue"></div>
-      </div>
-      <!-- El emoji es lo que de verdad identifica la tarea de un vistazo en la
-           cuadrícula, más que su categoría. Por eso se elige aparte. -->
-      <div class="emj-row" id="ctEmjRow">
-        <button class="emj auto${emoji?"":" sel"}" data-e="">AUTO</button>
-        ${EMOJI_PICK.map(e=>`<button class="emj${emoji===e?" sel":""}" data-e="${e}"><span class="emoji">${e}</span></button>`).join("")}
       </div>
 
       <div class="segmented" id="ctMode">
@@ -3327,8 +3373,6 @@ const Tasks = (() => {
           ${DURATIONS.map(m=>`<option value="${m}"${editing&&m===dur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("")}
         </select><span class="dd-chev">▾</span></div>
       </div>
-      <input class="big-input big-title" id="ctTitle" placeholder="Título" maxlength="120" value="${editing?esc(existing.title):""}"/>
-      <textarea class="big-input big-desc" id="ctDesc" rows="1" placeholder="Descripción (opcional)">${editing?esc(existing.desc||""):""}</textarea>
       <div id="ctDaysWrap" style="display:${(repeats&&dueUnit==="week")?"block":"none"};">
         <div class="lbl-sm">Días de la semana</div><div class="daypicker" id="ctDays"></div>
         <div class="form-group" style="margin-top:14px;">
@@ -3356,7 +3400,7 @@ const Tasks = (() => {
     // Menús desplegables (select nativo): las opciones ya vienen en el HTML
     // (evita el "temblor" de reflow al rellenarlas tras abrir la hoja).
     const catSel=$("#ctCat",sheet);
-    const emojiRing=$("#ctEmoji",sheet);
+
     const RC = 2*Math.PI*44;
 
     // La vista previa se repinta con CADA cambio: es la única forma de que el
@@ -3368,7 +3412,10 @@ const Tasks = (() => {
     }
     function dueNow(){ return mode==="enddate" ? endMs : startMs + periodNow(); }
     function paintPreview(){
-      if(emojiRing) emojiRing.innerHTML = `<span class="emoji">${emoji || (cat?Icons.raw(cat):"⭐")}</span>`;
+      // Sin emoji propio, el campo muestra el de la categoría (y solo si no
+      // lo estás escribiendo en ese momento).
+      const ei=$("#ctEmoji",sheet);
+      if(ei && !emoji && document.activeElement!==ei) ei.value = Icons.raw(cat);
       const pv=$("#ctPv",sheet), arc=$("#ctPvArc",sheet);
       const due=dueNow(), period=periodNow(), now=Date.now();
       const start=due-period;
@@ -3377,9 +3424,7 @@ const Tasks = (() => {
                         : (now<=start ? 1 : Math.max(0,Math.min(1,(due-now)/period)));
       if(arc) arc.setAttribute("stroke-dashoffset", (RC*(1-frac)).toFixed(2));
       if(pv) pv.classList.toggle("over", over);
-      const t=$("#ctPvTitle",sheet), d=$("#ctPvDue",sheet);
-      const ti=$("#ctTitle",sheet);
-      if(t) t.textContent = (ti && ti.value.trim()) || (editing?existing.title:"Nueva tarea");
+      const d=$("#ctPvDue",sheet);
       if(d) d.textContent = (over?"vencida hace ":"vence en ")
                           + (()=>{ const ms=Math.abs(due-now), dd=Math.floor(ms/86400000),
                                    hh=Math.floor((ms%86400000)/3600000), mm=Math.floor((ms%3600000)/60000);
@@ -3389,6 +3434,22 @@ const Tasks = (() => {
     }
 
     catSel.onchange=()=>{ cat=catSel.value; haptic(); fitSelectWidth(catSel); paintPreview(); };
+    const emjInput=$("#ctEmoji",sheet);
+    if(emjInput){
+      const lastGlyph = (str)=>{ const arr=Array.from(str||""); return arr.length?arr[arr.length-1]:""; };
+      emjInput.addEventListener("input", ()=>{
+        // Un emoji con modificador (tono de piel, variantes) ocupa varios
+        // caracteres: si el texto es corto se respeta entero; si no, se queda
+        // el último, que es el que acabas de escribir.
+        const v = emjInput.value;
+        emoji = Array.from(v).length<=3 ? v : lastGlyph(v);
+        emjInput.value = emoji;
+      });
+      emjInput.addEventListener("focus", ()=> emjInput.select());
+      emjInput.addEventListener("blur", ()=>{
+        if(!emjInput.value.trim()){ emoji=""; emjInput.value = Icons.raw(cat); }
+      });
+    }
     const emjRow=$("#ctEmjRow",sheet);
     if(emjRow) $$(".emj",emjRow).forEach(b=> b.onclick=()=>{
       emoji=b.getAttribute("data-e"); haptic();
@@ -3468,12 +3529,7 @@ const Tasks = (() => {
     if(swOnlyMonth) swOnlyMonth.onclick = ()=>{ onlyDays=!onlyDays; syncToggles(); haptic(); };
 
     const titleInput = $("#ctTitle",sheet);
-    // Descripción de una línea que CRECE con el texto (sin dejar hueco vacío).
-    const descInput = $("#ctDesc",sheet);
-    if(descInput){ const grow=()=>{ descInput.style.height="auto"; descInput.style.height=descInput.scrollHeight+"px"; };
-      descInput.addEventListener("input",grow); requestAnimationFrame(grow); }
     const saveBtn = $("#ctSave",sheet);
-    // "Cada semana" exige ≥1 día; "Cada mes" exige ≥1 fecha; "Fecha" exige una fecha
     // La fecha de finalización tiene que ir DESPUÉS del inicio; si no, el
     // intervalo sería negativo y el anillo no significaría nada.
     function validate(){
@@ -3486,7 +3542,7 @@ const Tasks = (() => {
     saveBtn.onclick = ()=>{
       const title = titleInput.value.trim();
       if(!title) return;
-      const desc = $("#ctDesc",sheet).value.trim();
+      const desc = editing ? (existing.desc||"") : "";
       // RESPONDER PRIMERO: cerrar el menú al instante; el guardado (localStorage),
       // el re-pintado y la nube van después, con la animación ya en marcha.
       haptic(15);
@@ -3499,7 +3555,6 @@ const Tasks = (() => {
       const periodMs = endMode ? Math.max(60000, endMs - startMs)
                                : Math.max(60000, dueN * (UNIT_MS[dueUnit]||UNIT_MS.day));
       const willRepeat = endMode ? false : repeats;
-      const dueAt = endMode ? endMs : startMs + periodMs;
       const recType = !willRepeat ? "once"
                     : (dueUnit==="week"  && days.length)      ? "weekly"
                     : (dueUnit==="month" && monthDays.length) ? "monthly"
@@ -3507,10 +3562,13 @@ const Tasks = (() => {
       const rec = {type:recType, days:days.slice(), dates:monthDays.slice()};
       const dueFields = {
         emoji: emoji || null,
-        startAt:startMs, dueAt, repeats:willRepeat, repeatFrom, endMode,
+        startAt:startMs, repeats:willRepeat, repeatFrom, endMode, dueVer:2,
         dueN: endMode ? Math.max(1,Math.round(periodMs/60000)) : dueN,
-        dueUnit: endMode ? "minute" : dueUnit
+        dueUnit: endMode ? "minute" : dueUnit,
+        recurrence: rec
       };
+      // Con días marcados manda el próximo día marcado, no la suma del intervalo.
+      dueFields.dueAt = endMode ? endMs : computeDueFrom(dueFields, startMs, false);
       const reminder = remind ? { time: (remindTime||"09:00") } : null;
       const newId = uid();
       setTimeout(()=>{
@@ -3550,7 +3608,10 @@ const Tasks = (() => {
       }, 60);
     };
     if(editing){ const delBtn=$("#ctDelete",sheet); if(delBtn) delBtn.onclick=()=>{ haptic(); confirmDelete(existing); }; }
-    if(!editing) setTimeout(()=>titleInput.focus(),350);
+    // preventScroll: enfocar un campo dentro de la hoja hacía que el navegador
+    // arrastrase el contenedor scrollable de detrás (la vista) hasta el final.
+    if(!editing) setTimeout(()=>{ try{ titleInput.focus({preventScroll:true}); }
+                                  catch(_){ titleInput.focus(); } },350);
   }
 
   /* ---------- COMPLETAR + FOTO ---------- */
@@ -3595,13 +3656,36 @@ const Tasks = (() => {
     $("#pcCancel").onclick = Sheets.close;
 
     confirm.onclick = ()=>{
-      // RESPONDER PRIMERO, trabajar después: el menú se cierra al instante y el
-      // trabajo pesado (IndexedDB, localStorage, re-pintados, red) se hace tras
-      // arrancar la animación de cierre. Antes, el clic esperaba a guardar la
-      // foto (varios MB) y reescribir el estado ANTES de cerrar → se sentía lento.
       haptic(15);
       Sheets.close();
       confirm.disabled = true; // evita doble clic mientras cierra
+      commitCompletion(task, photoData, pts);
+    };
+  }
+
+  /* Completar de un toque: tocar la tarjeta abre la cámara y, en cuanto hay
+     foto, la tarea queda hecha. El menú intermedio sobraba —siempre acababas
+     pulsando "Cámara"— y con él sobraban dos toques por tarea. */
+  function quickComplete(task){
+    if(isDoneToday(task)){ UI.toast("Ya completada","check","var(--green)"); return; }
+    const fileCam=$("#fileCam");
+    fileCam.onchange = (e)=>{
+      const f = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if(!f) return;                       // cancelaste la cámara: no pasa nada
+      compressImage(f,(dataUrl)=>{
+        const pts = ringState(task).over ? 0 : taskPoints(task.minutes,task.random);
+        commitCompletion(task, dataUrl, pts);
+      });
+    };
+    haptic(12);
+    fileCam.click();
+  }
+
+  /* RESPONDER PRIMERO, trabajar después: el trabajo pesado (IndexedDB,
+     localStorage, re-pintados, red) se hace con la animación ya en marcha.
+     Antes el clic esperaba a guardar la foto (varios MB) antes de cerrar. */
+  function commitCompletion(task, photoData, pts){
       const photoId = uid();
       const now = new Date();
       const entry = {
@@ -3651,7 +3735,6 @@ const Tasks = (() => {
           })();
         }
       }, 60); // deja arrancar la animación de cierre antes del trabajo pesado
-    };
   }
   // sube la foto de una tarea compartida al Storage y devuelve su URL pública
   async function uploadSharedPhoto(sharedId, dataUrl){
@@ -5526,7 +5609,7 @@ const Lightbox = (() => {
    ===================================================================== */
 const Router = (() => {
   let cur="tasks";
-  const views={gen:"#view-gen",tasks:"#view-tasks",insp:"#view-insp",profile:"#view-profile"};
+  const views={gen:"#view-gen",tasks:"#view-tasks",profile:"#view-profile"};
 
   function go(name){
     if(name===cur) { scrollTop(); return; }
@@ -5551,7 +5634,6 @@ const Router = (() => {
     $("#friendsBtn").style.display = cur==="profile" ? "grid" : "none";
     $("#settingsBtn").style.display= cur==="profile" ? "grid" : "none";
     $("#tbGroup").style.display    = cur==="tasks"   ? "flex" : "none";
-    if(cur==="insp" && typeof Inspirations!=="undefined") Inspirations.render();
     // el nombre aparece al hacer scroll; al cambiar de sección la vista nueva
     // empieza arriba, así que se sincroniza aquí para que no quede "pegado".
     $("#topbar").classList.toggle("scrolled", v.scrollTop>30);
@@ -5627,57 +5709,6 @@ const View = (() => {
     SORTS,
     set(k,val){ v[k]=val; save(); }
   };
-})();
-
-/* =====================================================================
-   INSPIRACIONES — tareas hechas, listas para añadir de un toque
-   ===================================================================== */
-const Inspirations = (() => {
-  const LIST = [
-    {e:"🌱", t:"Regar plantas",           c:"Naturaleza",    n:3, u:"day"},
-    {e:"📚", t:"Estudiar para examen",    c:"Estudio",       n:1, u:"day"},
-    {e:"🧺", t:"Lavar la ropa",           c:"Limpieza",      n:1, u:"week"},
-    {e:"💾", t:"Hacer copia de seguridad",c:"Programación",  n:1, u:"week"},
-    {e:"💊", t:"Tomar medicación",        c:"Salud",         n:1, u:"day"},
-    {e:"⚡", t:"Leer contador",           c:"Productividad", n:1, u:"month"},
-    {e:"🪟", t:"Limpiar ventanas",        c:"Limpieza",      n:1, u:"month"},
-    {e:"🛏️", t:"Cambiar las sábanas",     c:"Limpieza",      n:2, u:"week"},
-    {e:"🗑️", t:"Sacar la basura",         c:"Limpieza",      n:2, u:"day"},
-    {e:"🏋️", t:"Ir al gimnasio",          c:"Deporte",       n:2, u:"day"},
-    {e:"🚿", t:"Limpiar el baño",         c:"Limpieza",      n:1, u:"week"},
-    {e:"☕", t:"Limpiar la cafetera",     c:"Cocina",        n:2, u:"week"},
-    {e:"📬", t:"Revisar el buzón",        c:"Productividad", n:2, u:"day"},
-    {e:"💰", t:"Revisar gastos",          c:"Productividad", n:1, u:"month"},
-    {e:"🚗", t:"Revisar el coche",        c:"Productividad", n:3, u:"month"},
-    {e:"🧘", t:"Meditar",                 c:"Meditación",    n:1, u:"day"}
-  ];
-  function add(item, btn){
-    const now=Date.now();
-    const period = (item.n||1) * (UNIT_MS[item.u] || UNIT_MS.day);
-    const rec = { type: item.u==="week" ? "weekly" : item.u==="month" ? "monthly" : "daily", days:[], dates:[] };
-    Store.update(s=>{
-      s.tasks.unshift({ id:uid(), title:item.t, desc:"", category:item.c, emoji:item.e,
-        minutes:15, people:1, urgent:false, recurrence:rec, onlyOnDays:false, reminder:null,
-        random:false, createdAt:now, done:false, lastDone:null,
-        startAt:now, dueAt:now+period, dueN:item.n, dueUnit:item.u,
-        repeats:true, repeatFrom:"fixed", endMode:false });
-    });
-    haptic(12);
-    if(btn){ btn.classList.add("added"); btn.textContent="Añadida"; }
-    Tasks.render();
-    UI.toast("Tarea añadida","check","var(--green)");
-  }
-  function render(){
-    const wrap=$("#inspList"); if(!wrap) return;
-    wrap.innerHTML = LIST.map((it,i)=>`
-      <div class="insp-row" style="animation-delay:${Math.min(i*30,240)}ms">
-        <div class="insp-ic"><span class="emoji">${it.e}</span></div>
-        <div class="insp-t">${esc(it.t)}</div>
-        <button class="insp-add" data-i="${i}">Añadir</button>
-      </div>`).join("");
-    $$(".insp-add",wrap).forEach(b=> b.onclick=()=> add(LIST[+b.getAttribute("data-i")], b));
-  }
-  return { render };
 })();
 
 /* =====================================================================
@@ -5964,7 +5995,7 @@ window.addEventListener("pageshow",(e)=>{ if(e.persisted) repaintNudge(); });
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) repaintNudge(); });
 
 // exponer para depuración
-window.RachasApp = { Store, Router, Transfer:{ makeTransferCode, restoreFromCode } };
+window.RachasApp = { Store, Router, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, nextDueAfter };
 })();
 </script>
 </body>
