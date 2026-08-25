@@ -852,6 +852,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .ring-emj::placeholder{color:var(--label-2);font-family:inherit;font-weight:300;
   font-size:42px;opacity:1;}
 .pv-due{margin-top:4px;font-size:14px;color:var(--label-2);}
+/* Sale solo mientras falta el emoji: una pista que aparece cuando hace falta
+   explica por qué "Guardar" está apagado sin ocupar sitio el resto del tiempo. */
+.pv-need{margin-top:10px;font-size:13px;font-weight:600;color:var(--label-2);}
+.pv-need b{color:var(--green);font-size:15px;}
 .pv.over .pv-due{color:var(--red);font-weight:600;}
 /* Fila de ajuste: rótulo a la izquierda, valor en pastilla a la derecha. */
 .frow{display:flex;align-items:center;gap:10px;padding:13px 2px;min-height:56px;}
@@ -1244,7 +1248,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v140";
+const APP_VERSION = "v141";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1917,9 +1921,12 @@ const _genTareas = new GeneradorTareas({ historial: loadGenHist() });
 /* ---------------------------------------------------------------------
    Duración y puntos
    --------------------------------------------------------------------- */
+/* La duración sobrevive SOLO en el generador, donde sigue haciendo algo: es
+   uno de los tres ingredientes con los que se inventa la tarea ("30 minutos de
+   ...."). En el formulario ya no se pregunta: desde que los puntos salen del
+   anillo, elegir "45 minutos" no cambiaba nada ni se enseñaba en ningún sitio. */
 const DURATIONS = [5,10,15,20,30,45,60,120,150];
 const durLabel = (m) => m===60 ? "1 hora" : m===120 ? "2 horas" : m===150 ? "2 horas o más" : m+" minutos";
-const durShort = (m) => m===60 ? "1 h" : m===120 ? "2 h" : m===150 ? "2 h+" : m+" min";
 /* EL ANILLO ES LA PUNTUACIÓN.
    Antes los puntos salían de la duración declarada: una tarea de 2 h valía 240
    la hicieras cuando la hicieras, y vencer costaba esos 240 de golpe. Ahora el
@@ -2989,10 +2996,22 @@ const Tasks = (() => {
   /* ---------- AUTO-ELIMINACIÓN (solo de una vez) ----------
      "Solo hoy" y "Fecha" se borran al pasar su día sin completar. Las
      recurrentes NO se borran: solo penalizan los días programados sin hacer. */
-  /* Ninguna tarea se borra sola por vencer. Antes las de "solo hoy" y "fecha"
-     desaparecían al día siguiente; ahora se quedan en la lista con el anillo
-     rojo creciendo hasta que las hagas (o las borres tú). */
-  function isExpired(){ return false; }
+  /* Una tarea se borra sola cuando su anillo rojo se completa: ahí ya te ha
+     costado todo lo que podía costar y no queda nada que cobrar ni que salvar.
+     Antes desaparecían "al día siguiente", una hora arbitraria; ahora el
+     momento lo marca el mismo anillo que llevas viendo llenarse.
+
+     Dos excepciones, y las dos por lo mismo —borrar no se deshace—:
+     · Las que SE REPITEN no se borran. Perder "Correr" por no haber corrido dos
+       días seguidos sería castigar el olvido con la pérdida del hábito. Su
+       anillo se queda lleno hasta que la hagas, y ahí rueda al ciclo siguiente.
+     · Las COMPARTIDAS tampoco. Borrarlas las borra para los dos, y la tarea de
+       tu amigo no puede desaparecer porque tú la dejaras pudrirse. */
+  function isRotten(t, now){
+    if(t.repeats || t.shared) return false;
+    const { due, period } = taskWindow(t);
+    return now >= due + period;
+  }
   /* ---------- PENALIZACIÓN por tareas vencidas ----------
      Vencer ya no cuesta todo de golpe. El castigo CRECE con el anillo rojo:
      recién vencida no quita nada, con el anillo rojo entero quita lo mismo que
@@ -3007,22 +3026,35 @@ const Tasks = (() => {
      clave (`penalizedFor`) y el contador vuelve solo a cero. */
   function cleanupExpired(){
     const s=Store.get(); const now=Date.now();
-    let delta=0; const marks=[];
+    let delta=0; const marks=[], rotten=[];
     (s.tasks||[]).forEach(t=>{
       const { due, period } = taskWindow(t);
       if(now <= due || isDoneToday(t)) return;
       const want = Math.round(taskMaxPoints(t) * Math.min(1, (now - due) / period));
       const paid = (t.penalizedFor === due) ? (t.penalizedPts || 0) : 0;
       if(want > paid){ delta += want - paid; marks.push({ id:t.id, due, want }); }
+      if(isRotten(t, now)) rotten.push(t);
     });
-    if(!marks.length) return;
+    if(!marks.length && !rotten.length) return;
+    const rotIds = new Set(rotten.map(t=>t.id));
     Store.update(st=>{
+      // Cobrar ANTES de borrar: al salir de la lista la tarea deja de tener
+      // anillo, y con él se iría sin pagar el último tramo.
       marks.forEach(m=>{ const t=st.tasks.find(x=>x.id===m.id);
         if(t){ t.penalizedFor=m.due; t.penalizedPts=m.want; } });
       const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
       st.penalties=Math.min((st.penalties||0)+delta, sum);   // topada en lo ganado
       st.points=Math.max(0, sum - st.penalties);
+      if(rotIds.size) st.tasks = st.tasks.filter(t=>!rotIds.has(t.id));
     });
+    if(rotIds.size){
+      rotten.forEach(t=>{ if(Cloud.enabled && Cloud.enabled()) Cloud.deleteReminder(t.id); });
+      // Sin re-pintar desde aquí: el único que llama es render(), y lee la lista
+      // DESPUÉS de esta pasada. Repintar sería volver a entrar en sí mismo.
+      UI.toast(rotten.length===1
+        ? `“${rotten[0].title}” venció del todo`
+        : `${rotten.length} tareas vencieron del todo`, "check", "var(--red)");
+    }
     if(UI.renderProfile) UI.renderProfile();
     /* El goteo se anuncia solo cuando hay algo que anunciar. Ahora que el cobro
        es continuo, avisar de cada pasada sería un aviso cada pocos segundos por
@@ -3382,10 +3414,9 @@ const Tasks = (() => {
     // sigue existiendo para no borrarle la categoría a las que ya la tienen
     // (las de antes y las del generador, que sí sigue clasificando).
     let cat   = editing ? (existing.category || "") : "";
-    let dur   = editing ? existing.minutes  : 10;
     let ppl   = editing ? (existing.people||1) : 1;
     let urgent= editing ? !!existing.urgent : false;
-    let emoji = editing ? (existing.emoji||"") : "";   // "" = hereda el de la categoría
+    let emoji = editing ? (existing.emoji || Icons.raw(existing.category)) : "";
     let days  = editing && existing.recurrence && existing.recurrence.days ? existing.recurrence.days.slice() : [];
     let monthDays = editing && existing.recurrence && existing.recurrence.dates ? existing.recurrence.dates.slice() : [];
     // "Solo ciertos días" está activo si la tarea ya tiene días marcados.
@@ -3429,12 +3460,13 @@ const Tasks = (() => {
           <!-- El emoji se escribe con el teclado: tocar el centro del anillo
                abre el teclado y el último carácter que pongas es el icono de la
                tarea. Una rejilla de emojis fijos siempre se queda corta. -->
-          <input class="ring-emj" id="ctEmoji" value="${editing?esc(emoji||Icons.raw(cat)):esc(emoji)}"
+          <input class="ring-emj" id="ctEmoji" value="${esc(emoji)}"
                  placeholder="+" maxlength="8" aria-label="Emoji de la tarea" autocomplete="off"/>
         </div>
         <input class="pv-title" id="ctTitle" placeholder="Nueva tarea" maxlength="120"
                value="${editing?esc(existing.title):""}"/>
         <div class="pv-due" id="ctPvDue"></div>
+        <div class="pv-need" id="ctNeedEmj">Toca el <b>+</b> y escribe un emoji para la tarea.</div>
       </div>
 
       <div class="segmented" id="ctMode">
@@ -3503,13 +3535,6 @@ const Tasks = (() => {
         <div class="hint">Recibirás una notificación a esa hora los días en que toque la tarea.</div>
       </div>
 
-      <div class="fsep"></div>
-      <div class="dd-row" id="ctDD">
-        <div class="dd"><select id="ctDur" aria-label="Tiempo">
-          <option value="" disabled${editing?"":" selected"}>Tiempo</option>
-          ${DURATIONS.map(m=>`<option value="${m}"${editing&&m===dur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("")}
-        </select><span class="dd-chev">▾</span></div>
-      </div>
       ${(!editing && Cloud.configured())?`<div id="ctShareWrap"><div class="lbl-sm">Compartir con un amigo</div><div class="chips" id="ctShare"></div><div class="hint" id="ctShareHint" style="display:none">Si tú o tu amigo la completáis o la borráis, se hace para los dos.</div></div>`:""}
       <button class="btn" id="ctSave" style="margin-top:24px;">Guardar</button>
       ${editing?`<button class="btn danger ghost" id="ctDelete" style="margin-top:12px;">${trashSvg()} Eliminar tarea</button>`:""}
@@ -3550,11 +3575,11 @@ const Tasks = (() => {
       return Math.max(60000, due - computeStartFor(f, due));
     }
     function paintPreview(){
-      // Al crear, sin emoji propio, el campo se queda VACÍO y enseña el "+";
-      // la ficha usará el emoji genérico. Al editar sí se precarga, porque ahí
-      // hay una tarea que ya tiene icono (suyo o de su categoría antigua).
-      const ei=$("#ctEmoji",sheet);
-      if(ei && !emoji && document.activeElement!==ei) ei.value = editing ? Icons.raw(cat) : "";
+      // El campo no se rellena solo: vacío enseña el "+", y vacío es
+      // exactamente lo que impide guardar. Un emoji puesto por la app no sería
+      // una elección, sería un relleno con el que todas acabarían iguales.
+      const need=$("#ctNeedEmj",sheet);
+      if(need) need.style.display = emoji.trim() ? "none" : "block";
       const pv=$("#ctPv",sheet), arc=$("#ctPvArc",sheet);
       const due=dueNow(), period=periodNow(), now=Date.now();
       const start=due-period;
@@ -3582,19 +3607,16 @@ const Tasks = (() => {
         const v = emjInput.value;
         emoji = Array.from(v).length<=3 ? v : lastGlyph(v);
         emjInput.value = emoji;
+        validate(); paintPreview();
       });
       emjInput.addEventListener("focus", ()=> emjInput.select());
       emjInput.addEventListener("blur", ()=>{
-        // Vacío significa "el que le toque": se guarda vacío y taskEmoji() se
-        // encarga. Al crear se deja el "+" a la vista.
-        if(!emjInput.value.trim()){ emoji=""; emjInput.value = editing ? Icons.raw(cat) : ""; }
+        // Dejarlo vacío es una respuesta válida del campo, pero no de la tarea:
+        // se queda el "+" a la vista y "Guardar" sigue apagado.
+        if(!emjInput.value.trim()){ emoji=""; emjInput.value=""; }
+        validate(); paintPreview();
       });
     }
-    // Menú desplegable (select nativo): las opciones ya vienen en el HTML
-    // (evita el "temblor" de reflow al rellenarlas tras abrir la hoja).
-    const durSel=$("#ctDur",sheet);
-    durSel.onchange=()=>{ dur=+durSel.value; haptic(); fitSelectWidth(durSel); };
-    fitSelectWidth(durSel);
 
     // ---- modo: intervalo / fecha de finalización ----
     const modeWrap=$("#ctMode",sheet);
@@ -3674,7 +3696,9 @@ const Tasks = (() => {
     // La fecha de finalización tiene que ir DESPUÉS del inicio; si no, el
     // intervalo sería negativo y el anillo no significaría nada.
     function validate(){
-      saveBtn.disabled = !titleInput.value.trim() || (mode==="enddate" && !eod && endMs<=startMs);
+      saveBtn.disabled = !titleInput.value.trim()
+                      || !emoji.trim()
+                      || (mode==="enddate" && !eod && endMs<=startMs);
     }
     titleInput.addEventListener("input", ()=>{ validate(); paintPreview(); });
     validate(); paintPreview();
@@ -3682,7 +3706,7 @@ const Tasks = (() => {
     $("#ctCancel",sheet).onclick = Sheets.close;
     saveBtn.onclick = ()=>{
       const title = titleInput.value.trim();
-      if(!title) return;
+      if(!title || !emoji.trim()) return;   // el botón ya está apagado; esto es el cinturón
       const desc = editing ? (existing.desc||"") : "";
       // RESPONDER PRIMERO: cerrar el menú al instante; el guardado (localStorage),
       // el re-pintado y la nube van después, con la animación ya en marcha.
@@ -3709,7 +3733,7 @@ const Tasks = (() => {
                     : "daily";
       const rec = {type:recType, days:outDays, dates:outDates};
       const dueFields = {
-        emoji: emoji || null,
+        emoji: emoji.trim(),
         startAt:startMs, repeats:willRepeat, repeatFrom, endMode, eodMode, dueVer:3,
         dueN: endMode ? Math.max(1,Math.round(periodMs/60000)) : dueN,
         dueUnit: endMode ? "minute" : dueUnit,
@@ -3728,14 +3752,14 @@ const Tasks = (() => {
         Store.update(s=>{
           if(editing){
             const t = s.tasks.find(x=>x.id===existing.id);
-            if(t){ t.title=title; t.desc=desc; t.category=cat; t.minutes=dur; t.people=ppl; t.urgent=urgent;
+            if(t){ t.title=title; t.desc=desc; t.category=cat; t.people=ppl; t.urgent=urgent;
                    t.recurrence=rec; t.onlyOnDays=useDays; t.reminder=reminder;
                    Object.assign(t, dueFields);
                    // vencimiento nuevo = castigo nuevo: se olvida el ya cobrado
                    if(t.penalizedFor !== t.dueAt){ delete t.penalizedFor; delete t.penalizedPts; }
                    delete t.doneUntil; }
           } else {
-            s.tasks.unshift(Object.assign({ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
+            s.tasks.unshift(Object.assign({ id:newId, title, desc, category:cat, minutes:0, people:ppl, urgent,
               recurrence:rec, onlyOnDays:useDays, reminder, random:false, createdAt:Date.now(), done:false, lastDone:null },
               dueFields));
           }
@@ -3751,7 +3775,7 @@ const Tasks = (() => {
       if(!editing && partner){
         const meName=Store.get().profile.name||"Atleta";
         Cloud.createShared({ id:newId, owner_id:Cloud.myId(), owner_name:meName, partner_id:partner.cloudId, partner_name:partner.name,
-          title, descr:desc, category:cat, minutes:dur, people:ppl, urgent, recurrence:rec, only_on_days:useDays });
+          title, descr:desc, category:cat, minutes:0, people:ppl, urgent, recurrence:rec, only_on_days:useDays });
       }
       render();
       UI.toast(editing?"Cambios guardados":(partner?`Invitación enviada a ${esc(partner.name)}`:"Tarea creada"),"check","var(--green)");
