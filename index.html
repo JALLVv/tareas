@@ -1248,7 +1248,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v142";
+const APP_VERSION = "v143";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2133,7 +2133,8 @@ function weekStats(history, monday){
   items.forEach(h=>{ const c=h.category||"Otra"; cats[c]=(cats[c]||0)+1; });
   let topCategory=null, topCount=0;
   Object.entries(cats).forEach(([c,n])=>{ if(n>topCount){ topCount=n; topCategory=c; } });
-  return { points: items.reduce((a,h)=>a+(h.points||0),0), tasks: items.length, topCategory, topCount };
+  // Neto: una semana con tres tareas hechas tarde no puede leerse como buena.
+  return { points: items.reduce((a,h)=>a+(h.points||0)-(h.penalty||0),0), tasks: items.length, topCategory, topCount };
 }
 function weeklySummaryFor(history){
   const weekStart = shiftDate(mondayOf(dateKey()), -7);
@@ -2234,7 +2235,8 @@ function historyItemHtml(h, i){
     h.time?esc(h.time):"",
     h.category?esc(h.category):"",
     (h.shared&&h.partnerName?`<span class="pts" style="color:var(--indigo)">con ${esc(h.partnerName)}</span>`:""),
-    (h.points!=null?`<span class="pts">${h.points} pts</span>`:"")
+    (h.penalty?`<span class="pts" style="color:var(--red)">−${h.penalty} pts</span>`
+              :(h.points!=null?`<span class="pts">${h.points} pts</span>`:""))
   ].filter(Boolean);
   return `<div class="card gal-item${i!=null?' anim-in':''}" data-h="${h.id}"${i!=null?` style="animation-delay:${Math.min(i*40,240)}ms"`:""}>
     <div class="gal-thumb"></div>
@@ -2314,8 +2316,11 @@ function deleteCompletion(h){
     const idx=(s.history||[]).findIndex(x=>x.id===h.id);
     if(idx<0) return;
     const entry=s.history[idx];
-    s.points=Math.max(0,(s.points||0)-(entry.points||0));
     s.history.splice(idx,1);
+    // Se deshace entera: lo que sumó y lo que restó.
+    if(entry.penalty) s.penalties=Math.max(0,(s.penalties||0)-entry.penalty);
+    const sum=(s.history||[]).reduce((a,h)=>a+(h.points||0),0);
+    s.points=Math.max(0, sum - (s.penalties||0));
     // si la tarea sigue existiendo, permitir rehacerla ese día
     const t=(s.tasks||[]).find(x=>x.id===entry.taskId);
     if(t){ const ty=t.recurrence && t.recurrence.type;
@@ -2652,8 +2657,11 @@ const Gamify = (() => {
 
     let streakUp = 0; // fuera del entry: no debe persistirse en el historial
     Store.update(st=>{
-      st.points += entry.points;
       st.history.unshift(entry);
+      const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
+      // Topada en lo ganado, como el resto: nunca se pierde más de lo sumado.
+      if(entry.penalty>0) st.penalties=Math.min((st.penalties||0)+entry.penalty, sum);
+      st.points=Math.max(0, sum - (st.penalties||0));
       // racha
       const today = dateKey();
       const last = st.streak.lastDate;
@@ -2666,9 +2674,9 @@ const Gamify = (() => {
       }
     });
 
-    // Sin puntos (tarea vencida) no hay nada que anunciar: el "+0" flotando
-    // en mitad de la pantalla solo subrayaría lo que ya dice el anillo rojo.
+    // El número que sale volando es el que acaba de pasar, sume o reste.
     if(entry.points > 0) UI.pointsPop("+"+entry.points);
+    else if(entry.penalty > 0) UI.pointsPop("−"+entry.penalty, "var(--red)");
     const after = rankFor(Store.get().points).index;
 
     // racha primero (banner), luego rango si subió
@@ -2859,10 +2867,31 @@ const Tasks = (() => {
     // Vencida: el rojo arranca con un trocito visible, no desde la nada.
     return { over:true, frac: Math.max(0.05, Math.min(1, (now - due) / period)), due };
   }
-  // Lo que suma completarla AHORA: el anillo verde, tal y como se ve.
+  /* El anillo rojo nunca se DIBUJA por debajo del 5%, o no se vería; el cobro
+     sí arranca en cero, para que vencer no sea un escalón. Dibujo y cobro miden
+     lo mismo, pero el cobro sin suelo. */
+  function overdueFrac(t){
+    const { due, period } = taskWindow(t);
+    const now = Date.now();
+    return now <= due ? 0 : Math.min(1, (now - due) / period);
+  }
+  /* Lo que vale completarla AHORA, con signo. La regla es una sola y el anillo
+     la dice entera: cuanto más verde quede, más suma; cuanto más rojo se haya
+     llenado, más resta. +500 con el verde entero, 0 justo en el vencimiento,
+     −500 con el rojo entero.
+
+     El cobro llega AL COMPLETAR, no antes: mientras la tarea está ahí vencida
+     no se toca nada. Un goteo en segundo plano era lo que hacía aparecer
+     "−18 pts" al abrir la app sin haber hecho nada. */
   function pointsForNow(t){
     const st = ringState(t);
-    return st.over ? 0 : Math.round(taskMaxPoints(t) * st.frac);
+    if(!st.over) return Math.round(taskMaxPoints(t) * st.frac);
+    /* Al llenarse del todo el anillo rojo ya se cobró el máximo (y la tarea se
+       borró, salvo si se repite o es compartida). Esas dos siguen ahí, y
+       completarlas no puede volver a cobrar lo mismo: se descuenta lo ya
+       pagado por ESTE vencimiento, que es justo el máximo. */
+    const paid = (t.penalizedFor === taskDueAt(t)) ? taskMaxPoints(t) : 0;
+    return -Math.max(0, Math.round(taskMaxPoints(t) * overdueFrac(t)) - paid);
   }
   const ringOffset = (frac)=> (RING_C * (1 - frac)).toFixed(2);
 
@@ -3207,7 +3236,10 @@ const Tasks = (() => {
     const cmp = {
       due:     (a,b)=> taskDueAt(a) - taskDueAt(b),
       name:    (a,b)=> (a.title||"").localeCompare(b.title||"","es",{sensitivity:"base"}),
-      created: (a,b)=> (b.createdAt||0) - (a.createdAt||0)
+      // Ascendente, como "Vencimiento" (la más próxima primero) y "Nombre"
+      // (la A primero): ordenar por creación es ver el orden en que las
+      // creaste. Iba al revés que las otras dos y parecía que no ordenaba.
+      created: (a,b)=> (a.createdAt||0) - (b.createdAt||0)
     }[View.sort] || ((a,b)=> taskDueAt(a) - taskDueAt(b));
     list.sort((a,b)=>{ const ua=a.urgent?0:1, ub=b.urgent?0:1; return ua!==ub ? ua-ub : cmp(a,b); });
     // Encabezado de estado: dice de un vistazo si te queda algo o no.
@@ -3786,9 +3818,9 @@ const Tasks = (() => {
     // Fuera de plazo la tarea sigue pudiendo hacerse —y hay que hacerla— pero
     // ya no suma: mientras estuvo vencida el anillo rojo fue cobrando. Hacerla
     // ahora no devuelve lo perdido; lo que hace es parar la sangría.
-    const late = ringState(task).over;
-    const pts  = pointsForNow(task);
-    const risk = taskMaxPoints(task);
+    const pts  = pointsForNow(task);          // con signo: + a tiempo, − vencida
+    const late = pts < 0;
+    const cost = -pts;
     const head = `
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="pcCancel">Cancelar</span><span class="title">Completar</span><span class="act" style="opacity:0">•</span></div>
@@ -3796,7 +3828,7 @@ const Tasks = (() => {
         <div class="ico">${checkSvg()}</div>
         <h3>${esc(task.title)}</h3>
         <p>${late
-          ? `Esta tarea está <b style="color:var(--red)">vencida</b>: ya no suma. Si el anillo rojo se llena te costará <b style="color:var(--red)">${risk} pts</b>; hacerla ahora lo evita.`
+          ? `Esta tarea está <b style="color:var(--red)">vencida</b>: completarla ahora te resta <b style="color:var(--red)">${cost} pts</b>, y cuanto más se llene el anillo rojo, más será (hasta ${taskMaxPoints(task)}).`
           : `Sube una foto como evidencia para completar la tarea y ganar <b style="color:var(--yellow)">${pts} pts</b>.`}</p>
         <div class="photo-preview" id="pcPreview"><img id="pcImg" alt="evidencia"/><div class="retake" id="pcRetake">Cambiar foto</div></div>
         <div class="photo-btns">
@@ -3855,9 +3887,14 @@ const Tasks = (() => {
   function commitCompletion(task, photoData, pts){
       const photoId = uid();
       const now = new Date();
+      /* `points` es lo GANADO y `penalty` lo PERDIDO, cada uno en su casilla y
+         nunca negativos. Meter un número con signo en `points` habría bastado
+         para el total, pero ese campo lo suman el resumen semanal, las cifras
+         del perfil y lo que ven tus amigos: un negativo colado ahí saldría por
+         sitios que dan por hecho que solo se suma. */
       const entry = {
         id:uid(), taskId:task.id, title:task.title, category:task.category,
-        minutes:task.minutes, points:pts, random:task.random,
+        minutes:task.minutes, points:Math.max(0,pts), penalty:Math.max(0,-pts), random:task.random,
         date:dateKey(now), time:timeLabel(now), photoId: photoData?photoId:null,
         shared: !!task.shared, partnerName: task.shared?(task.partnerName||""):undefined,
         partnerId: task.shared?(task.partnerId||null):undefined,
@@ -5454,7 +5491,7 @@ const Friends = (() => {
         <div class="gal-thumb"></div>
         <div class="gal-info">
           <div class="t">${esc(shortTitle(h.title||"Tarea"))}</div>
-          <div class="m">${esc(h.time||"")}${h.category?" · "+esc(h.category):""}${h.points?` · <span class="pts">${h.points} pts</span>`:""}${withWhom(h)}</div>
+          <div class="m">${esc(h.time||"")}${h.category?" · "+esc(h.category):""}${h.penalty?` · <span class="pts" style="color:var(--red)">−${h.penalty} pts</span>`:(h.points?` · <span class="pts">${h.points} pts</span>`:"")}${withWhom(h)}</div>
         </div>
       </div>`).join("") : `<div class="card friends-empty">Sin tareas registradas este día.</div>`;
     items.forEach((h,idx)=>{
@@ -6143,7 +6180,7 @@ const Lightbox = (() => {
   function show(data,h){
     h=h||{};
     img.src=data; t.textContent=h.title||"";
-    m.textContent=[h.time,h.category,(h.points!=null?h.points+" pts":"")].filter(Boolean).join(" · ");
+    m.textContent=[h.time,h.category,(h.penalty?"−"+h.penalty+" pts":(h.points!=null?h.points+" pts":""))].filter(Boolean).join(" · ");
     box.classList.add("show"); haptic();
     if(scroll) scroll.scrollTop=0;
     curKey = (h.sharedId || h.id || h.key) || null; // clave de la completada
@@ -6301,9 +6338,10 @@ const UI = (() => {
     setTimeout(()=>{ t.classList.remove("show"); setTimeout(()=>t.remove(),450); },1900);
   }
 
-  function pointsPop(text){
+  function pointsPop(text, color){
     haptic(20);
     const p=el("div","points-pop",text);
+    if(color) p.style.color=color;
     document.body.appendChild(p);
     setTimeout(()=>p.remove(),1300);
   }
