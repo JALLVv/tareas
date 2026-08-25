@@ -454,13 +454,19 @@ img{display:block;}
 .segmented{display:flex;gap:0;padding:3px;border-radius:var(--radius-pill);
   background:var(--card);overflow-x:auto;scrollbar-width:none;}
 .segmented::-webkit-scrollbar{display:none;}
-.seg{flex:1 0 auto;text-align:center;white-space:nowrap;
+/* flex-basis:auto reparte solo el SOBRANTE, así que cada mitad conservaba el
+   ancho de su texto y "Completadas" salía más grande que "Pendientes". Con
+   basis 0 las dos parten de cero y acaban midiendo exactamente lo mismo. */
+.seg{flex:1 1 0;min-width:0;text-align:center;white-space:nowrap;
   padding:10px 18px;border-radius:var(--radius-pill);font-size:14px;font-weight:600;
   color:var(--label-2);letter-spacing:var(--track-body);
   transition:background var(--t-med) var(--ease-out), color var(--t-fast) var(--ease-out);}
 .seg.sel{background:var(--card-3);color:var(--label);font-weight:700;}
 .seg:active{opacity:0.7;}
 #taskFilter{margin-bottom:var(--gap);}
+/* En la hoja de crear, "Intervalo" y "Fecha de finalización" son de largos muy
+   distintos: ahí sí se reparte a lo ancho del texto, o la larga no cabría. */
+#ctMode .seg{flex:1 1 auto;}
 
 .switch{position:relative;width:51px;height:31px;border-radius:var(--radius-pill);
   background:var(--card-3);flex:0 0 auto;transition:background var(--t-med) var(--ease-out);}
@@ -1231,7 +1237,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v136";
+const APP_VERSION = "v137";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
