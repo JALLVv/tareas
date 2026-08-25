@@ -1248,7 +1248,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v141";
+const APP_VERSION = "v142";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2422,22 +2422,33 @@ const Store = (() => {
       }
     });
     if(typeof state.penalties!=='number') state.penalties=0;
-    /* El castigo pasa de cobrarse entero al vencer a crecer con el anillo rojo.
-       Una tarea que YA estaba vencida antes del cambio se da por saldada hasta
-       donde esté su anillo ahora mismo: con el sistema viejo o ya se cobró
-       entera, o se habría cobrado entera a la primera pasada. Cobrarla otra vez
-       con la regla nueva sería pasar factura por un tiempo que transcurrió bajo
-       otras reglas. A partir de aquí el goteo cuenta con normalidad. */
-    if(state.ptsVer !== 1){
+    /* El castigo vuelve a ser un solo cobro, al llenarse el anillo rojo. Hay
+       que deshacer el goteo proporcional que estuvo vivo entre medias:
+
+       1. Lo que el goteo ya descontó SE DEVUELVE. Era un cobro de una regla
+          retirada, y dejarlo puesto sería cobrar por algo que ya no existe.
+          `penalizedPts` es justo lo que se llevó de cada tarea. Nunca por
+          debajo de cero.
+       2. Una tarea que YA tiene el anillo rojo lleno al llegar aquí se da por
+          saldada: se marca su vencimiento como cobrado sin cobrar nada. Se
+          borrará, que es lo que toca, pero sin pasar una factura de 500 por
+          un tiempo que transcurrió bajo otras reglas.
+
+       Las tareas con `penalizedFor` pero SIN `penalizedPts` no se tocan: son
+       cobros enteros de antes del goteo, y esos sí fueron correctos. */
+    if(state.ptsVer !== 2){
       const nowMs = Date.now();
+      let back = 0;
       (state.tasks||[]).forEach(t=>{
-        const w = taskWindow(t);
-        if(nowMs > w.due){
-          t.penalizedFor = w.due;
-          t.penalizedPts = Math.round(taskMaxPoints(t) * Math.min(1, (nowMs - w.due) / w.period));
+        if(typeof t.penalizedPts === "number"){
+          back += t.penalizedPts;
+          delete t.penalizedPts; delete t.penalizedFor;
         }
+        const w = taskWindow(t);
+        if(nowMs >= w.due + w.period && t.penalizedFor === undefined) t.penalizedFor = w.due;
       });
-      state.ptsVer = 1;
+      if(back > 0) state.penalties = Math.max(0, (state.penalties||0) - back);
+      state.ptsVer = 2;
     }
     // Las recurrentes antiguas arrancan su contador de penalización desde ayer,
     // para no descontar retroactivamente días pasados antes de esta función.
@@ -2848,22 +2859,11 @@ const Tasks = (() => {
     // Vencida: el rojo arranca con un trocito visible, no desde la nada.
     return { over:true, frac: Math.max(0.05, Math.min(1, (now - due) / period)), due };
   }
-  /* El anillo rojo nunca se DIBUJA por debajo del 5%, o no se vería. El castigo
-     sí arranca en cero: con la fracción de la vista, vencer costaría 25 pts en
-     el mismo segundo del vencimiento, que es justo el escalón que se quería
-     quitar. Dibujo y cobro miden lo mismo, pero el cobro sin suelo. */
-  function overdueFrac(t){
-    const { due, period } = taskWindow(t);
-    const now = Date.now();
-    return now <= due ? 0 : Math.min(1, (now - due) / period);
-  }
   // Lo que suma completarla AHORA: el anillo verde, tal y como se ve.
   function pointsForNow(t){
     const st = ringState(t);
     return st.over ? 0 : Math.round(taskMaxPoints(t) * st.frac);
   }
-  // Lo que lleva costando el anillo rojo tal y como está AHORA.
-  function penaltySoFar(t){ return Math.round(taskMaxPoints(t) * overdueFrac(t)); }
   const ringOffset = (frac)=> (RING_C * (1 - frac)).toFixed(2);
 
   // "1d 23 h", "3 h 20 min", "12 min": la unidad grande manda y la pequeña
@@ -3013,58 +3013,50 @@ const Tasks = (() => {
     return now >= due + period;
   }
   /* ---------- PENALIZACIÓN por tareas vencidas ----------
-     Vencer ya no cuesta todo de golpe. El castigo CRECE con el anillo rojo:
-     recién vencida no quita nada, con el anillo rojo entero quita lo mismo que
-     habría dado el verde entero. Es la otra mitad de la misma regla, y por eso
-     el instante del vencimiento no es un escalón: se pasa de +0 a −0.
+     El castigo es un solo cobro, y llega cuando el anillo rojo se COMPLETA:
+     ni antes ni a plazos. Mientras el rojo se está llenando no cuesta nada,
+     que es lo que hace que corras a hacerla; cuando se llena del todo cuesta
+     lo mismo que habría dado el verde entero, de una vez.
 
-     Se cobra por DIFERENCIA y contra el reloj, no acumulando: cada pasada mira
-     dónde debería estar el contador (`want`) y cobra solo lo que falte respecto
-     a lo ya cobrado para ESE vencimiento (`penalizedPts`). Dos consecuencias
-     buenas: una semana con la app cerrada se pone al día sola en una pasada, y
-     una pasada de más no cobra dos veces. Al rodar el vencimiento cambia la
-     clave (`penalizedFor`) y el contador vuelve solo a cero. */
+     El goteo proporcional que había aquí antes descontaba de tres en tres
+     puntos cada vez que se abría la app. Era exacto y era invisible: veías
+     "−18 pts" sin haber hecho nada y sin que ese 18 significara nada.
+
+     `penalizedFor` guarda QUÉ vencimiento se cobró, así una pasada de más no
+     cobra dos veces y al rodar el vencimiento el cobro vuelve a estar
+     disponible. Se cobra ANTES de borrar: al salir de la lista la tarea deja
+     de tener anillo, y con él se iría sin pagar. */
   function cleanupExpired(){
     const s=Store.get(); const now=Date.now();
-    let delta=0; const marks=[], rotten=[];
+    let penalty=0; const marks=[], rotten=[];
     (s.tasks||[]).forEach(t=>{
       const { due, period } = taskWindow(t);
-      if(now <= due || isDoneToday(t)) return;
-      const want = Math.round(taskMaxPoints(t) * Math.min(1, (now - due) / period));
-      const paid = (t.penalizedFor === due) ? (t.penalizedPts || 0) : 0;
-      if(want > paid){ delta += want - paid; marks.push({ id:t.id, due, want }); }
+      if(now < due + period || isDoneToday(t)) return;   // el rojo aún no está lleno
+      if(t.penalizedFor !== due){ penalty += taskMaxPoints(t); marks.push({ id:t.id, due }); }
       if(isRotten(t, now)) rotten.push(t);
     });
     if(!marks.length && !rotten.length) return;
     const rotIds = new Set(rotten.map(t=>t.id));
     Store.update(st=>{
-      // Cobrar ANTES de borrar: al salir de la lista la tarea deja de tener
-      // anillo, y con él se iría sin pagar el último tramo.
-      marks.forEach(m=>{ const t=st.tasks.find(x=>x.id===m.id);
-        if(t){ t.penalizedFor=m.due; t.penalizedPts=m.want; } });
-      const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
-      st.penalties=Math.min((st.penalties||0)+delta, sum);   // topada en lo ganado
-      st.points=Math.max(0, sum - st.penalties);
+      marks.forEach(m=>{ const t=st.tasks.find(x=>x.id===m.id); if(t) t.penalizedFor=m.due; });
+      if(penalty>0){
+        const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
+        st.penalties=Math.min((st.penalties||0)+penalty, sum);   // topada en lo ganado
+        st.points=Math.max(0, sum - st.penalties);
+      }
       if(rotIds.size) st.tasks = st.tasks.filter(t=>!rotIds.has(t.id));
     });
-    if(rotIds.size){
-      rotten.forEach(t=>{ if(Cloud.enabled && Cloud.enabled()) Cloud.deleteReminder(t.id); });
-      // Sin re-pintar desde aquí: el único que llama es render(), y lee la lista
-      // DESPUÉS de esta pasada. Repintar sería volver a entrar en sí mismo.
-      UI.toast(rotten.length===1
-        ? `“${rotten[0].title}” venció del todo`
-        : `${rotten.length} tareas vencieron del todo`, "check", "var(--red)");
-    }
-    if(UI.renderProfile) UI.renderProfile();
-    /* El goteo se anuncia solo cuando hay algo que anunciar. Ahora que el cobro
-       es continuo, avisar de cada pasada sería un aviso cada pocos segundos por
-       tres puntos; y empujar el perfil a la nube en cada una, tráfico para
-       nada. Por debajo del umbral se descuenta igual, en silencio: el total del
-       perfil siempre va al día, y el siguiente empujón lleva el número exacto
-       (que además cada dispositivo recalcula del reloj por su cuenta). */
-    if(delta >= 10){
-      if(Cloud.enabled()) Cloud.pushProfile();
-      UI.toast(`Tareas vencidas · −${delta} pts`, "check", "var(--red)");
+    if(rotIds.size) rotten.forEach(t=>{ if(Cloud.enabled && Cloud.enabled()) Cloud.deleteReminder(t.id); });
+    // Sin re-pintar desde aquí: el único que llama es render(), y lee la lista
+    // DESPUÉS de esta pasada. Repintar sería volver a entrar en sí mismo.
+    if(penalty>0 || rotIds.size){
+      if(UI.renderProfile) UI.renderProfile();
+      if(penalty>0 && Cloud.enabled()) Cloud.pushProfile();
+      // Un aviso por lo que ha pasado, no dos: la tarea se llenó y eso costó.
+      const one = rotten[0] || (marks.length===1 ? (s.tasks||[]).find(x=>x.id===marks[0].id) : null);
+      UI.toast(one && (rotten.length + marks.length)<=2
+        ? `“${one.title}” venció${penalty>0?` · −${penalty} pts`:""}`
+        : `Tareas vencidas${penalty>0?` · −${penalty} pts`:""}`, "check", "var(--red)");
     }
   }
 
@@ -3796,7 +3788,7 @@ const Tasks = (() => {
     // ahora no devuelve lo perdido; lo que hace es parar la sangría.
     const late = ringState(task).over;
     const pts  = pointsForNow(task);
-    const lost = late ? penaltySoFar(task) : 0;
+    const risk = taskMaxPoints(task);
     const head = `
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="pcCancel">Cancelar</span><span class="title">Completar</span><span class="act" style="opacity:0">•</span></div>
@@ -3804,7 +3796,7 @@ const Tasks = (() => {
         <div class="ico">${checkSvg()}</div>
         <h3>${esc(task.title)}</h3>
         <p>${late
-          ? `Esta tarea está <b style="color:var(--red)">vencida</b> y lleva costándote <b style="color:var(--red)">${lost} pts</b>. Completarla no suma, pero detiene el descuento.`
+          ? `Esta tarea está <b style="color:var(--red)">vencida</b>: ya no suma. Si el anillo rojo se llena te costará <b style="color:var(--red)">${risk} pts</b>; hacerla ahora lo evita.`
           : `Sube una foto como evidencia para completar la tarea y ganar <b style="color:var(--yellow)">${pts} pts</b>.`}</p>
         <div class="photo-preview" id="pcPreview"><img id="pcImg" alt="evidencia"/><div class="retake" id="pcRetake">Cambiar foto</div></div>
         <div class="photo-btns">
