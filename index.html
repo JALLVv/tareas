@@ -80,8 +80,11 @@
   --gap-xs:8px; --gap-sm:12px; --gap:16px; --gap-lg:24px; --gap-xl:32px;
   --pad:18px;
 
-  --track-display:-0.03em; --track-title:-0.018em; --track-body:-0.005em; --track-caption:0em;
-  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","SF Pro",system-ui,"Segoe UI",Roboto,Helvetica,Arial,"Apple Color Emoji",sans-serif;
+  /* Menos interletrado: una redonda con las letras juntas se lee como una
+     palabra, no como una fila de letras sueltas. */
+  --track-display:-0.045em; --track-title:-0.032em; --track-body:-0.016em; --track-caption:-0.006em;
+  --font:ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN",-apple-system,BlinkMacSystemFont,
+         "Segoe UI Variable Display","Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple Color Emoji",sans-serif;
 
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
@@ -592,47 +595,46 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
    PERFIL
    ========================================================================= */
 .profile-head{display:flex;flex-direction:row;align-items:center;text-align:left;
-  gap:var(--gap);padding:0 2px var(--gap);}
-.ph-id{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:8px;}
-.avatar{width:64px;height:64px;border-radius:50%;flex:0 0 auto;
+  gap:var(--gap-sm);padding:0 2px var(--gap-sm);}
+.ph-id{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
+.avatar{width:56px;height:56px;border-radius:50%;flex:0 0 auto;
   background:linear-gradient(145deg,#5E5CE6,#0A84FF);
-  display:grid;place-items:center;font-size:25px;font-weight:800;color:#fff;
+  display:grid;place-items:center;font-size:22px;font-weight:800;color:#fff;
   overflow:hidden;position:relative;}
 .avatar img{width:100%;height:100%;object-fit:cover;}
 .avatar .edit-badge{position:absolute;bottom:-1px;right:-1px;width:23px;height:23px;border-radius:50%;
   background:var(--card-2);border:2px solid var(--bg);display:grid;place-items:center;}
 .avatar .edit-badge svg{width:11px;height:11px;color:var(--label-2);}
-.profile-name{font-size:21px;font-weight:800;letter-spacing:var(--track-title);margin:0;
+.profile-name{font-size:20px;font-weight:800;letter-spacing:var(--track-title);margin:0;
   display:inline-flex;align-items:center;gap:7px;}
 .profile-name .pen{width:15px;height:15px;color:var(--label-3);}
 .ph-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
-.phc{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:var(--radius-pill);
-  background:var(--card);font-size:13px;font-weight:700;color:var(--label);}
+.phc{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:var(--radius-pill);
+  background:var(--card);font-size:12px;font-weight:700;color:var(--label);}
 .phc .emoji{font-size:13px;}
 .phc.fire b{color:var(--orange);}
 .phc.pts{color:var(--yellow);}
-.rank-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:var(--radius-pill);
-  background:var(--card);color:var(--yellow);font-size:12.5px;font-weight:700;}
+.rank-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:var(--radius-pill);
+  background:var(--card);color:var(--yellow);font-size:12px;font-weight:700;}
 .rank-badge svg{width:14px;height:14px;}
 
-.rank-card{margin-top:0;padding:16px var(--pad);}
-.rank-row{display:flex;align-items:baseline;justify-content:flex-start;margin-bottom:11px;}
+.rank-card{margin-top:0;padding:13px var(--pad) 14px;}
+.rank-row{display:flex;align-items:baseline;justify-content:flex-start;margin-bottom:9px;}
 .rank-row .now{display:none;}
 .rank-row .next{font-size:13px;font-weight:600;color:var(--label-2);}
 .progress{height:8px;border-radius:var(--radius-pill);background:var(--card-2);overflow:hidden;position:relative;}
 .progress .bar{height:100%;border-radius:var(--radius-pill);background:var(--yellow);
   width:0;transition:width 1s var(--ease-out);}
-.rank-foot{display:flex;justify-content:space-between;margin-top:10px;font-size:12.5px;
+.rank-foot{display:flex;justify-content:space-between;margin-top:8px;font-size:12px;
   color:var(--label-2);font-weight:600;}
 
-.stat-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:10px;}
-.stat{padding:14px 12px;grid-column:span 2;}
-.stat:first-child{grid-column:span 6;padding:18px var(--pad);}
-.stat .v{font-size:24px;font-weight:800;letter-spacing:var(--track-title);line-height:1;
+/* Tres cifras iguales, sin pieza destacada: los puntos y la racha ya viven
+   junto al nombre, así que aquí no queda nada que merezca el doble de tamaño. */
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+.stat{padding:13px 10px;}
+.stat .v{font-size:22px;font-weight:800;letter-spacing:var(--track-title);line-height:1;
   font-variant-numeric:tabular-nums;}
-.stat:first-child .v{font-size:40px;letter-spacing:var(--track-display);}
-.stat .l{font-size:11px;color:var(--label-2);font-weight:600;margin-top:7px;line-height:1.3;}
-.stat:first-child .l{font-size:12.5px;}
+.stat .l{font-size:10.5px;color:var(--label-2);font-weight:600;margin-top:5px;line-height:1.25;}
 .stat .v.fire{color:var(--orange);} .stat .v.gold{color:var(--yellow);}
 .stat .v.pur{color:var(--purple);} .stat .v.grn{color:var(--green);}
 
@@ -645,7 +647,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .streak-best .v{font-size:19px;font-weight:800;color:var(--orange);}
 .streak-best .l{font-size:11px;color:var(--label-2);font-weight:500;}
 
-.week-card{margin-top:10px;padding:var(--gap) var(--pad) var(--pad);}
+.week-card{margin-top:8px;padding:var(--gap-sm) var(--pad) var(--gap);}
 .week-head{display:flex;align-items:baseline;justify-content:space-between;}
 .week-head .t{font-size:16px;font-weight:700;letter-spacing:var(--track-title);}
 .week-head .range{font-size:12.5px;color:var(--label-2);font-weight:500;}
@@ -660,7 +662,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .week-top b{color:var(--label);}
 .week-empty{margin-top:10px;font-size:13.5px;color:var(--label-2);font-weight:500;line-height:1.4;}
 
-.cal-card{margin-top:10px;padding:var(--gap) var(--gap-sm) var(--pad);overflow:hidden;}
+.cal-card{margin-top:8px;padding:var(--gap-sm) var(--gap-sm) var(--gap);overflow:hidden;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--gap-sm);padding:0 6px;}
 .cal-head .m{font-size:17px;font-weight:700;letter-spacing:var(--track-title);}
 .cal-nav{display:flex;gap:var(--gap-xs);}
@@ -1131,8 +1133,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
     </div>
 
     <div class="stat-grid">
-      <div class="card stat"><div class="v" id="stTotal">0</div><div class="l">Tareas completadas</div></div>
-      <div class="card stat"><div class="v fire" id="streakBest">0</div><div class="l">Mejor racha</div></div>
+      <div class="card stat"><div class="v" id="stTotal">0</div><div class="l">Completadas</div></div>
       <div class="card stat"><div class="v pur" id="stRandom">0</div><div class="l">Aleatorias</div></div>
       <div class="card stat"><div class="v grn" id="stNormal">0</div><div class="l">Normales</div></div>
     </div>
@@ -1222,7 +1223,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v133";
+const APP_VERSION = "v134";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3917,7 +3918,6 @@ const Profile = (() => {
     // racha y puntos: ahora viven junto al nombre
     $("#phStreak").textContent = s.streak.current;
     $("#phPoints").textContent = s.points;
-    $("#streakBest").textContent = s.streak.best;
 
     // estadísticas
     const total=s.history.length;
@@ -4478,13 +4478,33 @@ const Cloud = (() => {
       return r ? { cloudId:r.id, name:r.name||"Amigo", avatar:r.avatar_url||null } : null;
     }catch(e){ console.warn("lookupProfile:", e && e.message); return null; }
   }
-  async function sendFriendRequest(targetId){
+  // Busca por CORREO exacto. Devuelve solo nombre y avatar: el correo nunca
+  // vuelve del servidor, solo se usa para comparar.
+  async function lookupProfileEmail(email){
+    try{
+      if(!enabled() || !await init() || !client || !email) return null;
+      const { data, error }=await client.rpc('lookup_profile_email', { target_email:String(email).trim() });
+      if(error) throw error;
+      const r=Array.isArray(data)?data[0]:data;
+      return r ? { cloudId:r.id, name:r.name||"Amigo", avatar:r.avatar_url||null } : null;
+    }catch(e){ console.warn("lookupProfileEmail:", e && e.message); return null; }
+  }
+  // Acepta el correo del amigo. Antes recibía un UUID que había que copiar y
+  // pegar; ahora ese identificador solo vive por dentro.
+  async function sendFriendRequestByEmail(email){
     if(!enabled() || !await init() || !client) return { ok:false, error:"sin conexión" };
-    if(targetId===uid) return { ok:false, error:"Ese es tu propio ID" };
+    const prof = await lookupProfileEmail(email);
+    if(!prof) return { ok:false, error:"No hay ninguna cuenta con ese correo" };
+    if(prof.cloudId===uid) return { ok:false, error:"Ese es tu propio correo" };
+    return await sendFriendRequest(prof.cloudId, prof);
+  }
+  async function sendFriendRequest(targetId, known){
+    if(!enabled() || !await init() || !client) return { ok:false, error:"sin conexión" };
+    if(targetId===uid) return { ok:false, error:"Esa es tu propia cuenta" };
     // ¿existe el usuario? (lookup seguro: aún no sois amigos, no se puede leer
     // su perfil directamente)
-    const prof=await lookupProfile(targetId);
-    if(!prof) return { ok:false, error:"No se encontró ese ID" };
+    const prof = known || await lookupProfile(targetId);
+    if(!prof) return { ok:false, error:"No se encontró esa cuenta" };
     // ¿ya hay relación?
     try{
       const { data:exist }=await client.from('friendships').select('requester,addressee,status')
@@ -4787,7 +4807,8 @@ const Cloud = (() => {
   return { configured, enabled, init, myId, state, reconnect, reclaimHere, startFresh, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
     createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, syncAllReminders, listReminders, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
-    fetchComments, addComment, deleteComment, lookupProfile, exportSession, restoreSession,
+    fetchComments, addComment, deleteComment, lookupProfile, lookupProfileEmail, sendFriendRequestByEmail,
+    exportSession, restoreSession,
     raw:()=>client, ensure:init, session:()=>client&&client.auth };
 })();
 
@@ -5028,12 +5049,6 @@ const Friends = (() => {
     return { ids, dt };
   }
 
-  function copyToClip(text, box){
-    try{ navigator.clipboard && navigator.clipboard.writeText(text); }catch(e){}
-    try{ const rng=document.createRange(); rng.selectNodeContents(box); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(rng); }catch(e){}
-    haptic(); UI.toast("Copiado","check","var(--green)");
-  }
-
   /* ---------- Sheet principal (lista de amigos) ---------- */
   function openSheet(){
     stopPoll();
@@ -5046,13 +5061,11 @@ const Friends = (() => {
       <div class="sheet-body">
         ${avail?'':'<div class="card friends-empty">Necesitas conexión a internet para usar los amigos.</div>'}
         <div class="friends-sheet-head">
-          <button class="mini-btn" id="friendShare">Mi ID</button>
-          <button class="mini-btn accent" id="friendAdd">Añadir amigo</button>
+          <button class="mini-btn accent" id="friendAdd">Añadir amigo por correo</button>
         </div>
         <div id="friendsList"></div>
       </div>`);
     $("#frClose").onclick=Sheets.close;
-    $("#friendShare").onclick=()=>{ haptic(); shareSheet(); };
     $("#friendAdd").onclick=()=>{ haptic(); addSheet(); };
     renderList();
     refreshAll(myGen); // actualiza la lista en segundo plano
@@ -5067,7 +5080,7 @@ const Friends = (() => {
     const wrap=$("#friendsList"); if(!wrap) return;
     const s=Store.get();
     if(!s.friends.length){
-      wrap.innerHTML=`<div class="card friends-empty">Aún no tienes amigos.<br>Comparte tu <b>ID</b> y pulsa <b>Añadir amigo</b> para añadir a otros por el suyo.</div>`;
+      wrap.innerHTML=`<div class="card friends-empty">Aún no tienes amigos.<br>Pulsa <b>Añadir amigo por correo</b> y escribe el correo con el que se registró.</div>`;
       return;
     }
     wrap.innerHTML=s.friends.map(f=>`<div class="card friend-card" data-fid="${f.id}">
@@ -5130,43 +5143,34 @@ const Friends = (() => {
     if(changed && token===gen) renderList();
   }
 
-  function shareSheet(){
-    Sheets.show(`
-      <div class="grabber"></div>
-      <div class="sheet-head"><span class="act" id="fcBack">‹ Atrás</span><span class="title">Mi ID</span><span class="act" id="fcCopy">Copiar</span></div>
-      <div class="sheet-body">
-        <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">Comparte este ID con un amigo. Al añadirte verá tu perfil <b>en vivo</b> (puntos, racha, calendario y fotos), siempre actualizado.</p>
-        <div class="code-box" id="fcBox">Obteniendo tu ID…</div>
-      </div>`);
-    $("#fcBack").onclick=openSheet;
-    Cloud.init().then(id=>{ const b=$("#fcBox"); if(b) b.textContent=id||"No disponible (sin conexión)"; const cp=$("#fcCopy"); if(cp&&id) cp.onclick=()=>copyToClip(id, $("#fcBox")); });
-  }
-
-  function pasteSheet(title, onValue, help, placeholder){
-    Sheets.show(`
-      <div class="grabber"></div>
-      <div class="sheet-head"><span class="act cancel" id="paCancel">Cancelar</span><span class="title">${esc(title)}</span><span class="act" id="paSave">Listo</span></div>
-      <div class="sheet-body">
-        <p style="color:var(--label-2);font-size:14px;margin:6px 0 12px;line-height:1.5;">${help}</p>
-        <div class="field-block well"><textarea class="field" id="paInput" rows="2" placeholder="${placeholder}"></textarea></div>
-      </div>`);
-    $("#paCancel").onclick=openSheet;
-    $("#paSave").onclick=()=>onValue($("#paInput").value);
-    setTimeout(()=>{ const i=$("#paInput"); if(i) i.focus(); },350);
-  }
   function addSheet(){
     if(!Cloud.configured()){ UI.toast("Necesitas conexión","check","var(--red)"); return; }
-    pasteSheet("Añadir amigo", async (raw)=>{
-      const id=(raw||"").trim(); if(!id) return;
-      if(Store.get().friends.some(x=>x.cloudId===id)){ UI.toast("Ya es tu amigo","check","var(--blue)"); openSheet(); return; }
-      UI.toast("Enviando solicitud…","check","var(--blue)");
-      const r=await Cloud.sendFriendRequest(id);
+    Sheets.show(`
+      <div class="grabber"></div>
+      <div class="sheet-head"><span class="act cancel" id="faCancel">Cancelar</span><span class="title">Añadir amigo</span><span class="act" id="faSend">Enviar</span></div>
+      <div class="sheet-body">
+        <p style="color:var(--label-2);font-size:14px;margin:6px 0 14px;line-height:1.5;">
+          Escribe el <b>correo</b> con el que tu amigo creó su cuenta. Le llegará una
+          solicitud y, al aceptarla, veréis vuestros perfiles en vivo.</p>
+        <div class="form-group">
+          <div class="field-block"><input class="field" id="faEmail" type="email" inputmode="email"
+               autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com"/></div>
+        </div>
+        <div class="hint">Tiene que ser el correo exacto: no se puede buscar por partes.</div>
+      </div>`);
+    const input=$("#faEmail"), send=$("#faSend");
+    $("#faCancel").onclick=openSheet;
+    send.onclick=async ()=>{
+      const email=(input.value||"").trim();
+      if(!/^\S+@\S+\.\S+$/.test(email)){ UI.toast("Escribe un correo válido","check","var(--red)"); return; }
+      send.textContent="Enviando…";
+      const r=await Cloud.sendFriendRequestByEmail(email);
+      send.textContent="Enviar";
       if(!r.ok){ UI.toast(r.error||"No se pudo enviar","check","var(--red)"); return; }
       if(r.accepted){ haptic(15); UI.toast(`Ahora eres amigo de ${esc(r.name||"")}`,"check","var(--green)"); syncFriends().then(()=>renderList()); openSheet(); return; }
       haptic(15); UI.toast(`Solicitud enviada a ${esc(r.name||"")}`,"check","var(--green)"); openSheet();
-    },
-    "Pega el <b>ID</b> que te compartió tu amigo (de su 'Mi ID'). Le llegará una solicitud para que te acepte.",
-    "ID del amigo");
+    };
+    setTimeout(()=>{ try{ input.focus({preventScroll:true}); }catch(_){ input.focus(); } },350);
   }
 
   function openProfile(f, fetched, restoreScrollTop, initialMonth){
@@ -5207,8 +5211,7 @@ const Friends = (() => {
           <button class="mini-btn danger" id="fpDel">Eliminar amigo</button>
         </div>
         <div class="stat-grid" style="margin-top:16px;">
-          <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Tareas completadas</div></div>
-          <div class="card stat"><div class="v fire">${fv.streak.best}</div><div class="l">Mejor racha</div></div>
+          <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Completadas</div></div>
           <div class="card stat"><div class="v pur">${(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Aleatorias</div></div>
           <div class="card stat"><div class="v grn">${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Normales</div></div>
         </div>
