@@ -595,20 +595,20 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
    PERFIL
    ========================================================================= */
 .profile-head{display:flex;flex-direction:row;align-items:center;text-align:left;
-  gap:var(--gap-sm);padding:0 2px var(--gap-sm);}
+  gap:var(--gap);padding:0 2px var(--gap);}
 .ph-id{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
-.avatar{width:72px;height:72px;border-radius:50%;flex:0 0 auto;
+.avatar{width:88px;height:88px;border-radius:50%;flex:0 0 auto;
   background:linear-gradient(145deg,#5E5CE6,#0A84FF);
-  display:grid;place-items:center;font-size:28px;font-weight:800;color:#fff;
+  display:grid;place-items:center;font-size:34px;font-weight:800;color:#fff;
   overflow:hidden;position:relative;}
 .avatar img{width:100%;height:100%;object-fit:cover;}
-.avatar .edit-badge{position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;
+.avatar .edit-badge{position:absolute;bottom:1px;right:1px;width:29px;height:29px;border-radius:50%;
   background:var(--card-2);border:2px solid var(--bg);display:grid;place-items:center;}
-.avatar .edit-badge svg{width:12px;height:12px;color:var(--label-2);}
-.profile-name{font-size:24px;font-weight:800;letter-spacing:var(--track-title);margin:0;
+.avatar .edit-badge svg{width:13px;height:13px;color:var(--label-2);}
+.profile-name{font-size:28px;font-weight:800;letter-spacing:var(--track-title);margin:0;
   display:inline-flex;align-items:center;gap:7px;min-width:0;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.profile-name .pen{width:16px;height:16px;color:var(--label-3);flex:0 0 auto;}
+.profile-name .pen{width:18px;height:18px;color:var(--label-3);flex:0 0 auto;}
 /* El nombre y la acción sobre esa persona van juntos; las cifras, debajo.
    Mezclar "Eliminar amigo" con la racha y los puntos ponía al mismo nivel un
    dato y una acción que no se puede deshacer. */
@@ -637,14 +637,14 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 
 /* Tres cifras iguales, sin pieza destacada: los puntos y la racha ya viven
    junto al nombre, así que aquí no queda nada que merezca el doble de tamaño. */
-.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
-/* El número tiene su propio margen óptico a la izquierda; sin este empujón
-   la etiqueta de debajo parecía pegada al borde de la ficha. */
-.stat{padding:13px 12px 13px 15px;}
-.stat .v{font-size:22px;font-weight:800;letter-spacing:var(--track-title);line-height:1;
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;}
+/* Radio propio, más cerrado que el de las tarjetas grandes: a este tamaño
+   el radio de 28px se comía las esquinas y la ficha parecía una pastilla.
+   Y el contenido va centrado, que es lo que pide una caja casi cuadrada. */
+.stat{padding:15px 10px;border-radius:16px;text-align:center;}
+.stat .v{font-size:23px;font-weight:800;letter-spacing:var(--track-title);line-height:1;
   font-variant-numeric:tabular-nums;}
-.stat .l{font-size:10.5px;color:var(--label-2);font-weight:600;margin-top:5px;line-height:1.25;
-  padding-left:1px;}
+.stat .l{font-size:10.5px;color:var(--label-2);font-weight:600;margin-top:6px;line-height:1.25;}
 .stat .v.fire{color:var(--orange);} .stat .v.gold{color:var(--yellow);}
 .stat .v.pur{color:var(--purple);} .stat .v.grn{color:var(--green);}
 
@@ -657,7 +657,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .streak-best .v{font-size:19px;font-weight:800;color:var(--orange);}
 .streak-best .l{font-size:11px;color:var(--label-2);font-weight:500;}
 
-.week-card{margin-top:8px;padding:var(--gap-sm) var(--pad) var(--gap);}
+.week-card{margin-top:14px;padding:var(--gap-sm) var(--pad) var(--gap);}
 .week-head{display:flex;align-items:baseline;justify-content:space-between;}
 .week-head .t{font-size:16px;font-weight:700;letter-spacing:var(--track-title);}
 .week-head .range{font-size:12.5px;color:var(--label-2);font-weight:500;}
@@ -674,8 +674,8 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 
 /* El botón de la semana queda a la MISMA distancia de las estadísticas y del
    calendario: antes tenía 14px arriba y 8 abajo y se veía descolgado. */
-.week-btn{margin-top:8px;}
-.cal-card{margin-top:8px;padding:var(--gap-sm) var(--gap-sm) var(--gap);overflow:hidden;}
+.week-btn{margin-top:14px;}
+.cal-card{margin-top:14px;padding:var(--gap-sm) var(--gap-sm) var(--gap);overflow:hidden;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--gap-sm);padding:0 6px;}
 .cal-head .m{font-size:17px;font-weight:700;letter-spacing:var(--track-title);}
 .cal-nav{display:flex;gap:var(--gap-xs);}
@@ -1231,7 +1231,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v135";
+const APP_VERSION = "v136";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3924,15 +3924,18 @@ const Profile = (() => {
     }
 
     // racha y puntos: ahora viven junto al nombre
-    $("#phStreak").textContent = s.streak.current;
-    $("#phPoints").textContent = s.points;
-
-    // estadísticas
     const total=s.history.length;
     const rnd=s.history.filter(h=>h.random).length;
-    $("#stTotal").textContent = total;
-    $("#stRandom").textContent = rnd;
-    $("#stNormal").textContent = total-rnd;
+    // data-count deja el valor final donde animateCounters pueda encontrarlo;
+    // el texto se pone igualmente para que al repintar (sondeo de la nube) la
+    // cifra sea correcta aunque no haya animación.
+    const setNum=(sel,val)=>{ const e=$(sel); if(!e) return;
+      e.setAttribute("data-count", val); e.textContent = val; };
+    setNum("#phStreak", s.streak.current);
+    setNum("#phPoints", s.points);
+    setNum("#stTotal",  total);
+    setNum("#stRandom", rnd);
+    setNum("#stNormal", total-rnd);
 
     // resumen de la semana (lunes-domingo, última ya terminada): un botón que
     // solo aparece durante las 48 h de disponibilidad; se abre en su propia hoja.
@@ -3943,6 +3946,10 @@ const Profile = (() => {
 
     renderCalendar();
   }
+
+  // Al abrir el perfil las cifras suben desde cero: es un resumen de lo que
+  // llevas hecho, y verlo contar le da el peso que tiene.
+  function animate(){ animateCounters($("#view-profile"), 700); }
 
   function renderCalendar(dir){
     const s = Store.get();
@@ -4026,7 +4033,7 @@ const Profile = (() => {
     $("#fileAvatar").onchange=e=>{ const f=e.target.files[0]; if(!f)return;
       compressImage(f,(data)=>{ Store.update(s=>{s.profile.avatar=data;}); render(); if(Cloud.enabled()) Cloud.pushProfile(); }); e.target.value=""; };
   }
-  return { init, render, renderCalendar };
+  return { init, render, renderCalendar, animate };
 })();
 
 /* =====================================================================
@@ -5214,16 +5221,16 @@ const Friends = (() => {
               <button class="mini-btn danger ph-del" id="fpDel">Eliminar amigo</button>
             </div>
             <div class="ph-chips">
-              <span class="phc fire"><span class="emoji">🔥</span><b>${fv.streak.current}</b></span>
-              <span class="phc pts"><b>${fv.points}</b> pts</span>
+              <span class="phc fire"><span class="emoji">🔥</span><b data-count="${fv.streak.current}">0</b></span>
+              <span class="phc pts"><b data-count="${fv.points}">0</b> pts</span>
               <span class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</span>
             </div>
           </div>
         </div>
         <div class="stat-grid">
-          <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Completadas</div></div>
-          <div class="card stat"><div class="v pur">${(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Aleatorias</div></div>
-          <div class="card stat"><div class="v grn">${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Normales</div></div>
+          <div class="card stat"><div class="v" data-count="${(fv.history||[]).length}">0</div><div class="l">Completadas</div></div>
+          <div class="card stat"><div class="v pur" data-count="${(fv.history||[]).filter(h=>h.random).length}">0</div><div class="l">Aleatorias</div></div>
+          <div class="card stat"><div class="v grn" data-count="${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}">0</div><div class="l">Normales</div></div>
         </div>
         ${fpWs.available?'<button class="btn secondary week-btn" id="fpWeekBtn">Ver resumen semanal</button>':''}
         <div class="card cal-card">
@@ -5237,6 +5244,9 @@ const Friends = (() => {
           <div class="cal-weeks" id="fpGrid"></div>
         </div>
       </div>`);
+    // Solo al ABRIR de verdad, no en los repintados del sondeo en vivo: ver
+    // los números reiniciarse cada 8 segundos sería un tic, no una animación.
+    if(!fetched) animateCounters($("#sheet"), 700);
     $("#fpBack").onclick=openSheet;
     $("#fpClose").onclick=()=>{ stopPoll(); Sheets.close(); };
     $("#fpDel").onclick=async ()=>{ haptic(20); stopPoll();
@@ -6037,7 +6047,7 @@ const Router = (() => {
     $("#fab").classList.toggle("show", name==="tasks");
     updateTopbar();
     if(name==="tasks") Tasks.render();
-    if(name==="profile") Profile.render();
+    if(name==="profile"){ Profile.render(); Profile.animate(); }
     scrollTop();
   }
   function scrollTop(){ const v=$(views[cur]); if(v) v.scrollTop=0; updateTopbar(); }
