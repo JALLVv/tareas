@@ -187,7 +187,10 @@ img{display:block;}
   bottom:calc(var(--safe-bottom) + var(--dock-gap));
   height:var(--dock-h);padding:6px;
   display:flex;align-items:stretch;
-  background:var(--card);border-radius:var(--radius-lg);
+  /* Un punto más claro que las tarjetas: compartiendo color, el calendario y
+     la barra se fundían en una sola mancha al llegar al fondo de la pantalla. */
+  background:var(--card-2);border-radius:var(--radius-lg);
+  box-shadow:0 6px 22px rgba(0,0,0,0.55);
 }
 .tabbar::after{content:none;}
 .tab{
@@ -198,7 +201,7 @@ img{display:block;}
 }
 .tab{background:transparent;transition:background var(--t-med) var(--ease-out),
   color var(--t-med) var(--ease-out), transform var(--t-press) var(--ease-out);}
-.tab.active{background:var(--card-2);}
+.tab.active{background:var(--card-3);}
 .tab::before{content:none;}
 .tab.active::before{content:none;}
 .tab svg,.tab .tab-ic,.tab span{position:relative;}
@@ -602,6 +605,12 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .profile-name{font-size:21px;font-weight:800;letter-spacing:var(--track-title);margin:0;
   display:inline-flex;align-items:center;gap:7px;}
 .profile-name .pen{width:15px;height:15px;color:var(--label-3);}
+.ph-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.phc{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:var(--radius-pill);
+  background:var(--card);font-size:13px;font-weight:700;color:var(--label);}
+.phc .emoji{font-size:13px;}
+.phc.fire b{color:var(--orange);}
+.phc.pts{color:var(--yellow);}
 .rank-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:var(--radius-pill);
   background:var(--card);color:var(--yellow);font-size:12.5px;font-weight:700;}
 .rank-badge svg{width:14px;height:14px;}
@@ -716,9 +725,13 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .friends-sheet-head .mini-btn{flex:1;text-align:center;}
 .friends-actions{display:flex;gap:var(--gap-xs);}
 .sheet-head .act.danger{color:var(--red);font-weight:600;}
+/* Dentro de la hoja el fondo YA es --card, así que una tarjeta del mismo
+   color desaparecía: los amigos se leían como una lista de texto suelto. Su
+   burbuja sube un escalón para volver a despegarse del fondo. */
 .friend-card{display:flex;align-items:center;gap:13px;padding:12px 14px;margin-bottom:10px;cursor:pointer;
+  background:var(--card-2);border-radius:var(--radius);
   transition:transform var(--t-press) var(--ease-out), background var(--t-fast);}
-.friend-card:active{transform:scale(0.98);background:var(--card-2);}
+.friend-card:active{transform:scale(0.98);background:var(--card-3);}
 .friend-av{width:46px;height:46px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
   overflow:hidden;font-size:18px;font-weight:800;color:#fff;
   background:linear-gradient(145deg,#5E5CE6,#0A84FF);}
@@ -733,7 +746,23 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .code-box{width:100%;background:var(--card-2);border:none;border-radius:var(--radius-sm);
   padding:13px 15px;font-size:13px;color:var(--label-2);word-break:break-all;
   font-family:ui-monospace,monospace;max-height:120px;overflow:auto;}
-.friend-profile-head{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 4px;}
+/* Todo el perfil del amigo va sobre burbujas, no sobre el fondo pelado. */
+/* El cuerpo de la hoja YA es --card: cualquier pieza de ese mismo color se
+   volvía invisible dentro. Todo lo que deba leerse como "caja" sube un
+   escalón, y lo que va dentro de esas cajas, dos. */
+.sheet .card,.sheet .stat,.sheet .cal-card,.sheet .week-card,.sheet .gal-item,
+.sheet .notif-activate,.sheet .friend-profile-head,.sheet .form-group,
+.sheet .settings-list,.sheet .tg-list,.sheet .segmented,.sheet .rank-badge,
+.sheet .phc,.sheet .chip,.sheet .mini-btn,.sheet .action-btn,.sheet .btn.secondary{background:var(--card-2);}
+.sheet .wk-stat,.sheet .gal-thumb,.sheet .notif-ic,.sheet .pill,.sheet .seg.sel,
+.sheet .chipv,.sheet .cal-nav button,.sheet .day,.sheet .time-field,
+.sheet .code-box,.sheet .dd select,.sheet .well,.sheet .switch{background:var(--card-3);}
+.sheet .action-btn:active,.sheet .mini-btn:active,.sheet .settings-row.tappable:active{background:var(--card-3);}
+.sheet .switch.on{background:var(--green);}
+.sheet .day.sel{background:var(--green);}
+.sheet .mini-btn.accent{background:var(--green);}
+.friend-profile-head{display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:var(--gap) 0 var(--pad);border-radius:var(--radius-lg);}
 .friend-profile-head .big-av{width:74px;height:74px;border-radius:50%;display:grid;place-items:center;
   overflow:hidden;font-size:30px;font-weight:800;color:#fff;
   background:linear-gradient(145deg,#5E5CE6,#0A84FF);}
@@ -1082,7 +1111,13 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
       </div>
       <div class="ph-id">
         <div class="profile-name" id="profileName">Atleta <svg class="pen" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 18l-1 3 3-1L19 8l-2-2zM15 5l2 2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <div class="rank-badge" id="rankBadge"></div>
+        <!-- Racha y puntos junto al nombre: son dos cifras, no dos secciones.
+             Ocupaban una tarjeta entera cada una para decir un número. -->
+        <div class="ph-chips">
+          <span class="phc fire"><span class="emoji">🔥</span><b id="phStreak">0</b></span>
+          <span class="phc pts"><b id="phPoints">0</b> pts</span>
+          <span class="rank-badge" id="rankBadge"></span>
+        </div>
       </div>
     </div>
 
@@ -1095,21 +1130,9 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
       <div class="rank-foot"><span id="rankPts">0 pts</span><span id="rankRemain"></span></div>
     </div>
 
-    <div class="card streak-card">
-      <div class="streak-flame">🔥</div>
-      <div class="streak-info">
-        <div class="big" id="streakCur">0 días</div>
-        <div class="small">Racha actual</div>
-      </div>
-      <div class="streak-best">
-        <div class="v" id="streakBest">0</div>
-        <div class="l">Mejor racha</div>
-      </div>
-    </div>
-
     <div class="stat-grid">
-      <div class="card stat"><div class="v gold" id="stPts">0</div><div class="l">Puntos totales</div></div>
-      <div class="card stat"><div class="v" id="stTotal">0</div><div class="l">Completadas</div></div>
+      <div class="card stat"><div class="v" id="stTotal">0</div><div class="l">Tareas completadas</div></div>
+      <div class="card stat"><div class="v fire" id="streakBest">0</div><div class="l">Mejor racha</div></div>
       <div class="card stat"><div class="v pur" id="stRandom">0</div><div class="l">Aleatorias</div></div>
       <div class="card stat"><div class="v grn" id="stNormal">0</div><div class="l">Normales</div></div>
     </div>
@@ -1199,7 +1222,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v132";
+const APP_VERSION = "v133";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2385,7 +2408,10 @@ const Store = (() => {
   let saveTimer=null;
   function saveNow(){ if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; }
     try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
-  function save(){ if(!saveTimer) saveTimer=setTimeout(saveNow, 0); }
+  function save(){ if(!saveTimer) saveTimer=setTimeout(saveNow, 0);
+    // Todo cambio local viaja a la nube por su cuenta. No hay ningún botón de
+    // "sincronizar": si hiciera falta pulsarlo, la sincronización no existiría.
+    try{ if(window.Sync && Sync.schedule) Sync.schedule(); }catch(e){} }
   window.addEventListener("pagehide", saveNow);
   document.addEventListener("visibilitychange", ()=>{ if(document.hidden) saveNow(); });
   return {
@@ -3888,14 +3914,14 @@ const Profile = (() => {
       $("#rankRemain").textContent = "¡Eres una leyenda!";
     }
 
-    // racha
-    $("#streakCur").textContent = s.streak.current + (s.streak.current===1?" día":" días");
+    // racha y puntos: ahora viven junto al nombre
+    $("#phStreak").textContent = s.streak.current;
+    $("#phPoints").textContent = s.points;
     $("#streakBest").textContent = s.streak.best;
 
     // estadísticas
     const total=s.history.length;
     const rnd=s.history.filter(h=>h.random).length;
-    $("#stPts").textContent = s.points;
     $("#stTotal").textContent = total;
     $("#stRandom").textContent = rnd;
     $("#stNormal").textContent = total-rnd;
@@ -4761,8 +4787,214 @@ const Cloud = (() => {
   return { configured, enabled, init, myId, state, reconnect, reclaimHere, startFresh, guessPhotoUrl, pushProfile, pushCompletion, pushSharedCompletion, syncBacklog, reconcile, forceResync, relinkPhotos, pullFriend,
     createShared, fetchShared, fetchSharedOne, acceptShared, rejectShared, completeShared, deleteShared, uploadShared, notify, notifySelf, maybeNotifyWeeklySummary, fetchNotifs, markNotifsRead, clearNotif, clearNotifs, clearAllNotifs, clearNotifsByTitle, ensurePush, disablePush, syncReminder, deleteReminder, syncAllReminders, listReminders, testPush, updatePartner,
     sendFriendRequest, fetchFriendships, acceptFriend, rejectFriend, removeFriendCloud, linkFriend,
-    fetchComments, addComment, deleteComment, lookupProfile, exportSession, restoreSession };
+    fetchComments, addComment, deleteComment, lookupProfile, exportSession, restoreSession,
+    raw:()=>client, ensure:init, session:()=>client&&client.auth };
 })();
+
+/* =====================================================================
+   ACCOUNT — cuenta con correo
+   Hasta ahora cada instalación creaba una cuenta ANÓNIMA: los datos vivían
+   en la nube pero atados a ese teléfono, así que cambiar de móvil obligaba a
+   transferir un código a mano. Con un correo la cuenta deja de ser del
+   aparato y pasa a ser tuya.
+
+   Registrarse desde una instalación que ya tiene cuenta anónima NO crea una
+   cuenta nueva: le PONE el correo a la que ya existe (updateUser). Así no se
+   pierden amigos, historial ni fotos, que es justo lo que pasaría creando
+   una cuenta limpia y abandonando la vieja.
+   ===================================================================== */
+const Account = (() => {
+  function client(){ return Cloud.raw(); }
+  async function user(){
+    try{ await Cloud.ensure(); const c=client(); if(!c) return null;
+      const { data } = await c.auth.getUser(); return (data && data.user) || null;
+    }catch(e){ return null; }
+  }
+  // Una cuenta anónima de Supabase no tiene correo; esa es la señal.
+  async function info(){
+    const u = await user();
+    if(!u) return { signed:false, email:null, anon:true };
+    return { signed: !!u.email, email: u.email || null, anon: !u.email };
+  }
+  function niceError(e){
+    const m = String((e && (e.message||e.error_description)) || e || "");
+    if(/already registered|already been registered|User already registered/i.test(m))
+      return "Ese correo ya tiene cuenta. Usa “Iniciar sesión”.";
+    if(/Invalid login credentials/i.test(m)) return "Correo o contraseña incorrectos.";
+    if(/Password should be at least/i.test(m))  return "La contraseña debe tener al menos 6 caracteres.";
+    if(/Email not confirmed/i.test(m))          return "Confirma el correo que te enviamos y vuelve a entrar.";
+    if(/rate limit|too many/i.test(m))          return "Demasiados intentos. Prueba en un minuto.";
+    if(/Unable to validate email|invalid format/i.test(m)) return "Ese correo no parece válido.";
+    return m || "No se pudo completar.";
+  }
+  // Registrarse = ponerle correo a la cuenta que ya usas en este teléfono.
+  async function signUp(email, password){
+    await Cloud.ensure(); const c=client();
+    if(!c) return { ok:false, msg:"Sin conexión con la nube." };
+    const u = await user();
+    try{
+      if(u && !u.email){
+        const { error } = await c.auth.updateUser({ email, password });
+        if(error) throw error;
+        await Sync.push();                       // deja tus datos ya subidos
+        return { ok:true, msg:"Cuenta creada. Tus datos ya están en ella.", linked:true };
+      }
+      const { error } = await c.auth.signUp({ email, password });
+      if(error) throw error;
+      await Sync.push();
+      return { ok:true, msg:"Cuenta creada." };
+    }catch(e){ return { ok:false, msg:niceError(e) }; }
+  }
+  // Entrar en otro dispositivo: la cuenta cambia, así que el estado local se
+  // descarta y se trae el de la nube. Antes de irnos se sube lo que hubiera
+  // en la cuenta anterior, para no dejarlo a medias.
+  async function signIn(email, password){
+    await Cloud.ensure(); const c=client();
+    if(!c) return { ok:false, msg:"Sin conexión con la nube." };
+    try{
+      try{ await Sync.flush(); }catch(_){}
+      const { error } = await c.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+      Sync.reset();
+      try{ localStorage.setItem("rachas_uid", (await user() || {}).id || ""); }catch(_){}
+      const got = await Sync.pull();
+      await Sync.start();
+      return { ok:true, msg: got ? "Sesión iniciada. Datos restaurados."
+                                 : "Sesión iniciada." };
+    }catch(e){ return { ok:false, msg:niceError(e) }; }
+  }
+  // Cerrar sesión sube lo pendiente ANTES de salir: si no, lo último que
+  // hiciste se quedaría solo en un teléfono del que estás saliendo.
+  async function signOut(){
+    try{ await Sync.flush(); }catch(_){}
+    try{ const c=client(); if(c) await c.auth.signOut(); }catch(e){}
+    Sync.reset();
+    try{ localStorage.removeItem("rachas_uid"); localStorage.removeItem("rachas_epoch"); }catch(_){}
+    return { ok:true };
+  }
+  async function reset(email){
+    await Cloud.ensure(); const c=client();
+    if(!c) return { ok:false, msg:"Sin conexión con la nube." };
+    try{
+      const { error } = await c.auth.resetPasswordForEmail(email);
+      if(error) throw error;
+      return { ok:true, msg:"Te hemos enviado un correo para cambiar la contraseña." };
+    }catch(e){ return { ok:false, msg:niceError(e) }; }
+  }
+  return { info, signUp, signIn, signOut, reset };
+})();
+
+/* =====================================================================
+   SYNC — el estado completo, siempre en la nube
+   Una sola fila por cuenta (tabla app_state) con TODO: tareas, historial,
+   puntos, racha, amigos. Cada guardado local programa una subida; cada
+   cambio hecho en otro dispositivo llega por Realtime y se funde aquí.
+   No hay botón de sincronizar: un botón significaría que la app puede
+   quedarse desincronizada, y entonces la cuenta no serviría para nada.
+
+   FUSIÓN: el historial NUNCA se sobrescribe, se UNE por id. Es el único
+   dato irrecuperable (una tarea completada, con su foto y sus puntos); lo
+   demás —tareas, ajustes— es reproducible, así que ahí manda la versión más
+   reciente. Puntos y racha no se funden: Store.load() los recalcula a partir
+   del historial ya unido, así que salen bien solos.
+   ===================================================================== */
+const Sync = (() => {
+  const REV_KEY = "rachas_sync_rev";
+  let timer=null, busy=false, pending=false, channel=null, lastRev=0, started=false;
+  try{ lastRev = parseInt(localStorage.getItem(REV_KEY)||"0",10)||0; }catch(e){}
+  const setRev = (r)=>{ lastRev=r||0; try{ localStorage.setItem(REV_KEY,String(lastRev)); }catch(e){} };
+
+  // Lo que viaja. Se excluyen las marcas propias del dispositivo (qué avisos
+  // ya se enseñaron aquí), que no significan nada en otro teléfono.
+  function snapshot(){
+    const s = Store.get();
+    return { profile:s.profile, tasks:s.tasks, history:s.history,
+             friends:s.friends, penalties:s.penalties,
+             deletedShared:s.deletedShared, cloud:{ avatarUrl:(s.cloud||{}).avatarUrl||null } };
+  }
+  function mergeInto(remote){
+    if(!remote || typeof remote!=="object") return false;
+    let changed=false;
+    Store.update(s=>{
+      // --- historial: unión por id, nunca se pierde una completada ---
+      const seen = new Set((s.history||[]).map(h=>h.id));
+      (remote.history||[]).forEach(h=>{ if(h && h.id && !seen.has(h.id)){ s.history.push(h); seen.add(h.id); changed=true; } });
+      s.history.sort((a,b)=> (b.date+(b.time||"")).localeCompare(a.date+(a.time||"")));
+      // --- tareas y ajustes: manda lo remoto (viene de una revisión mayor) ---
+      if(Array.isArray(remote.tasks)) { s.tasks = remote.tasks; changed=true; }
+      if(Array.isArray(remote.friends)) s.friends = remote.friends;
+      if(Array.isArray(remote.deletedShared)) s.deletedShared = remote.deletedShared;
+      if(remote.profile && remote.profile.name) s.profile.name = remote.profile.name;
+      if(remote.profile && remote.profile.avatar) s.profile.avatar = remote.profile.avatar;
+      if(remote.cloud && remote.cloud.avatarUrl) s.cloud.avatarUrl = remote.cloud.avatarUrl;
+      if(typeof remote.penalties === "number") s.penalties = remote.penalties;
+    });
+    Store.load();                 // recalcula puntos y racha desde el historial
+    return changed;
+  }
+  async function pull(){
+    try{
+      const uid = await Cloud.ensure(); const c = Cloud.raw();
+      if(!uid || !c) return false;
+      const { data, error } = await c.from('app_state').select('data,rev').eq('user_id',uid).maybeSingle();
+      if(error || !data) return false;
+      if((data.rev||0) <= lastRev) return false;   // ya lo tenemos
+      mergeInto(data.data);
+      setRev(data.rev||0);
+      if(typeof Tasks!=="undefined" && Tasks.render) Tasks.render();
+      if(typeof UI!=="undefined" && UI.renderProfile) UI.renderProfile();
+      return true;
+    }catch(e){ return false; }
+  }
+  async function push(){
+    if(busy){ pending=true; return; }
+    busy=true;
+    try{
+      const uid = await Cloud.ensure(); const c = Cloud.raw();
+      if(!uid || !c) return;
+      // Antes de escribir se lee: si otro dispositivo subió algo mientras
+      // tanto, se funde primero. Así dos teléfonos convergen en vez de
+      // pisarse el uno al otro.
+      const { data } = await c.from('app_state').select('data,rev').eq('user_id',uid).maybeSingle();
+      const cloudRev = (data && data.rev) || 0;
+      if(data && cloudRev > lastRev){ mergeInto(data.data); setRev(cloudRev); }
+      const rev = Math.max(cloudRev, lastRev) + 1;
+      const { error } = await c.from('app_state').upsert({
+        user_id:uid, data:snapshot(), rev, updated_at:new Date().toISOString() });
+      if(!error) setRev(rev);
+    }catch(e){}
+    finally{ busy=false; if(pending){ pending=false; schedule(); } }
+  }
+  // Agrupa ráfagas: completar una tarea toca el estado varias veces seguidas.
+  function schedule(){ if(timer) clearTimeout(timer); timer=setTimeout(()=>{ timer=null; push(); }, 1500); }
+  function flush(){ if(timer){ clearTimeout(timer); timer=null; } push(); }
+
+  async function watch(){
+    try{
+      const uid = await Cloud.ensure(); const c = Cloud.raw();
+      if(!uid || !c) return;
+      if(channel){ try{ c.removeChannel(channel); }catch(e){} channel=null; }
+      channel = c.channel('app_state_'+uid)
+        .on('postgres_changes', { event:'*', schema:'public', table:'app_state', filter:'user_id=eq.'+uid },
+            ()=> pull())
+        .subscribe();
+    }catch(e){}
+  }
+  async function start(){
+    if(started) return; started=true;
+    await pull();       // lo primero al abrir: traerse lo que haya
+    watch();
+    // Redes que se caen, apps que vuelven del segundo plano: al reaparecer se
+    // comprueba si hay algo nuevo y se vuelca lo que quedara pendiente.
+    document.addEventListener("visibilitychange", ()=>{ if(!document.hidden){ pull(); schedule(); } });
+    window.addEventListener("online", ()=>{ pull(); schedule(); });
+    window.addEventListener("pagehide", ()=>{ try{ flush(); }catch(e){} });
+  }
+  // Al cambiar de cuenta el contador de revisión no vale: empieza de cero.
+  function reset(){ setRev(0); started=false; if(channel){ try{ Cloud.raw().removeChannel(channel); }catch(e){} channel=null; } }
+  return { schedule, flush, pull, push, start, reset, snapshot, mergeInto };
+})();
+window.Sync = Sync;
 
 /* =====================================================================
    FRIENDS — amigos en la nube (Supabase). Se añaden por ID; el perfil se
@@ -4940,7 +5172,15 @@ const Friends = (() => {
   function openProfile(f, fetched, restoreScrollTop, initialMonth){
     const myGen = fetched ? gen : ++gen; // vista nueva salvo que sea el re-pintado tras refrescar
     loadMyShared(); // refresca mis tareas compartidas para anotar "Contigo"
-    const fv = f; // los datos de la nube ya son correctos (el trigger limpia al borrar)
+    // Los datos de la nube ya vienen bien (el trigger limpia al borrar), pero un
+    // amigo guardado por una versión antigua puede traer la racha a medias, y
+    // entonces el perfil enseñaba "undefined" en vez de un número.
+    const fv = Object.assign({}, f, {
+      points: f.points||0,
+      streak: Object.assign({current:0,best:0,lastDate:null}, f.streak||{}),
+      history: Array.isArray(f.history)?f.history:[],
+      dates: Array.isArray(f.dates)?f.dates:[]
+    });
     let cal = initialMonth ? new Date(initialMonth.y, initialMonth.m, 1) : new Date();
     const dateSet=new Set(fv.dates||[]);
     const fpWs = weeklySummaryFor(fv.history); // resumen de la semana (botón, si está disponible)
@@ -4957,19 +5197,18 @@ const Friends = (() => {
         <div class="friend-profile-head">
           ${avHtml(f,"big-av")}
           <div class="fpn">${esc(f.name)}</div>
-          <div class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</div>
+          <div class="ph-chips" style="justify-content:center">
+            <span class="phc fire"><span class="emoji">🔥</span><b>${fv.streak.current}</b></span>
+            <span class="phc pts"><b>${fv.points}</b> pts</span>
+            <span class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</span>
+          </div>
         </div>
         <div class="friends-actions" style="justify-content:center;margin-top:14px;">
           <button class="mini-btn danger" id="fpDel">Eliminar amigo</button>
         </div>
-        <div class="card streak-card" style="margin-top:16px;">
-          <div class="streak-flame">🔥</div>
-          <div class="streak-info"><div class="big">${fv.streak.current}${fv.streak.current===1?" día":" días"}</div><div class="small">Racha actual</div></div>
-          <div class="streak-best"><div class="v">${fv.streak.best}</div><div class="l">Mejor racha</div></div>
-        </div>
-        <div class="stat-grid">
-          <div class="card stat"><div class="v gold">${fv.points}</div><div class="l">Puntos totales</div></div>
-          <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Completadas</div></div>
+        <div class="stat-grid" style="margin-top:16px;">
+          <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Tareas completadas</div></div>
+          <div class="card stat"><div class="v fire">${fv.streak.best}</div><div class="l">Mejor racha</div></div>
           <div class="card stat"><div class="v pur">${(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Aleatorias</div></div>
           <div class="card stat"><div class="v grn">${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Normales</div></div>
         </div>
@@ -5393,6 +5632,94 @@ async function restoreFromCode(code){
   Cloud.forceResync();
   return { ok:true };
 }
+/* La hoja se abre AL INSTANTE y luego se rellena. Esperar a la nube antes de
+   dibujar nada hacía que, con mala cobertura, tocar "Cuenta" no hiciera
+   aparentemente nada: el botón parecía roto. */
+function openAccountSheet(){
+  renderAccountSheet({ signed:false, email:null, checking:true });
+  // Si la nube no contesta en 6 s se asume "sin sesión" y se ofrece entrar:
+  // dejar la hoja en "Comprobando…" para siempre no ayuda a nadie.
+  Promise.race([ Account.info(), new Promise(r=>setTimeout(()=>r({signed:false,email:null}),6000)) ])
+    .then(a=>{ if($("#acSheetMark")) renderAccountSheet(a); })
+    .catch(()=>{});
+}
+function renderAccountSheet(a){
+  const head = `
+    <div class="grabber"></div>
+    <div class="sheet-head"><span class="act" id="acBack">‹ Atrás</span><span class="title">Cuenta</span><span class="act" id="acClose">Cerrar</span></div>
+    <div class="sheet-body"><span id="acSheetMark" hidden></span>`;
+  if(a.signed){
+    Sheets.show(head + `
+      <div class="ta-name">${esc(a.email)}</div>
+      <div class="hint" style="text-align:center;margin-bottom:18px">
+        Todo se guarda solo en esta cuenta. Entra con este correo en otro móvil
+        y tus tareas, historial y amigos aparecerán allí.
+      </div>
+      <div class="action-list">
+        <button class="action-btn" id="acSync">Subir ahora lo pendiente</button>
+        <button class="action-btn danger" id="acOut">Cerrar sesión en este dispositivo</button>
+      </div>
+      <div class="hint">Al cerrar sesión, este móvil deja de recibir cambios. Tus datos siguen en la cuenta.</div>
+    </div>`);
+    $("#acSync").onclick = async ()=>{ haptic(); UI.toast("Subiendo…","check","var(--label-2)");
+      await Sync.flush(); UI.toast("Todo al día","check","var(--green)"); };
+    $("#acOut").onclick = async ()=>{ haptic(); await Account.signOut();
+      Sheets.close(); UI.toast("Sesión cerrada","check","var(--label-2)"); };
+  } else {
+    Sheets.show(head + `
+      <div class="segmented" id="acMode" style="margin-bottom:18px">
+        <div class="seg sel" data-m="up">Crear cuenta</div>
+        <div class="seg" data-m="in">Iniciar sesión</div>
+      </div>
+      <div class="form-group">
+        <div class="field-block"><input class="field" id="acEmail" type="email" inputmode="email"
+             autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Correo electrónico"/></div>
+        <div class="field-block"><input class="field" id="acPass" type="password"
+             autocomplete="current-password" placeholder="Contraseña (mínimo 6)"/></div>
+      </div>
+      <div class="hint" id="acHint">${a.checking?"Comprobando si ya has iniciado sesión…":"Tus datos de este móvil pasarán a esta cuenta; no se pierde nada."}</div>
+      <button class="btn" id="acGo" style="margin-top:18px" disabled>Crear cuenta</button>
+      <button class="btn ghost" id="acForgot" style="margin-top:8px">He olvidado la contraseña</button>
+    </div>`);
+    let mode="up";
+    const em=$("#acEmail"), pw=$("#acPass"), go=$("#acGo"), hint=$("#acHint");
+    const validate=()=>{ go.disabled = !/^\S+@\S+\.\S+$/.test(em.value.trim()) || pw.value.length<6; };
+    [em,pw].forEach(i=> i.addEventListener("input", validate));
+    $$(".seg",$("#acMode")).forEach(el=> el.onclick=()=>{
+      mode=el.getAttribute("data-m"); haptic();
+      $$(".seg",$("#acMode")).forEach(x=>x.classList.toggle("sel",x===el));
+      go.textContent = mode==="up" ? "Crear cuenta" : "Iniciar sesión";
+      hint.textContent = mode==="up"
+        ? "Tus datos de este móvil pasarán a esta cuenta; no se pierde nada."
+        : "Se traerán los datos de esa cuenta y sustituirán a los de este móvil.";
+      validate();
+    });
+    go.onclick = async ()=>{
+      const email=em.value.trim(), pass=pw.value;
+      go.disabled=true; go.textContent="Un momento…"; haptic(12);
+      const r = mode==="up" ? await Account.signUp(email,pass) : await Account.signIn(email,pass);
+      if(r.ok){
+        Sheets.close();
+        UI.toast(r.msg,"check","var(--green)");
+        if(typeof Tasks!=="undefined" && Tasks.render) Tasks.render();
+        if(UI.renderProfile) UI.renderProfile();
+      } else {
+        go.disabled=false; go.textContent = mode==="up"?"Crear cuenta":"Iniciar sesión";
+        UI.toast(r.msg,"check","var(--red)");
+      }
+    };
+    $("#acForgot").onclick = async ()=>{
+      const email=em.value.trim();
+      if(!/^\S+@\S+\.\S+$/.test(email)){ UI.toast("Escribe primero tu correo","check","var(--red)"); return; }
+      haptic(); const r=await Account.reset(email);
+      UI.toast(r.msg,"check", r.ok?"var(--green)":"var(--red)");
+    };
+    setTimeout(()=>{ try{ em.focus({preventScroll:true}); }catch(_){ em.focus(); } },350);
+  }
+  $("#acClose").onclick = Sheets.close;
+  $("#acBack").onclick  = ()=>{ haptic(); openSettingsSheet(); };
+}
+
 function openSettingsSheet(){
   const hasN = ("Notification" in window);
   const denied = hasN && Notification.permission==="denied";
@@ -5406,6 +5733,11 @@ function openSettingsSheet(){
     <div class="sheet-head"><span class="act" style="opacity:0">•</span><span class="title">Ajustes</span><span class="act" id="setClose">Cerrar</span></div>
     <div class="sheet-body">
       <div class="settings-list">
+        <button class="settings-row tappable" id="setAccount">
+          <span class="sr-ic emoji">👤</span>
+          <div class="sr-info"><div class="sr-t">Cuenta</div><div class="sr-s" id="setAccountSub">Comprobando…</div></div>
+          <span class="sr-chev">›</span>
+        </button>
         <div class="settings-row">
           <span class="sr-ic emoji">🔔</span>
           <div class="sr-info"><div class="sr-t">Notificaciones</div><div class="sr-s">${denied?'Bloqueadas en iOS · actívalas en Ajustes › esta app':'Avisos de amigos y recordatorios'}</div></div>
@@ -5443,6 +5775,13 @@ function openSettingsSheet(){
                          : "⚠️ Este dispositivo NO está suscrito · activa Notificaciones arriba";
   }catch(e){} })();
   $("#setClose").onclick=Sheets.close;
+  // El estado de la cuenta se pregunta a la nube, no se adivina.
+  (async ()=>{ try{
+    const a = await Account.info(); const el=$("#setAccountSub"); if(!el) return;
+    el.textContent = a.signed ? a.email : "Sin correo · tus datos solo viven en este móvil";
+    if(!a.signed) el.style.color = "var(--orange)";
+  }catch(e){} })();
+  $("#setAccount").onclick = ()=>{ haptic(); openAccountSheet(); };
   $("#setCloud").onclick=async ()=>{
     haptic();
     const st=Cloud.state();
@@ -5963,6 +6302,8 @@ function boot(){
 
   // Nube (si está activada): inicia sesión y sube perfil + historial en segundo plano
   if (Cloud.enabled()){
+    // Sincronización continua del estado completo: se enciende sola con la app.
+    Cloud.init().then(id=>{ if(id) Sync.start(); }).catch(()=>{});
     Cloud.init().then(id=>{
       if(!id){
         // La sesión no se pudo restaurar: AVISAR (antes era silencioso y el
