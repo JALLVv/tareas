@@ -629,10 +629,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 /* El rango va en su propia línea y con más cuerpo que las cifras: es la
    etiqueta que mejor resume dónde estás, y compartiendo fila con la racha y
    los puntos parecía un dato más. */
-.rank-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;
+.rank-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;
   border-radius:var(--radius-pill);background:var(--card);
-  font-size:14px;font-weight:800;letter-spacing:var(--track-body);}
-.rank-badge svg{width:19px;height:19px;flex:0 0 auto;}
+  font-size:13px;font-weight:800;letter-spacing:var(--track-body);}
+.rank-badge svg{width:16px;height:16px;flex:0 0 auto;}
 
 .rank-card{margin-top:0;padding:13px var(--pad) 14px;}
 .rank-row{display:flex;align-items:baseline;justify-content:flex-start;margin-bottom:9px;}
@@ -1244,7 +1244,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v139";
+const APP_VERSION = "v140";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -1261,8 +1261,9 @@ const Icons = (() => {
   const emoji = (k)=> map[k] || map._default;
   return { get:(k)=> `<span class="emoji">${emoji(k)}</span>`, raw:emoji };
 })();
-// Cada tarea puede llevar SU emoji; si no, hereda el de su categoría. Es lo
-// que permite que "Regar plantas" sea 🌱 y no el icono genérico de Naturaleza.
+// Cada tarea lleva SU emoji. Si no eliges ninguno cae en el de su categoría
+// —las del generador y las de antes la tienen— y, a falta de las dos cosas,
+// en el genérico. Es lo que permite que "Regar plantas" sea 🌱.
 const taskEmoji = (t)=> `<span class="emoji">${(t && t.emoji) || Icons.raw(t && t.category)}</span>`;
 
 /* ---------------------------------------------------------------------
@@ -1919,9 +1920,19 @@ const _genTareas = new GeneradorTareas({ historial: loadGenHist() });
 const DURATIONS = [5,10,15,20,30,45,60,120,150];
 const durLabel = (m) => m===60 ? "1 hora" : m===120 ? "2 horas" : m===150 ? "2 horas o más" : m+" minutos";
 const durShort = (m) => m===60 ? "1 h" : m===120 ? "2 h" : m===150 ? "2 h+" : m+" min";
-// 2 h y 2 h+ otorgan los MISMOS puntos (240 base); el resto es minutos×2
-const basePoints = (m) => m>=120 ? 240 : m*2;   // 5→10, 10→20, … 60→120, 2h y 2h+→240
-const taskPoints = (m,random) => basePoints(m) * (random?2:1);
+/* EL ANILLO ES LA PUNTUACIÓN.
+   Antes los puntos salían de la duración declarada: una tarea de 2 h valía 240
+   la hicieras cuando la hicieras, y vencer costaba esos 240 de golpe. Ahora el
+   número sale del mismo sitio que el dibujo. Con el anillo verde entero una
+   tarea da 500; a la mitad, 250; justo al vencer, nada. Pasado el vencimiento
+   el anillo rojo se llena y cobra lo mismo al revés: lleno del todo, −500.
+   Las dos consecuencias que importan: lo que ves en la ficha y lo que se apunta
+   en el marcador son el mismo número, y el paso de premio a castigo no tiene
+   escalón —cruza por cero justo en el vencimiento—. La duración pasa a ser
+   solo una nota tuya; ya no decide cuánto vale la tarea. */
+const PTS_FULL = 500;
+// Las del generador siguen valiendo el doble. Y por lo mismo cuestan el doble.
+const taskMaxPoints = (t) => PTS_FULL * ((t && t.random) ? 2 : 1);
 
 /* ---------------------------------------------------------------------
    INTERVALO DE VENCIMIENTO
@@ -2404,6 +2415,23 @@ const Store = (() => {
       }
     });
     if(typeof state.penalties!=='number') state.penalties=0;
+    /* El castigo pasa de cobrarse entero al vencer a crecer con el anillo rojo.
+       Una tarea que YA estaba vencida antes del cambio se da por saldada hasta
+       donde esté su anillo ahora mismo: con el sistema viejo o ya se cobró
+       entera, o se habría cobrado entera a la primera pasada. Cobrarla otra vez
+       con la regla nueva sería pasar factura por un tiempo que transcurrió bajo
+       otras reglas. A partir de aquí el goteo cuenta con normalidad. */
+    if(state.ptsVer !== 1){
+      const nowMs = Date.now();
+      (state.tasks||[]).forEach(t=>{
+        const w = taskWindow(t);
+        if(nowMs > w.due){
+          t.penalizedFor = w.due;
+          t.penalizedPts = Math.round(taskMaxPoints(t) * Math.min(1, (nowMs - w.due) / w.period));
+        }
+      });
+      state.ptsVer = 1;
+    }
     // Las recurrentes antiguas arrancan su contador de penalización desde ayer,
     // para no descontar retroactivamente días pasados antes de esta función.
     (state.tasks||[]).forEach(t=>{ const ty=t.recurrence&&t.recurrence.type;
@@ -2484,7 +2512,7 @@ const Generator = (() => {
     } catch(e){
       texto = "Dedica este tiempo a tu categoría elegida.";
     }
-    current = { title:texto, category:selCat, minutes:selDur, people:selPeople, points:taskPoints(selDur,true) };
+    current = { title:texto, category:selCat, minutes:selDur, people:selPeople, points:PTS_FULL*2 };
     return current;
   }
   function clearOutput(){ current=null; genPartner=null; const o=$("#genOutput"); if(o) o.innerHTML=""; }
@@ -2520,7 +2548,7 @@ const Generator = (() => {
         <div class="meta">
           <span class="pill">${clockSvg()} ${durLabel(current.minutes)}</span>
           ${current.people>1?`<span class="pill">${peopleSvg()} ${peopleShort(current.people)}</span>`:""}
-          <span class="pill pts">${starSvg()} ${current.points} pts</span>
+          <span class="pill pts">${starSvg()} hasta ${current.points} pts</span>
         </div>
       </div>
       ${Cloud.configured()?`<div id="genShareWrap" style="margin-top:14px"><div class="lbl-sm">Compartir con un amigo</div><div class="chips" id="genShare"></div><div class="hint" id="genShareHint" style="display:none">Si tú o tu amigo la completáis o la borráis, se hace para los dos.</div></div>`:""}
@@ -2813,6 +2841,22 @@ const Tasks = (() => {
     // Vencida: el rojo arranca con un trocito visible, no desde la nada.
     return { over:true, frac: Math.max(0.05, Math.min(1, (now - due) / period)), due };
   }
+  /* El anillo rojo nunca se DIBUJA por debajo del 5%, o no se vería. El castigo
+     sí arranca en cero: con la fracción de la vista, vencer costaría 25 pts en
+     el mismo segundo del vencimiento, que es justo el escalón que se quería
+     quitar. Dibujo y cobro miden lo mismo, pero el cobro sin suelo. */
+  function overdueFrac(t){
+    const { due, period } = taskWindow(t);
+    const now = Date.now();
+    return now <= due ? 0 : Math.min(1, (now - due) / period);
+  }
+  // Lo que suma completarla AHORA: el anillo verde, tal y como se ve.
+  function pointsForNow(t){
+    const st = ringState(t);
+    return st.over ? 0 : Math.round(taskMaxPoints(t) * st.frac);
+  }
+  // Lo que lleva costando el anillo rojo tal y como está AHORA.
+  function penaltySoFar(t){ return Math.round(taskMaxPoints(t) * overdueFrac(t)); }
   const ringOffset = (frac)=> (RING_C * (1 - frac)).toFixed(2);
 
   // "1d 23 h", "3 h 20 min", "12 min": la unidad grande manda y la pequeña
@@ -2949,37 +2993,46 @@ const Tasks = (() => {
      desaparecían al día siguiente; ahora se quedan en la lista con el anillo
      rojo creciendo hasta que las hagas (o las borres tú). */
   function isExpired(){ return false; }
-  /* ---------- PENALIZACIÓN por tareas no completadas ----------
-     Cada día/fecha programada que pasa sin completarse resta los MISMOS puntos
-     que habría dado la tarea. Aplica a TODOS los tipos. */
-  /* Cada vencimiento que pasa sin completar resta los MISMOS puntos que habría
-     dado la tarea, UNA sola vez por vencimiento (penalizedFor guarda cuál ya
-     se cobró). Antes se recorría el calendario día a día; ahora el castigo va
-     atado al mismo instante que dibuja el anillo, así lo que ves y lo que se
-     cobra no pueden discrepar. */
+  /* ---------- PENALIZACIÓN por tareas vencidas ----------
+     Vencer ya no cuesta todo de golpe. El castigo CRECE con el anillo rojo:
+     recién vencida no quita nada, con el anillo rojo entero quita lo mismo que
+     habría dado el verde entero. Es la otra mitad de la misma regla, y por eso
+     el instante del vencimiento no es un escalón: se pasa de +0 a −0.
+
+     Se cobra por DIFERENCIA y contra el reloj, no acumulando: cada pasada mira
+     dónde debería estar el contador (`want`) y cobra solo lo que falte respecto
+     a lo ya cobrado para ESE vencimiento (`penalizedPts`). Dos consecuencias
+     buenas: una semana con la app cerrada se pone al día sola en una pasada, y
+     una pasada de más no cobra dos veces. Al rodar el vencimiento cambia la
+     clave (`penalizedFor`) y el contador vuelve solo a cero. */
   function cleanupExpired(){
     const s=Store.get(); const now=Date.now();
-    let penalty=0; const marks=[];
+    let delta=0; const marks=[];
     (s.tasks||[]).forEach(t=>{
-      const due = taskDueAt(t);
-      if(now > due && t.penalizedFor !== due && !isDoneToday(t)){
-        penalty += taskPoints(t.minutes, t.random);
-        marks.push({ id:t.id, due });
-      }
+      const { due, period } = taskWindow(t);
+      if(now <= due || isDoneToday(t)) return;
+      const want = Math.round(taskMaxPoints(t) * Math.min(1, (now - due) / period));
+      const paid = (t.penalizedFor === due) ? (t.penalizedPts || 0) : 0;
+      if(want > paid){ delta += want - paid; marks.push({ id:t.id, due, want }); }
     });
-    if(!penalty && !marks.length) return;
+    if(!marks.length) return;
     Store.update(st=>{
-      marks.forEach(m=>{ const t=st.tasks.find(x=>x.id===m.id); if(t) t.penalizedFor=m.due; });
-      if(penalty>0){
-        const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
-        st.penalties=Math.min((st.penalties||0)+penalty, sum); // topada en lo ganado
-        st.points=Math.max(0, sum - st.penalties);
-      }
+      marks.forEach(m=>{ const t=st.tasks.find(x=>x.id===m.id);
+        if(t){ t.penalizedFor=m.due; t.penalizedPts=m.want; } });
+      const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
+      st.penalties=Math.min((st.penalties||0)+delta, sum);   // topada en lo ganado
+      st.points=Math.max(0, sum - st.penalties);
     });
-    if(penalty>0){
-      if(Cloud.enabled()) Cloud.pushProfile();   // refleja el descuento en la nube (y para amigos)
-      if(UI.renderProfile) UI.renderProfile();
-      UI.toast(`Tareas sin completar · −${penalty} pts`, "check", "var(--red)");
+    if(UI.renderProfile) UI.renderProfile();
+    /* El goteo se anuncia solo cuando hay algo que anunciar. Ahora que el cobro
+       es continuo, avisar de cada pasada sería un aviso cada pocos segundos por
+       tres puntos; y empujar el perfil a la nube en cada una, tráfico para
+       nada. Por debajo del umbral se descuenta igual, en silencio: el total del
+       perfil siempre va al día, y el siguiente empujón lleva el número exacto
+       (que además cada dispositivo recalcula del reloj por su cuenta). */
+    if(delta >= 10){
+      if(Cloud.enabled()) Cloud.pushProfile();
+      UI.toast(`Tareas vencidas · −${delta} pts`, "check", "var(--red)");
     }
   }
 
@@ -3180,10 +3233,8 @@ const Tasks = (() => {
     const tb=$("#doneDateToday",wrap); if(tb) tb.onclick=()=>{ haptic(); doneDate=dateKey(); render(); };
   }
   function cardHtml(t,i){
-    const color = catColor(t.category);
-    const pts = taskPoints(t.minutes,t.random);
-    // La ficha es el ANILLO. Todo lo demás cuelga de él: el emoji de la
-    // categoría va dentro, el título debajo y el tiempo restante al pie.
+    // La ficha es el ANILLO. Todo lo demás cuelga de él: el emoji va dentro,
+    // el título debajo y el tiempo restante al pie.
     // Tocar el anillo = completar. El menú vive fuera, en su esquina, para que
     // tocar el anillo signifique siempre lo mismo y nada más.
     const st = ringState(t);
@@ -3327,7 +3378,10 @@ const Tasks = (() => {
   function openCreate(){ openTaskForm(null); }
   function openTaskForm(existing){
     const editing = !!existing;
-    let cat   = editing ? existing.category : CATEGORIES[0].name;
+    // Las tareas nuevas ya no se clasifican: el emoji es su identidad. El campo
+    // sigue existiendo para no borrarle la categoría a las que ya la tienen
+    // (las de antes y las del generador, que sí sigue clasificando).
+    let cat   = editing ? (existing.category || "") : "";
     let dur   = editing ? existing.minutes  : 10;
     let ppl   = editing ? (existing.people||1) : 1;
     let urgent= editing ? !!existing.urgent : false;
@@ -3362,7 +3416,6 @@ const Tasks = (() => {
     let remind = editing && existing.reminder && existing.reminder.time ? true : false;
     let remindTime = editing && existing.reminder && existing.reminder.time ? existing.reminder.time : "09:00";
     let partner = null; // amigo con quien se comparte (solo al crear)
-    if(!CATEGORIES.some(c=>c.name===cat)) cat = CATEGORIES[0].name;
 
     const body = `
       <div class="pv" id="ctPv">
@@ -3452,10 +3505,6 @@ const Tasks = (() => {
 
       <div class="fsep"></div>
       <div class="dd-row" id="ctDD">
-        <div class="dd"><select id="ctCat" aria-label="Categoría">
-          <option value="" disabled${editing?"":" selected"}>Categoría</option>
-          ${CATEGORIES.map(c=>`<option value="${esc(c.name)}"${editing&&c.name===cat?" selected":""}>${Icons.raw(c.name)}  ${esc(c.name)}</option>`).join("")}
-        </select><span class="dd-chev">▾</span></div>
         <div class="dd"><select id="ctDur" aria-label="Tiempo">
           <option value="" disabled${editing?"":" selected"}>Tiempo</option>
           ${DURATIONS.map(m=>`<option value="${m}"${editing&&m===dur?" selected":""}>⏱  ${esc(durLabel(m))}</option>`).join("")}
@@ -3470,10 +3519,6 @@ const Tasks = (() => {
       <div class="sheet-head"><span class="act cancel" id="ctCancel">Cancelar</span><span class="title">${editing?"Editar tarea":"Nueva tarea"}</span><span class="act" style="opacity:0">•</span></div>
       <div class="sheet-body">${body}</div>`;
     const sheet = Sheets.show(head);
-
-    // Menús desplegables (select nativo): las opciones ya vienen en el HTML
-    // (evita el "temblor" de reflow al rellenarlas tras abrir la hoja).
-    const catSel=$("#ctCat",sheet);
 
     const RC = 2*Math.PI*44;
 
@@ -3505,8 +3550,9 @@ const Tasks = (() => {
       return Math.max(60000, due - computeStartFor(f, due));
     }
     function paintPreview(){
-      // Al crear, sin emoji propio, el campo se queda VACÍO y enseña el "+".
-      // Al editar sí se precarga, porque ahí hay una tarea que ya tiene icono.
+      // Al crear, sin emoji propio, el campo se queda VACÍO y enseña el "+";
+      // la ficha usará el emoji genérico. Al editar sí se precarga, porque ahí
+      // hay una tarea que ya tiene icono (suyo o de su categoría antigua).
       const ei=$("#ctEmoji",sheet);
       if(ei && !emoji && document.activeElement!==ei) ei.value = editing ? Icons.raw(cat) : "";
       const pv=$("#ctPv",sheet), arc=$("#ctPvArc",sheet);
@@ -3526,7 +3572,6 @@ const Tasks = (() => {
                                    return Math.max(1,mm)+" min"; })();
     }
 
-    catSel.onchange=()=>{ cat=catSel.value; haptic(); fitSelectWidth(catSel); paintPreview(); };
     const emjInput=$("#ctEmoji",sheet);
     if(emjInput){
       const lastGlyph = (str)=>{ const arr=Array.from(str||""); return arr.length?arr[arr.length-1]:""; };
@@ -3540,14 +3585,16 @@ const Tasks = (() => {
       });
       emjInput.addEventListener("focus", ()=> emjInput.select());
       emjInput.addEventListener("blur", ()=>{
-        // Vacío significa "el de la categoría": se guarda vacío y taskEmoji()
-        // se encarga de heredarlo. Al crear se deja el "+" a la vista.
+        // Vacío significa "el que le toque": se guarda vacío y taskEmoji() se
+        // encarga. Al crear se deja el "+" a la vista.
         if(!emjInput.value.trim()){ emoji=""; emjInput.value = editing ? Icons.raw(cat) : ""; }
       });
     }
+    // Menú desplegable (select nativo): las opciones ya vienen en el HTML
+    // (evita el "temblor" de reflow al rellenarlas tras abrir la hoja).
     const durSel=$("#ctDur",sheet);
     durSel.onchange=()=>{ dur=+durSel.value; haptic(); fitSelectWidth(durSel); };
-    [catSel,durSel].forEach(fitSelectWidth);
+    fitSelectWidth(durSel);
 
     // ---- modo: intervalo / fecha de finalización ----
     const modeWrap=$("#ctMode",sheet);
@@ -3685,7 +3732,7 @@ const Tasks = (() => {
                    t.recurrence=rec; t.onlyOnDays=useDays; t.reminder=reminder;
                    Object.assign(t, dueFields);
                    // vencimiento nuevo = castigo nuevo: se olvida el ya cobrado
-                   if(t.penalizedFor !== t.dueAt) delete t.penalizedFor;
+                   if(t.penalizedFor !== t.dueAt){ delete t.penalizedFor; delete t.penalizedPts; }
                    delete t.doneUntil; }
           } else {
             s.tasks.unshift(Object.assign({ id:newId, title, desc, category:cat, minutes:dur, people:ppl, urgent,
@@ -3721,10 +3768,11 @@ const Tasks = (() => {
   function openComplete(task){
     let photoData = null;
     // Fuera de plazo la tarea sigue pudiendo hacerse —y hay que hacerla— pero
-    // ya no da puntos: los suyos se descontaron al vencer. Si además los diera
-    // al completarla tarde, el castigo se anularía solo.
+    // ya no suma: mientras estuvo vencida el anillo rojo fue cobrando. Hacerla
+    // ahora no devuelve lo perdido; lo que hace es parar la sangría.
     const late = ringState(task).over;
-    const pts  = late ? 0 : taskPoints(task.minutes,task.random);
+    const pts  = pointsForNow(task);
+    const lost = late ? penaltySoFar(task) : 0;
     const head = `
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="pcCancel">Cancelar</span><span class="title">Completar</span><span class="act" style="opacity:0">•</span></div>
@@ -3732,7 +3780,7 @@ const Tasks = (() => {
         <div class="ico">${checkSvg()}</div>
         <h3>${esc(task.title)}</h3>
         <p>${late
-          ? `Esta tarea está <b style="color:var(--red)">vencida</b>. Puedes completarla, pero ya no suma puntos.`
+          ? `Esta tarea está <b style="color:var(--red)">vencida</b> y lleva costándote <b style="color:var(--red)">${lost} pts</b>. Completarla no suma, pero detiene el descuento.`
           : `Sube una foto como evidencia para completar la tarea y ganar <b style="color:var(--yellow)">${pts} pts</b>.`}</p>
         <div class="photo-preview" id="pcPreview"><img id="pcImg" alt="evidencia"/><div class="retake" id="pcRetake">Cambiar foto</div></div>
         <div class="photo-btns">
@@ -3777,7 +3825,7 @@ const Tasks = (() => {
       e.target.value = "";
       if(!f) return;                       // cancelaste la cámara: no pasa nada
       compressImage(f,(dataUrl)=>{
-        const pts = ringState(task).over ? 0 : taskPoints(task.minutes,task.random);
+        const pts = pointsForNow(task);
         commitCompletion(task, dataUrl, pts);
       });
     };
