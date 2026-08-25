@@ -1248,7 +1248,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v143";
+const APP_VERSION = "v144";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2426,6 +2426,29 @@ const Store = (() => {
         t.dueVer  = 3;
       }
     });
+    /* Sin `createdAt` no hay orden "Creación" posible: todas empatan en cero y
+       la lista sale como esté en memoria, que es lo que hace parecer que el
+       orden no funciona. Las tareas de las primeras versiones no lo traen.
+       Se rellena con la mejor pista que haya, y solo donde falta: las tareas
+       que sí lo tienen no se tocan, porque un dato real siempre vale más que
+       una deducción. Se recorre de la más antigua (final de la lista) a la más
+       nueva, así cada hueco queda por debajo de la que ya se resolvió. */
+    if((state.tasks||[]).some(t=> typeof t.createdAt !== "number")){
+      const firstDone={};
+      (state.history||[]).forEach(h=>{ if(h && h.taskId && h.date){
+        if(!firstDone[h.taskId] || h.date < firstDone[h.taskId]) firstDone[h.taskId]=h.date; } });
+      const tk=state.tasks; let prev=null;
+      for(let i=tk.length-1;i>=0;i--){
+        const t=tk[i];
+        if(typeof t.createdAt === "number"){ prev=t.createdAt; continue; }
+        // La completada más antigua de esa tarea prueba que ya existía ese día.
+        // Sin ninguna, manda su sitio en la lista: las nuevas entran por delante,
+        // así que el orden del array YA es el orden de creación.
+        const d=firstDone[t.id];
+        t.createdAt = d ? startOfDayMs(d) : (prev!=null ? prev+1000 : 0);
+        prev=t.createdAt;
+      }
+    }
     if(typeof state.penalties!=='number') state.penalties=0;
     /* El castigo vuelve a ser un solo cobro, al llenarse el anillo rojo. Hay
        que deshacer el goteo proporcional que estuvo vivo entre medias:
@@ -3232,14 +3255,21 @@ const Tasks = (() => {
     const wrap = $("#taskListWrap");
     const s = Store.get();
     let list = s.tasks.filter(t=> !isDoneToday(t) && scheduledToday(t));
+    // Sitio de cada tarea en la lista guardada: las nuevas entran por delante,
+    // así que el array YA es el orden de creación. Sirve de desempate cuando
+    // dos comparten `createdAt` (importadas juntas, creadas el mismo segundo):
+    // sin él quedarían como las dejara el ordenador, que es lo que se lee como
+    // "no ordena".
+    const pos = new Map(s.tasks.map((t,i)=>[t.id,i]));
     // Urgentes primero SIEMPRE; dentro de cada grupo, el orden que hayas elegido.
     const cmp = {
-      due:     (a,b)=> taskDueAt(a) - taskDueAt(b),
-      name:    (a,b)=> (a.title||"").localeCompare(b.title||"","es",{sensitivity:"base"}),
+      due:     (a,b)=> (taskDueAt(a) - taskDueAt(b)) || (pos.get(b.id) - pos.get(a.id)),
+      name:    (a,b)=> (a.title||"").localeCompare(b.title||"","es",{sensitivity:"base"})
+                       || (pos.get(b.id) - pos.get(a.id)),
       // Ascendente, como "Vencimiento" (la más próxima primero) y "Nombre"
       // (la A primero): ordenar por creación es ver el orden en que las
       // creaste. Iba al revés que las otras dos y parecía que no ordenaba.
-      created: (a,b)=> (a.createdAt||0) - (b.createdAt||0)
+      created: (a,b)=> ((a.createdAt||0) - (b.createdAt||0)) || (pos.get(b.id) - pos.get(a.id))
     }[View.sort] || ((a,b)=> taskDueAt(a) - taskDueAt(b));
     list.sort((a,b)=>{ const ua=a.urgent?0:1, ub=b.urgent?0:1; return ua!==ub ? ua-ub : cmp(a,b); });
     // Encabezado de estado: dice de un vistazo si te queda algo o no.
