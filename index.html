@@ -597,17 +597,24 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .profile-head{display:flex;flex-direction:row;align-items:center;text-align:left;
   gap:var(--gap-sm);padding:0 2px var(--gap-sm);}
 .ph-id{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
-.avatar{width:56px;height:56px;border-radius:50%;flex:0 0 auto;
+.avatar{width:72px;height:72px;border-radius:50%;flex:0 0 auto;
   background:linear-gradient(145deg,#5E5CE6,#0A84FF);
-  display:grid;place-items:center;font-size:22px;font-weight:800;color:#fff;
+  display:grid;place-items:center;font-size:28px;font-weight:800;color:#fff;
   overflow:hidden;position:relative;}
 .avatar img{width:100%;height:100%;object-fit:cover;}
-.avatar .edit-badge{position:absolute;bottom:-1px;right:-1px;width:23px;height:23px;border-radius:50%;
+.avatar .edit-badge{position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;
   background:var(--card-2);border:2px solid var(--bg);display:grid;place-items:center;}
-.avatar .edit-badge svg{width:11px;height:11px;color:var(--label-2);}
-.profile-name{font-size:20px;font-weight:800;letter-spacing:var(--track-title);margin:0;
-  display:inline-flex;align-items:center;gap:7px;}
-.profile-name .pen{width:15px;height:15px;color:var(--label-3);}
+.avatar .edit-badge svg{width:12px;height:12px;color:var(--label-2);}
+.profile-name{font-size:24px;font-weight:800;letter-spacing:var(--track-title);margin:0;
+  display:inline-flex;align-items:center;gap:7px;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.profile-name .pen{width:16px;height:16px;color:var(--label-3);flex:0 0 auto;}
+/* El nombre y la acción sobre esa persona van juntos; las cifras, debajo.
+   Mezclar "Eliminar amigo" con la racha y los puntos ponía al mismo nivel un
+   dato y una acción que no se puede deshacer. */
+.ph-name-row{display:flex;align-items:center;gap:10px;width:100%;min-width:0;}
+.ph-name-row .profile-name{flex:0 1 auto;}
+.ph-del{flex:0 0 auto;margin-left:auto;padding:5px 11px;font-size:11.5px;}
 .ph-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
 .phc{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:var(--radius-pill);
   background:var(--card);font-size:12px;font-weight:700;color:var(--label);}
@@ -631,10 +638,13 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 /* Tres cifras iguales, sin pieza destacada: los puntos y la racha ya viven
    junto al nombre, así que aquí no queda nada que merezca el doble de tamaño. */
 .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
-.stat{padding:13px 10px;}
+/* El número tiene su propio margen óptico a la izquierda; sin este empujón
+   la etiqueta de debajo parecía pegada al borde de la ficha. */
+.stat{padding:13px 12px 13px 15px;}
 .stat .v{font-size:22px;font-weight:800;letter-spacing:var(--track-title);line-height:1;
   font-variant-numeric:tabular-nums;}
-.stat .l{font-size:10.5px;color:var(--label-2);font-weight:600;margin-top:5px;line-height:1.25;}
+.stat .l{font-size:10.5px;color:var(--label-2);font-weight:600;margin-top:5px;line-height:1.25;
+  padding-left:1px;}
 .stat .v.fire{color:var(--orange);} .stat .v.gold{color:var(--yellow);}
 .stat .v.pur{color:var(--purple);} .stat .v.grn{color:var(--green);}
 
@@ -662,6 +672,9 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .week-top b{color:var(--label);}
 .week-empty{margin-top:10px;font-size:13.5px;color:var(--label-2);font-weight:500;line-height:1.4;}
 
+/* El botón de la semana queda a la MISMA distancia de las estadísticas y del
+   calendario: antes tenía 14px arriba y 8 abajo y se veía descolgado. */
+.week-btn{margin-top:8px;}
 .cal-card{margin-top:8px;padding:var(--gap-sm) var(--gap-sm) var(--gap);overflow:hidden;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--gap-sm);padding:0 6px;}
 .cal-head .m{font-size:17px;font-weight:700;letter-spacing:var(--track-title);}
@@ -737,7 +750,7 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .friend-av{width:46px;height:46px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
   overflow:hidden;font-size:18px;font-weight:800;color:#fff;
   background:linear-gradient(145deg,#5E5CE6,#0A84FF);}
-.friend-av img,.friend-profile-head .big-av img{width:100%;height:100%;object-fit:cover;}
+.friend-av img{width:100%;height:100%;object-fit:cover;}
 .friend-info{flex:1;min-width:0;}
 .friend-info .fn{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .friend-info .fm{font-size:13px;color:var(--label-2);margin-top:2px;}
@@ -748,12 +761,11 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .code-box{width:100%;background:var(--card-2);border:none;border-radius:var(--radius-sm);
   padding:13px 15px;font-size:13px;color:var(--label-2);word-break:break-all;
   font-family:ui-monospace,monospace;max-height:120px;overflow:auto;}
-/* Todo el perfil del amigo va sobre burbujas, no sobre el fondo pelado. */
 /* El cuerpo de la hoja YA es --card: cualquier pieza de ese mismo color se
    volvía invisible dentro. Todo lo que deba leerse como "caja" sube un
    escalón, y lo que va dentro de esas cajas, dos. */
 .sheet .card,.sheet .stat,.sheet .cal-card,.sheet .week-card,.sheet .gal-item,
-.sheet .notif-activate,.sheet .friend-profile-head,.sheet .form-group,
+.sheet .notif-activate,.sheet .form-group,
 .sheet .settings-list,.sheet .tg-list,.sheet .segmented,.sheet .rank-badge,
 .sheet .phc,.sheet .chip,.sheet .mini-btn,.sheet .action-btn,.sheet .btn.secondary{background:var(--card-2);}
 .sheet .wk-stat,.sheet .gal-thumb,.sheet .notif-ic,.sheet .pill,.sheet .seg.sel,
@@ -763,12 +775,8 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
 .sheet .switch.on{background:var(--green);}
 .sheet .day.sel{background:var(--green);}
 .sheet .mini-btn.accent{background:var(--green);}
-.friend-profile-head{display:flex;flex-direction:column;align-items:center;gap:8px;
-  padding:var(--gap) 0 var(--pad);border-radius:var(--radius-lg);}
-.friend-profile-head .big-av{width:74px;height:74px;border-radius:50%;display:grid;place-items:center;
-  overflow:hidden;font-size:30px;font-weight:800;color:#fff;
-  background:linear-gradient(145deg,#5E5CE6,#0A84FF);}
-.friend-profile-head .fpn{font-size:21px;font-weight:800;letter-spacing:var(--track-title);}
+/* Dentro de la hoja el retrato del amigo usa la misma pieza que el tuyo. */
+.sheet .avatar{background:linear-gradient(145deg,#5E5CE6,#0A84FF);}
 
 /* =========================================================================
    HOJAS / MODALES
@@ -1223,7 +1231,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v134";
+const APP_VERSION = "v135";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3930,7 +3938,7 @@ const Profile = (() => {
     // solo aparece durante las 48 h de disponibilidad; se abre en su propia hoja.
     const ws = weeklySummaryFor(s.history);
     const wrap = $("#weekCardWrap");
-    wrap.innerHTML = ws.available ? `<button class="btn secondary" id="weekSummaryBtn" style="margin-top:14px;">Ver resumen semanal</button>` : "";
+    wrap.innerHTML = ws.available ? `<button class="btn secondary week-btn" id="weekSummaryBtn">Ver resumen semanal</button>` : "";
     if(ws.available){ $("#weekSummaryBtn").onclick=()=>{ haptic(); openWeekSummarySheet(ws, {mine:true}); }; }
 
     renderCalendar();
@@ -5061,7 +5069,7 @@ const Friends = (() => {
       <div class="sheet-body">
         ${avail?'':'<div class="card friends-empty">Necesitas conexión a internet para usar los amigos.</div>'}
         <div class="friends-sheet-head">
-          <button class="mini-btn accent" id="friendAdd">Añadir amigo por correo</button>
+          <button class="mini-btn accent" id="friendAdd">Añadir amigo</button>
         </div>
         <div id="friendsList"></div>
       </div>`);
@@ -5198,25 +5206,27 @@ const Friends = (() => {
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act" id="fpBack">‹ Atrás</span><span class="title">Amigo</span><span class="act" id="fpClose">Cerrar</span></div>
       <div class="sheet-body">
-        <div class="friend-profile-head">
-          ${avHtml(f,"big-av")}
-          <div class="fpn">${esc(f.name)}</div>
-          <div class="ph-chips" style="justify-content:center">
-            <span class="phc fire"><span class="emoji">🔥</span><b>${fv.streak.current}</b></span>
-            <span class="phc pts"><b>${fv.points}</b> pts</span>
-            <span class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</span>
+        <div class="profile-head">
+          ${avHtml(f,"avatar")}
+          <div class="ph-id">
+            <div class="ph-name-row">
+              <div class="profile-name">${esc(f.name)}</div>
+              <button class="mini-btn danger ph-del" id="fpDel">Eliminar amigo</button>
+            </div>
+            <div class="ph-chips">
+              <span class="phc fire"><span class="emoji">🔥</span><b>${fv.streak.current}</b></span>
+              <span class="phc pts"><b>${fv.points}</b> pts</span>
+              <span class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</span>
+            </div>
           </div>
         </div>
-        <div class="friends-actions" style="justify-content:center;margin-top:14px;">
-          <button class="mini-btn danger" id="fpDel">Eliminar amigo</button>
-        </div>
-        <div class="stat-grid" style="margin-top:16px;">
+        <div class="stat-grid">
           <div class="card stat"><div class="v">${(fv.history||[]).length}</div><div class="l">Completadas</div></div>
           <div class="card stat"><div class="v pur">${(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Aleatorias</div></div>
           <div class="card stat"><div class="v grn">${(fv.history||[]).length-(fv.history||[]).filter(h=>h.random).length}</div><div class="l">Normales</div></div>
         </div>
-        ${fpWs.available?'<button class="btn secondary" id="fpWeekBtn" style="margin-top:14px;">Ver resumen semanal</button>':''}
-        <div class="card cal-card" style="margin-top:14px;">
+        ${fpWs.available?'<button class="btn secondary week-btn" id="fpWeekBtn">Ver resumen semanal</button>':''}
+        <div class="card cal-card">
           <div class="cal-head"><span class="m" id="fpMonth">—</span>
             <div class="cal-nav">
               <button id="fpPrev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 5l-7 7 7 7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
