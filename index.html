@@ -269,7 +269,7 @@ img{display:block;}
 .tilerow .tile-title{margin-top:0;text-align:left;font-size:16px;}
 .tilerow .tile-due{margin-top:3px;text-align:left;}
 .tilerow .tile-menu{position:static;flex:0 0 auto;}
-.tilerow.urgent{box-shadow:inset 0 0 0 1.5px rgba(255,159,10,0.6);}
+.tilerow.urgent{box-shadow:inset 0 0 0 3px var(--orange);}
 .tilerow.done,.tile.done{opacity:0.45;}
 
 /* Inspiraciones: emoji en ficha, título, y el botón de añadir a la derecha. */
@@ -340,7 +340,7 @@ img{display:block;}
 .ring-track{fill:none;stroke:var(--ring-track);stroke-width:7;}
 .ring-arc{fill:none;stroke:var(--green);stroke-width:7;stroke-linecap:round;
   transition:stroke-dashoffset var(--t-slow) var(--ease-out), stroke var(--t-med) var(--ease-out);}
-.tile.over .ring-arc{stroke:var(--red);}
+.tile.over .ring-arc,.tilerow.over .ring-arc{stroke:var(--red);}
 .ring-ic{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
   font-size:30px;line-height:1;pointer-events:none;}
 .ring-ic svg{width:30px;height:30px;color:var(--label);transform:none;}
@@ -352,11 +352,11 @@ img{display:block;}
   overflow:hidden;overflow-wrap:anywhere;}
 .tile-due{margin-top:4px;font-size:12px;font-weight:500;color:var(--label-2);
   letter-spacing:var(--track-caption);}
-.tile.over .tile-due{color:var(--red);font-weight:600;}
+.tile.over .tile-due,.tilerow.over .tile-due{color:var(--red);font-weight:600;}
 /* Urgente lleva aro ÁMBAR, no rojo: el rojo es del reloj y solo puede
    significar "vencida". Si dos cosas distintas usaran el mismo color, el
    anillo dejaría de poder leerse de un vistazo. */
-.tile.urgent{box-shadow:inset 0 0 0 1.5px rgba(255,159,10,0.6);}
+.tile.urgent{box-shadow:inset 0 0 0 3px var(--orange);}
 .tile.done{opacity:0.45;}
 .tile.done .ring-arc{stroke:var(--green);}
 
@@ -382,7 +382,7 @@ img{display:block;}
 .tc-when.today{color:var(--blue);}
 .tc-when.shared{color:var(--indigo);}
 .tc-pts{margin-left:auto;color:var(--yellow);}
-.task-card.urgent{box-shadow:inset 0 0 0 1.5px rgba(255,159,10,0.6);}
+.task-card.urgent{box-shadow:inset 0 0 0 3px var(--orange);}
 .task-card.urgent::before,.task-card.urgent.done::before{display:none;}
 .task-card.done,.task-card.urgent.done{opacity:0.45;}
 .task-card.done .task-title{color:var(--label-2);text-decoration:line-through;}
@@ -844,6 +844,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   text-align:center;font-size:36px;line-height:1;padding:0;
   font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",inherit;
   caret-color:transparent;}
+/* El "+" del hueco vacío: grande y del color del texto, no un gris de aviso.
+   Es una invitación a poner algo, no un error. */
+.ring-emj::placeholder{color:var(--label-2);font-family:inherit;font-weight:300;
+  font-size:42px;opacity:1;}
 .pv-due{margin-top:4px;font-size:14px;color:var(--label-2);}
 .pv.over .pv-due{color:var(--red);font-weight:600;}
 /* Fila de ajuste: rótulo a la izquierda, valor en pastilla a la derecha. */
@@ -1237,7 +1241,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v137";
+const APP_VERSION = "v138";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3334,7 +3338,9 @@ const Tasks = (() => {
     let dueN       = editing && existing.dueN ? existing.dueN : 1;
     let dueUnit    = editing && existing.dueUnit ? existing.dueUnit : "day";
     let repeats    = editing ? !!existing.repeats : true;
-    let repeatFrom = editing && existing.repeatFrom ? existing.repeatFrom : "fixed";
+    const repeatFrom = editing && existing.repeatFrom ? existing.repeatFrom : "fixed";
+    // "hasta que acabe el día": el fin lo pone la propia jornada, no tú.
+    let eod = editing ? !!existing.eodMode : false;
     // Por defecto empieza AHORA (redondeado al minuto) y vence en un día.
     let startMs    = editing && existing.startAt ? existing.startAt : Date.now();
     let endMs      = editing && existing.endMode ? (existing.dueAt || startMs + 86400000) : startMs + 86400000;
@@ -3367,8 +3373,8 @@ const Tasks = (() => {
           <!-- El emoji se escribe con el teclado: tocar el centro del anillo
                abre el teclado y el último carácter que pongas es el icono de la
                tarea. Una rejilla de emojis fijos siempre se queda corta. -->
-          <input class="ring-emj" id="ctEmoji" value="${emoji||Icons.raw(cat)}"
-                 maxlength="8" aria-label="Emoji de la tarea" autocomplete="off"/>
+          <input class="ring-emj" id="ctEmoji" value="${editing?esc(emoji||Icons.raw(cat)):esc(emoji)}"
+                 placeholder="+" maxlength="8" aria-label="Emoji de la tarea" autocomplete="off"/>
         </div>
         <input class="pv-title" id="ctTitle" placeholder="Nueva tarea" maxlength="120"
                value="${editing?esc(existing.title):""}"/>
@@ -3398,7 +3404,15 @@ const Tasks = (() => {
           </select><span class="dd-chev">▾</span></span>
         </span>
       </div>
-      <div class="frow" id="ctEndRow" style="display:${mode==="enddate"?"flex":"none"}">
+      <!-- Lo más habitual dentro de "fecha de finalización" es "hoy hasta que
+           se acabe el día". Con el interruptor no hay que elegir fecha ni hora:
+           el anillo dura desde que la creas hasta las 23:59 de ese mismo día,
+           y la fila de "Termina" desaparece porque ya no decide nada. -->
+      <div class="frow" id="ctEodRow" style="display:${mode==="enddate"?"flex":"none"}">
+        <span class="fl">Hasta que acabe el día</span>
+        <div class="switch${eod?" on":""}" id="ctEod"><div class="knob"></div></div>
+      </div>
+      <div class="frow" id="ctEndRow" style="display:${(mode==="enddate"&&!eod)?"flex":"none"}">
         <span class="fl">Termina</span>
         <span class="fval">
           <input type="date" class="chipv" id="ctEndDate" value="${esc(endDate)}"/>
@@ -3419,15 +3433,6 @@ const Tasks = (() => {
       <div id="ctDaysPick" style="display:${(mode==="interval"&&repeats&&byDays)?"block":"none"};padding:2px 2px 14px;">
         <div class="daypicker" id="ctDays"></div>
         <div class="hint">Aparecerá esos días a las 00:00 y vencerá a las 23:59 del mismo día.</div>
-      </div>
-      <div class="frow" id="ctRepeatFromRow" style="display:${(mode==="interval"&&repeats&&!byDays)?"flex":"none"}">
-        <span class="fl">Repetir desde</span>
-        <span class="fval">
-          <span class="fsel"><select class="chipv" id="ctRepeatFrom" aria-label="Repetir desde">
-            <option value="fixed"${repeatFrom==="fixed"?" selected":""}>intervalo fijo</option>
-            <option value="completion"${repeatFrom==="completion"?" selected":""}>última finalización</option>
-          </select><span class="dd-chev">▾</span></span>
-        </span>
       </div>
       <div class="frow">
         <span class="fl">Urgente</span>
@@ -3485,20 +3490,22 @@ const Tasks = (() => {
                       dates: useDays ? monthDays.slice() : [] }
       };
     }
+    // 23:59:59.999 del día en que empieza la tarea.
+    function endOfStartDay(){ return endOfDayMs(dateKey(new Date(startMs))); }
     function dueNow(){
-      if(mode==="enddate") return endMs;
+      if(mode==="enddate") return eod ? endOfStartDay() : endMs;
       return computeDueFrom(previewFields(), startMs, false);
     }
     function periodNow(){
-      if(mode==="enddate") return Math.max(60000, endMs - startMs);
+      if(mode==="enddate") return Math.max(60000, dueNow() - startMs);
       const f=previewFields(), due=dueNow();
       return Math.max(60000, due - computeStartFor(f, due));
     }
     function paintPreview(){
-      // Sin emoji propio, el campo muestra el de la categoría (y solo si no
-      // lo estás escribiendo en ese momento).
+      // Al crear, sin emoji propio, el campo se queda VACÍO y enseña el "+".
+      // Al editar sí se precarga, porque ahí hay una tarea que ya tiene icono.
       const ei=$("#ctEmoji",sheet);
-      if(ei && !emoji && document.activeElement!==ei) ei.value = Icons.raw(cat);
+      if(ei && !emoji && document.activeElement!==ei) ei.value = editing ? Icons.raw(cat) : "";
       const pv=$("#ctPv",sheet), arc=$("#ctPvArc",sheet);
       const due=dueNow(), period=periodNow(), now=Date.now();
       const start=due-period;
@@ -3530,15 +3537,11 @@ const Tasks = (() => {
       });
       emjInput.addEventListener("focus", ()=> emjInput.select());
       emjInput.addEventListener("blur", ()=>{
-        if(!emjInput.value.trim()){ emoji=""; emjInput.value = Icons.raw(cat); }
+        // Vacío significa "el de la categoría": se guarda vacío y taskEmoji()
+        // se encarga de heredarlo. Al crear se deja el "+" a la vista.
+        if(!emjInput.value.trim()){ emoji=""; emjInput.value = editing ? Icons.raw(cat) : ""; }
       });
     }
-    const emjRow=$("#ctEmjRow",sheet);
-    if(emjRow) $$(".emj",emjRow).forEach(b=> b.onclick=()=>{
-      emoji=b.getAttribute("data-e"); haptic();
-      $$(".emj",emjRow).forEach(x=>x.classList.toggle("sel",x===b));
-      paintPreview();
-    });
     const durSel=$("#ctDur",sheet);
     durSel.onchange=()=>{ dur=+durSel.value; haptic(); fitSelectWidth(durSel); };
     [catSel,durSel].forEach(fitSelectWidth);
@@ -3549,12 +3552,12 @@ const Tasks = (() => {
       $("#ctIntervalRow",sheet).style.display   = mode==="interval"?"flex":"none";
       $("#ctEndRow",sheet).style.display        = mode==="enddate"?"flex":"none";
       $("#ctRepeatRow",sheet).style.display     = mode==="interval"?"flex":"none";
-      $("#ctRepeatFromRow",sheet).style.display = (mode==="interval"&&repeats)?"flex":"none";
       const on = (mode==="interval"&&repeats);
       $("#ctIntervalRow",sheet).style.display   = (mode==="interval"&&!byDays)?"flex":"none";
       $("#ctByDaysRow",sheet).style.display     = on?"flex":"none";
       $("#ctDaysPick",sheet).style.display      = (on&&byDays)?"block":"none";
-      $("#ctRepeatFromRow",sheet).style.display = (on&&!byDays)?"flex":"none";
+      $("#ctEodRow",sheet).style.display        = (mode==="enddate")?"flex":"none";
+      $("#ctEndRow",sheet).style.display        = (mode==="enddate"&&!eod)?"flex":"none";
     }
     $$(".seg",modeWrap).forEach(el=> el.onclick=()=>{
       mode=el.getAttribute("data-m"); haptic();
@@ -3580,9 +3583,9 @@ const Tasks = (() => {
 
     const swRep=$("#ctRepeats",sheet);
     swRep.onclick=()=>{ repeats=!repeats; swRep.classList.toggle("on",repeats); haptic(); syncRows(); validate(); };
-    const rfSel=$("#ctRepeatFrom",sheet);
-    rfSel.onchange=()=>{ repeatFrom=rfSel.value; haptic(); fitSelectWidth(rfSel); };
-    fitSelectWidth(rfSel);
+    const swEod=$("#ctEod",sheet);
+    if(swEod) swEod.onclick=()=>{ eod=!eod; swEod.classList.toggle("on",eod); haptic();
+      syncRows(); paintPreview(); validate(); };
     syncRows();
     const renderDays = ()=>{ const w=$("#ctDays",sheet); if(!w) return; w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
@@ -3621,7 +3624,7 @@ const Tasks = (() => {
     // La fecha de finalización tiene que ir DESPUÉS del inicio; si no, el
     // intervalo sería negativo y el anillo no significaría nada.
     function validate(){
-      saveBtn.disabled = !titleInput.value.trim() || (mode==="enddate" && endMs<=startMs);
+      saveBtn.disabled = !titleInput.value.trim() || (mode==="enddate" && !eod && endMs<=startMs);
     }
     titleInput.addEventListener("input", ()=>{ validate(); paintPreview(); });
     validate(); paintPreview();
@@ -3640,7 +3643,9 @@ const Tasks = (() => {
       // recordatorios (qué días toca), el calendario y las tareas compartidas.
       // Ahora se DEDUCE del intervalo en vez de elegirse a mano.
       const endMode = (mode==="enddate");
-      const periodMs = endMode ? Math.max(60000, endMs - startMs)
+      const eodMode = endMode && eod;
+      const endTarget = eodMode ? endOfDayMs(dateKey(new Date(startMs))) : endMs;
+      const periodMs = endMode ? Math.max(60000, endTarget - startMs)
                                : Math.max(60000, dueN * (UNIT_MS[dueUnit]||UNIT_MS.day));
       const willRepeat = endMode ? false : repeats;
       // Los días marcados solo cuentan si el interruptor está activo y la
@@ -3655,14 +3660,14 @@ const Tasks = (() => {
       const rec = {type:recType, days:outDays, dates:outDates};
       const dueFields = {
         emoji: emoji || null,
-        startAt:startMs, repeats:willRepeat, repeatFrom, endMode, dueVer:3,
+        startAt:startMs, repeats:willRepeat, repeatFrom, endMode, eodMode, dueVer:3,
         dueN: endMode ? Math.max(1,Math.round(periodMs/60000)) : dueN,
         dueUnit: endMode ? "minute" : dueUnit,
         recurrence: rec
       };
       // Con días marcados manda el próximo día marcado (00:00 → 23:59), no la
       // suma del intervalo; y el arranque se ajusta a esa misma ventana.
-      dueFields.dueAt   = endMode ? endMs : computeDueFrom(dueFields, startMs, false);
+      dueFields.dueAt   = endMode ? endTarget : computeDueFrom(dueFields, startMs, false);
       dueFields.startAt = endMode ? startMs : computeStartFor(dueFields, dueFields.dueAt);
       const reminder = remind ? { time: (remindTime||"09:00") } : null;
       const newId = uid();
