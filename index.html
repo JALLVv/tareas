@@ -602,10 +602,10 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
    ========================================================================= */
 .profile-head{display:flex;flex-direction:row;align-items:center;text-align:left;
   gap:var(--gap);padding:0 2px var(--gap);}
-.ph-id{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
-.avatar{width:88px;height:88px;border-radius:50%;flex:0 0 auto;
+.ph-id{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:8px;}
+.avatar{width:104px;height:104px;border-radius:50%;flex:0 0 auto;
   background:linear-gradient(145deg,#5E5CE6,#0A84FF);
-  display:grid;place-items:center;font-size:34px;font-weight:800;color:#fff;
+  display:grid;place-items:center;font-size:40px;font-weight:800;color:#fff;
   overflow:hidden;position:relative;}
 .avatar img{width:100%;height:100%;object-fit:cover;}
 .avatar .edit-badge{position:absolute;bottom:1px;right:1px;width:29px;height:29px;border-radius:50%;
@@ -620,16 +620,19 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
    dato y una acción que no se puede deshacer. */
 .ph-name-row{display:flex;align-items:center;gap:10px;width:100%;min-width:0;}
 .ph-name-row .profile-name{flex:0 1 auto;}
-.ph-del{flex:0 0 auto;margin-left:auto;padding:5px 11px;font-size:11.5px;}
 .ph-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
 .phc{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:var(--radius-pill);
   background:var(--card);font-size:12px;font-weight:700;color:var(--label);}
 .phc .emoji{font-size:13px;}
 .phc.fire b{color:var(--orange);}
 .phc.pts{color:var(--yellow);}
-.rank-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:var(--radius-pill);
-  background:var(--card);color:var(--yellow);font-size:12px;font-weight:700;}
-.rank-badge svg{width:14px;height:14px;}
+/* El rango va en su propia línea y con más cuerpo que las cifras: es la
+   etiqueta que mejor resume dónde estás, y compartiendo fila con la racha y
+   los puntos parecía un dato más. */
+.rank-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;
+  border-radius:var(--radius-pill);background:var(--card);
+  font-size:14px;font-weight:800;letter-spacing:var(--track-body);}
+.rank-badge svg{width:19px;height:19px;flex:0 0 auto;}
 
 .rank-card{margin-top:0;padding:13px var(--pad) 14px;}
 .rank-row{display:flex;align-items:baseline;justify-content:flex-start;margin-bottom:9px;}
@@ -973,10 +976,10 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
   color:var(--label-2);margin-bottom:var(--gap);opacity:0;transform:translateY(10px);}
 .rankup.show .eyebrow{animation:riIn .5s .15s var(--ease-out) forwards;}
 .rankup .badge{width:126px;height:126px;border-radius:50%;display:grid;place-items:center;
-  margin-bottom:var(--gap-lg);background:linear-gradient(145deg,#FFD60A,#FF9F0A);
+  margin-bottom:var(--gap-lg);background:#101014;
   transform:scale(0.92) rotate(-30deg);opacity:0;}
 .rankup.show .badge{animation:riBadge .7s .2s var(--ease) forwards;}
-.rankup .badge svg{width:60px;height:60px;color:#000;}
+.rankup .badge svg{width:66px;height:66px;}
 .rankup .rk{font-size:34px;font-weight:900;letter-spacing:var(--track-display);opacity:0;transform:translateY(14px);}
 .rankup.show .rk{animation:riIn .5s .45s var(--ease-out) forwards;}
 .rankup .desc{font-size:15px;color:var(--label-2);margin-top:8px;font-weight:500;opacity:0;}
@@ -1133,10 +1136,10 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
         <div class="profile-name" id="profileName">Atleta <svg class="pen" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 18l-1 3 3-1L19 8l-2-2zM15 5l2 2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <!-- Racha y puntos junto al nombre: son dos cifras, no dos secciones.
              Ocupaban una tarjeta entera cada una para decir un número. -->
+        <span class="rank-badge" id="rankBadge"></span>
         <div class="ph-chips">
           <span class="phc fire"><span class="emoji">🔥</span><b id="phStreak">0</b></span>
           <span class="phc pts"><b id="phPoints">0</b> pts</span>
-          <span class="rank-badge" id="rankBadge"></span>
         </div>
       </div>
     </div>
@@ -1241,7 +1244,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v138";
+const APP_VERSION = "v139";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3122,7 +3125,7 @@ const Tasks = (() => {
     if(filter==="done"){ renderDone(); return; }
     const wrap = $("#taskListWrap");
     const s = Store.get();
-    let list = s.tasks.filter(t=> (View.showDone || !isDoneToday(t)) && scheduledToday(t));
+    let list = s.tasks.filter(t=> !isDoneToday(t) && scheduledToday(t));
     // Urgentes primero SIEMPRE; dentro de cada grupo, el orden que hayas elegido.
     const cmp = {
       due:     (a,b)=> taskDueAt(a) - taskDueAt(b),
@@ -3904,7 +3907,7 @@ const Profile = (() => {
 
   function render(){
     const s = Store.get();
-    const {rank,next} = rankFor(s.points);
+    const {rank,next,index:idx} = rankFor(s.points);
 
     // cabecera
     $("#avatarInitial").textContent = (s.profile.name||"A").trim().charAt(0).toUpperCase() || "A";
@@ -3916,7 +3919,9 @@ const Profile = (() => {
     } else { if(existing) existing.remove(); $("#avatarInitial").style.display="block"; }
 
     $("#profileName").innerHTML = `${esc(s.profile.name||"Atleta")} <svg class="pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18l-1 3 3-1L19 8l-2-2zM15 5l2 2"/></svg>`;
-    $("#rankBadge").innerHTML = `${trophySvg()} ${rank.name}`;
+    const rb=$("#rankBadge");
+    rb.innerHTML = `${gemSvg(idx)} ${rank.name}`;
+    rb.style.color = gemFor(idx).hi;   // el rótulo toma el color del mineral
 
     // tarjeta de rango
     $("#rankNow").textContent = rank.name;
@@ -3924,11 +3929,13 @@ const Profile = (() => {
       const span = next.min - rank.min;
       const prog = Math.max(0,Math.min(1,(s.points - rank.min)/span));
       $("#rankBar").style.width = (prog*100)+"%";
+      $("#rankBar").style.background = gemFor(idx).color;
       $("#rankNext").textContent = "Siguiente: "+next.name;
       $("#rankPts").textContent = s.points+" pts";
       $("#rankRemain").textContent = (next.min - s.points)+" pts para subir";
     } else {
       $("#rankBar").style.width="100%";
+      $("#rankBar").style.background = gemFor(idx).color;
       $("#rankNext").textContent = "Rango máximo";
       $("#rankPts").textContent = s.points+" pts";
       $("#rankRemain").textContent = "¡Eres una leyenda!";
@@ -3942,7 +3949,7 @@ const Profile = (() => {
     // cifra sea correcta aunque no haya animación.
     const setNum=(sel,val)=>{ const e=$(sel); if(!e) return;
       e.setAttribute("data-count", val); e.textContent = val; };
-    setNum("#phStreak", s.streak.current);
+    const st=$("#phStreak"); if(st){ st.removeAttribute("data-count"); st.textContent = s.streak.current; }
     setNum("#phPoints", s.points);
     setNum("#stTotal",  total);
     setNum("#stRandom", rnd);
@@ -5199,6 +5206,29 @@ const Friends = (() => {
     setTimeout(()=>{ try{ input.focus({preventScroll:true}); }catch(_){ input.focus(); } },350);
   }
 
+  function confirmRemoveFriend(f){
+    Sheets.show(`
+      <div class="grabber"></div>
+      <div class="sheet-head"><span class="act cancel" id="rfCancel">Cancelar</span><span class="title">Eliminar amigo</span><span class="act" style="opacity:0">•</span></div>
+      <div class="sheet-body photo-modal">
+        <div class="ico danger">${trashSvg()}</div>
+        <h3>¿Eliminar a ${esc(f.name)}?</h3>
+        <p>Dejaréis de ver vuestros perfiles y la amistad se borra <b>para los dos</b>. No se puede deshacer.</p>
+        <button class="btn danger" id="rfGo">Sí, eliminar</button>
+        <button class="btn ghost" id="rfNo" style="margin-top:10px">Cancelar</button>
+      </div>`);
+    const back=()=>openProfile(f);
+    $("#rfCancel").onclick=back;
+    $("#rfNo").onclick=back;
+    $("#rfGo").onclick=async ()=>{
+      haptic(20); stopPoll();
+      if(f.cloudId) removedFriends.add(f.cloudId);                 // bloquea re-añadir hasta confirmar
+      Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); });
+      UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); // instantáneo, sin el amigo
+      if(f.cloudId) await Cloud.removeFriendCloud(f.cloudId);       // borra la amistad para ambos
+    };
+  }
+
   function openProfile(f, fetched, restoreScrollTop, initialMonth){
     const myGen = fetched ? gen : ++gen; // vista nueva salvo que sea el re-pintado tras refrescar
     loadMyShared(); // refresca mis tareas compartidas para anotar "Contigo"
@@ -5229,12 +5259,11 @@ const Friends = (() => {
           <div class="ph-id">
             <div class="ph-name-row">
               <div class="profile-name">${esc(f.name)}</div>
-              <button class="mini-btn danger ph-del" id="fpDel">Eliminar amigo</button>
             </div>
+            <span class="rank-badge" style="color:${gemFor(rankFor(fv.points).index).hi}">${gemSvg(rankFor(fv.points).index)} ${esc(rankFor(fv.points).rank.name)}</span>
             <div class="ph-chips">
-              <span class="phc fire"><span class="emoji">🔥</span><b data-count="${fv.streak.current}">0</b></span>
+              <span class="phc fire"><span class="emoji">🔥</span><b>${fv.streak.current}</b></span>
               <span class="phc pts"><b data-count="${fv.points}">0</b> pts</span>
-              <span class="rank-badge">${trophySvg()} ${esc(rankFor(fv.points).rank.name)}</span>
             </div>
           </div>
         </div>
@@ -5254,18 +5283,18 @@ const Friends = (() => {
           <div class="cal-dow-row" id="fpDow"></div>
           <div class="cal-weeks" id="fpGrid"></div>
         </div>
+        <!-- Al final del todo: hay que recorrer el perfil entero para llegar
+             hasta aquí, que es lo que corresponde a algo que no se deshace. -->
+        <button class="btn danger ghost" id="fpDel" style="margin-top:18px">${trashSvg()} Eliminar amigo</button>
       </div>`);
     // Solo al ABRIR de verdad, no en los repintados del sondeo en vivo: ver
     // los números reiniciarse cada 8 segundos sería un tic, no una animación.
     if(!fetched) animateCounters($("#sheet"), 700);
     $("#fpBack").onclick=openSheet;
     $("#fpClose").onclick=()=>{ stopPoll(); Sheets.close(); };
-    $("#fpDel").onclick=async ()=>{ haptic(20); stopPoll();
-      if(f.cloudId) removedFriends.add(f.cloudId);                 // bloquea re-añadir hasta confirmar
-      Store.update(s=>{ s.friends=s.friends.filter(x=>x.id!==f.id); });
-      UI.toast("Amigo eliminado","check","var(--red)"); openSheet(); // instantáneo, sin el amigo
-      if(f.cloudId) await Cloud.removeFriendCloud(f.cloudId);       // borra la amistad para ambos
-    };
+    // Eliminar a un amigo lo borra para LOS DOS y no se puede deshacer: se
+    // pregunta siempre, y el botón que confirma no es el que estabas tocando.
+    $("#fpDel").onclick=()=>{ haptic(); confirmRemoveFriend(f); };
     if(fpWs.available){ const wb=$("#fpWeekBtn"); if(wb) wb.onclick=()=>{ haptic(); openWeekSummarySheet(fpWs, {mine:false}); }; }
     function draw(){
       const y=cal.getFullYear(), m=cal.getMonth();
@@ -5306,7 +5335,7 @@ const Friends = (() => {
       if(!fr) return;
       const updated={ ...f, ...fr };
       Store.update(s=>{ const i=s.friends.findIndex(x=>x.id===f.id); if(i>=0) s.friends[i]=updated; });
-      const open = $("#scrim").classList.contains("show") && $("#fpDel"); // sheet aún abierto en este perfil
+      const open = $("#scrim").classList.contains("show") && $("#fpGrid"); // sheet aún abierto en este perfil
       if(gen!==myGen || !open || fsig(updated)===fsig(f)) return; // navegó/cerró o nada cambió
       stopPoll(); openProfile(updated, true, liveScroll, {y:cal.getFullYear(), m:cal.getMonth()});
     };
@@ -5316,7 +5345,7 @@ const Friends = (() => {
     stopPoll();
     if(f.cloudId){
       pollTimer=setInterval(()=>{
-        if(gen!==myGen || !$("#scrim").classList.contains("show") || !$("#fpDel")){ stopPoll(); return; }
+        if(gen!==myGen || !$("#scrim").classList.contains("show") || !$("#fpGrid")){ stopPoll(); return; }
         Cloud.pullFriend(f.cloudId).then(fr=>{ if(gen===myGen) applyFresh(fr); });
       }, 5000);
     }
@@ -5563,7 +5592,46 @@ const Notifs = (() => {
   function init(){ const b=$("#notifBtn"); if(b) b.onclick=openSheet; updateBadge(); }
   return { init, refresh, openSheet, updateBadge };
 })();
-function trophySvg(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2h3v2a4 4 0 01-4 4h-.3A5 5 0 0113 14.9V17h2.5a1 1 0 011 1v1H7.5v-1a1 1 0 011-1H11v-2.1A5 5 0 018.3 12H8a4 4 0 01-4-4V6h3zM6 6v2a2 2 0 002 2V6zm12 0v4a2 2 0 002-2V6z"/></svg>';}
+/* ---------------------------------------------------------------------
+   GEMAS DE LIGA
+   Cada rango es un mineral distinto. El reparto de trabajo entre forma y
+   color es deliberado: a 14 px las facetas interiores desaparecen, así que
+   quien distingue la liga de un vistazo es el COLOR; a tamaño grande son las
+   facetas las que cuentan la progresión (piedra sin tallar → tallada → con
+   destello). Si lo fiara todo a la forma, el icono pequeño sería ilegible;
+   si lo fiara todo al color, el grande no diría nada.
+   --------------------------------------------------------------------- */
+const GEMS = [
+  {name:"Piedra",    color:"#7C838E", hi:"#A7AEB9"},
+  {name:"Bronce",    color:"#C07A38", hi:"#E8A868"},
+  {name:"Plata",     color:"#AFB9C7", hi:"#E8EFF7"},
+  {name:"Oro",       color:"#DFAE35", hi:"#FBE083"},
+  {name:"Esmeralda", color:"#2FB177", hi:"#7BE8B6"},
+  {name:"Rubí",      color:"#D8425D", hi:"#FF8598"},
+  {name:"Diamante",  color:"#57C9E2", hi:"#C2F2FB"}
+];
+const gemFor = (i)=> GEMS[Math.max(0, Math.min(GEMS.length-1, i|0))];
+function gemSvg(i){
+  const g = gemFor(i), n = Math.max(0, Math.min(GEMS.length-1, i|0));
+  // Sin tallar: un pedrusco. Es el único asimétrico, y esa silueta irregular
+  // es lo que lo separa de las gemas incluso a 14 px, donde no se ve otra cosa.
+  if(n===0) return `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7.6 4.4 14.2 3.5 20.4 7.9 18.4 15.4 11.4 20.3 4 15.1 2.9 8.9Z"
+          fill="${g.color}" stroke="${g.hi}" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+  // Tallada. Cuantas más facetas, más alta la liga.
+  const f = [];
+  if(n>=1) f.push("M2.4 9.4H21.6");                    // mesa
+  if(n>=3) f.push("M8 9.4 12 20.8","M16 9.4 12 20.8"); // pabellón
+  if(n>=5) f.push("M5.4 4 8 9.4","M18.6 4 16 9.4");    // corona
+  const spark = n>=6
+    ? `<path d="M19.7 1.6l.62 1.72 1.72.62-1.72.62-.62 1.72-.62-1.72-1.72-.62 1.72-.62z" fill="#fff" opacity=".92"/>`
+    : "";
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5.4 4H18.6L21.6 9.4L12 20.8L2.4 9.4Z"
+          fill="${g.color}" stroke="${g.hi}" stroke-width="1.2" stroke-linejoin="round"/>
+    ${f.length?`<g stroke="${g.hi}" stroke-width="1" stroke-linecap="round" fill="none" opacity=".7"><path d="${f.join(" ")}"/></g>`:""}
+    ${spark}</svg>`;
+}
 
 /* =====================================================================
    TRANSFERENCIA — mover la cuenta y los datos a otra instalación.
@@ -6086,13 +6154,11 @@ const Router = (() => {
     const check = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>`;
     const gridIc = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></svg>`;
     const listIc = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>`;
-    const eyeIc  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>`;
     const row = (on,ic,lbl,attr,extra="") =>
       `<button class="vm-item" ${attr}><span class="vm-check">${on?check:""}</span><span class="vm-ic">${ic}</span><span class="vm-lbl">${lbl}</span>${extra}</button>`;
     return row(View.mode==="grid", gridIc, "Cuadrícula", 'data-set="mode" data-val="grid"')
          + row(View.mode==="list", listIc, "Lista",      'data-set="mode" data-val="list"')
          + `<div class="vm-sep"></div>`
-         + row(View.showDone, eyeIc, "Mostrar completados", 'data-toggle="showDone"')
          + row(false, "", "Orden: "+esc(View.sortLabel()), 'data-sort="1"', '<span class="vm-chev">›</span>');
   }
   function buildSortMenu(){
@@ -6136,14 +6202,14 @@ const Router = (() => {
    ===================================================================== */
 const View = (() => {
   const KEY="rachas_view_v1";
-  const def={ mode:"grid", showDone:false, sort:"due" };
+  const def={ mode:"grid", sort:"due" };
   let v;
   try{ v = Object.assign({}, def, JSON.parse(localStorage.getItem(KEY))||{}); }
   catch(e){ v = Object.assign({}, def); }
   const save = ()=>{ try{ localStorage.setItem(KEY, JSON.stringify(v)); }catch(e){} };
   const SORTS = [["due","Fecha de vencimiento"],["name","Nombre"],["created","Creación"]];
   return {
-    get mode(){return v.mode;}, get showDone(){return v.showDone;}, get sort(){return v.sort;},
+    get mode(){return v.mode;}, get sort(){return v.sort;},
     sortLabel(){ return (SORTS.find(x=>x[0]===v.sort)||SORTS[0])[1]; },
     SORTS,
     set(k,val){ v[k]=val; save(); }
@@ -6190,10 +6256,12 @@ const UI = (() => {
   function rankUp(rank){
     haptic([20,60,20,60]);
     confetti();
+    const idx = RANKS.findIndex(r=>r.name===rank.name);
+    const g = gemFor(idx<0?0:idx);
     const o=el("div","rankup show");
     o.innerHTML=`
       <div class="eyebrow">Nuevo rango</div>
-      <div class="badge">${trophySvg()}</div>
+      <div class="badge" style="background:radial-gradient(circle at 50% 36%, ${g.color}40, #101014 72%);box-shadow:0 0 0 2px ${g.color}59, 0 20px 52px -16px ${g.color}">${gemSvg(idx)}</div>
       <div class="rk">${esc(rank.name)}</div>
       <div class="desc">${esc(rank.desc)}</div>
       <button class="cont">Continuar</button>`;
@@ -6436,7 +6504,7 @@ window.addEventListener("pageshow",(e)=>{ if(e.persisted) repaintNudge(); });
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) repaintNudge(); });
 
 // exponer para depuración
-window.RachasApp = { Store, Router, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
+window.RachasApp = { Store, Router, UI, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
 })();
 </script>
 </body>
