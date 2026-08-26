@@ -1260,7 +1260,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v145";
+const APP_VERSION = "v146";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -6259,8 +6259,15 @@ const Lightbox = (() => {
     if(cChip){ cChip.style.display="flex";
       cChip.innerHTML=`<span>Respondiendo a <b>${esc(name)}</b></span><span class="x" id="lbCCancel">Cancelar</span>`;
       const cx=$("#lbCCancel"); if(cx) cx.onclick=()=>{ haptic(); clearReply(); }; }
-    if(cInput){ cInput.placeholder=`Responder a ${name}…`;
-      try{ cInput.focus({preventScroll:true}); }catch(_){ cInput.focus(); } }
+    if(cInput){
+      cInput.placeholder=`Responder a ${name}…`;
+      cInput.focus();                      // sin preventScroll: que lo acerque
+      keepInputVisible();                  // por si el teclado ya estaba abierto
+      // El teclado no aparece al instante; visualViewport avisa cuando ocupa
+      // sitio, y estos reintentos cubren los navegadores que no lo implementan.
+      setTimeout(keepInputVisible, 120);
+      setTimeout(keepInputVisible, 380);
+    }
   }
   function clearReply(){
     replyTo=null;
@@ -6275,6 +6282,36 @@ const Lightbox = (() => {
     if(sig!==lastSig){ lastSig=sig; renderComments(list); } // solo re-pinta si cambió (evita parpadeo)
   }
   function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
+  /* TECLADO. iOS no encoge el layout al abrirlo: encoge solo el viewport
+     VISUAL. El campo se queda donde estaba, tapado, y el contenedor no tiene
+     a dónde bajar porque su alto no ha cambiado — por eso hacía falta cerrar y
+     reabrir el teclado para verlo. Se hacen las dos cosas: se le añade abajo el
+     hueco que ocupa el teclado (así hay sitio al que desplazarse) y se desplaza
+     lo justo para dejar el campo por encima de él.
+
+     Va atado a visualViewport y no al focus a secas porque el teclado tarda en
+     aparecer: en el momento del focus todavía no se sabe cuánto ocupa. */
+  const vv = window.visualViewport || null;
+  function keyboardInset(){
+    if(!vv) return 0;
+    return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  }
+  function keepInputVisible(){
+    if(!cInput || !scroll || !box.classList.contains("show")) return;
+    const kb = keyboardInset();
+    scroll.style.paddingBottom = kb
+      ? `calc(env(safe-area-inset-bottom) + 20px + ${kb}px)` : "";
+    // Solo se corrige el desplazamiento si el foco está en el campo: si no,
+    // se le estaría moviendo la lista a alguien que está leyendo.
+    if(document.activeElement !== cInput) return;
+    const over = cInput.getBoundingClientRect().bottom + 14 - (window.innerHeight - kb);
+    if(over > 0) scroll.scrollTop += over;
+  }
+  function watchKeyboard(on){
+    if(!vv) return;
+    if(on){ vv.addEventListener("resize", keepInputVisible); vv.addEventListener("scroll", keepInputVisible); }
+    else  { vv.removeEventListener("resize", keepInputVisible); vv.removeEventListener("scroll", keepInputVisible); }
+  }
   function show(data,h){
     h=h||{};
     img.src=data; t.textContent=h.title||"";
@@ -6284,6 +6321,7 @@ const Lightbox = (() => {
     curKey = (h.sharedId || h.id || h.key) || null; // clave de la completada
     curOwner = h.ownerId || null; curPhoto = (typeof data==="string" && data.indexOf("http")===0) ? data : (h.photoUrl||null);
     curGen++; lastSig=""; cList.innerHTML=""; clearReply();
+    scroll.style.paddingBottom=""; watchKeyboard(true);
     stopPoll();
     if(curKey && Cloud.enabled()){
       cWrap.style.display="block"; load(curKey, curGen);
@@ -6291,7 +6329,9 @@ const Lightbox = (() => {
       const g=curGen; pollTimer=setInterval(()=>{ if(g!==curGen || !box.classList.contains("show")){ stopPoll(); return; } load(curKey, g); }, 5000);
     } else { cWrap.style.display="none"; }
   }
-  function hide(){ box.classList.remove("show"); curKey=null; curOwner=null; curGen++; stopPoll(); clearReply(); if(cInput) cInput.value="";
+  function hide(){ box.classList.remove("show"); curKey=null; curOwner=null; curGen++; stopPoll(); clearReply();
+    watchKeyboard(false); if(scroll) scroll.style.paddingBottom="";
+    if(cInput) cInput.value="";
     // limpiar la foto/comentarios anteriores para que al abrir otra tarea NO se
     // vea por un instante la que se abrió antes (evita el "arrastre" visual).
     img.removeAttribute("src"); t.textContent=""; m.textContent=""; if(cList) cList.innerHTML=""; lastSig=""; }
@@ -6308,6 +6348,10 @@ const Lightbox = (() => {
   }
   if(cSend) cSend.onclick=send;
   if(cInput) cInput.addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefault(); send(); } });
+  if(cInput){
+    cInput.addEventListener("focus", ()=>{ keepInputVisible(); setTimeout(keepInputVisible,120); setTimeout(keepInputVisible,380); });
+    cInput.addEventListener("blur",  ()=>{ if(scroll) scroll.style.paddingBottom=""; });
+  }
   return { show, hide };
 })();
 
