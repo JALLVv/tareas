@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v149";
+const APP_VERSION = "v150";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2078,7 +2078,7 @@ function occurrencesOf(t, now){
   for(let i=0;i<10;i++){
     const k = addDaysKey(hoy,-i);
     if(!isMarkedKey(t,k)) continue;
-    const start = startOfDayMs(k), due = endOfDayMs(k);
+    const start = occStartMs(t, k), due = endOfDayMs(k);
     if(due < nacio) break;
     const period = Math.max(60000, due-start);
     if(now < start) continue;
@@ -2094,9 +2094,18 @@ function computeDueFrom(t, fromMs, strict){
   }
   return fromMs + taskPeriod(t||{});
 }
+/* A qué hora empieza el día de una tarea. Por defecto a las 00:00, pero se
+   puede elegir: una tarea de "todos los días a partir de las 14:00" no debería
+   nacer a medianoche con medio anillo ya gastado. Se guarda en minutos desde
+   medianoche para que no dependa de husos ni de formatos. */
+const startMinutes = (t)=>{
+  const m = t && t.startHour;
+  return (typeof m === "number" && m > 0 && m < 1440) ? Math.round(m) : 0;
+};
+const occStartMs = (t, k)=> startOfDayMs(k) + startMinutes(t)*60000;
 // Arranque de la ventana que termina en dueMs.
 function computeStartFor(t, dueMs){
-  if(markedDays(t)) return startOfDayMs(dateKey(new Date(dueMs)));
+  if(markedDays(t)) return occStartMs(t, dateKey(new Date(dueMs)));
   return dueMs - taskPeriod(t||{});
 }
 function taskDueAt(t){
@@ -3208,7 +3217,7 @@ const Tasks = (() => {
         for(let i=1;i<=10;i++){
           const k = addDaysKey(hoy,-i);
           if(!isMarkedKey(t,k)) continue;
-          const due = endOfDayMs(k), period = Math.max(60000, due - startOfDayMs(k));
+          const due = endOfDayMs(k), period = Math.max(60000, due - occStartMs(t,k));
           if(due < nacio) break;                                                  // antes de existir
           if(now < due + period) continue;                                        // su rojo no está lleno
           if((t.penalizedKeys||[]).includes(k)) continue;                         // ya cobrado
@@ -3518,19 +3527,30 @@ const Tasks = (() => {
     const nodes = $$("[data-ring]");
     if(!nodes.length){ clearInterval(ringClock); ringClock=null; return; }
     const tasks = Store.get().tasks;
+    let falta=false;
     nodes.forEach(el=>{
       const t = tasks.find(x=>x.id===el.getAttribute("data-ring"));
       if(!t) return;
-      const st  = ringState(t);
+      const tile = el.closest(".tile, .tilerow");
+      /* Cada ficha lleva SU día. Repintar con la ventana de la tarea le ponía
+         el mismo reloj a todas las fichas de una misma tarea —y encima el de la
+         tarea, que con días marcados se quedó en el día en que se guardó—: dos
+         fichas idénticas, las dos vencidas y con la misma cuenta imposible.
+         Pasaba a los 30 s, o al instante al volver a la app. */
+      const k = tile ? (tile.getAttribute("data-occ")||"") : "";
+      const occ = k ? occurrencesOf(t).find(o=>o.key===k) : null;
+      if(k && !occ){ falta=true; return; }   // ese día ya caducó: hay que repintar la lista
+      const st  = ringState(occ || t);
       const arc = el.querySelector(".ring-arc");
       if(arc) arc.setAttribute("stroke-dashoffset", ringOffset(st.frac));
-      const tile = el.closest(".tile, .tilerow");
       if(tile){
         tile.classList.toggle("over", st.over);
         const due = tile.querySelector(".tile-due");
         if(due) due.textContent = dueLabel(st.due);
       }
     });
+    // Una ocurrencia que caduca mientras miras no se puede quedar dibujada.
+    if(falta) render();
   }
   function startRingClock(){
     if(ringClock) clearInterval(ringClock);
@@ -3646,6 +3666,9 @@ const Tasks = (() => {
     let kind       = (editing && existing.repeats) ? "repeat" : "once";
     let dayMode    = (editing && existing.recurrence && (existing.recurrence.dates||[]).length) ? "month" : "week";
     let onceWhen   = "today";
+    // Hora a la que arranca el día de la tarea. 0 = medianoche, como siempre.
+    let startHour  = (editing && typeof existing.startHour === "number") ? existing.startHour : 0;
+    const hhmm = (m)=> String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
     if(editing && !existing.repeats){
       if(!existing.endMode) onceWhen = "in";                 // ventana que rueda
       else if(existing.eodMode){
@@ -3792,6 +3815,13 @@ const Tasks = (() => {
         </div>
       </div>
 
+      <!-- Una hora propia para el arranque del día. Sirve igual a la de "hoy"
+           que a las que se repiten: "todos los días a partir de las 14:00" no
+           debería nacer a medianoche con medio anillo ya gastado. -->
+      <div class="frow" id="ctHourRow">
+        <span class="fl">Empieza a las</span>
+        <span class="fval"><input type="time" class="chipv" id="ctStartHour" value="${esc(hhmm(startHour))}"/></span>
+      </div>
       <div class="frow">
         <span class="fl">Urgente</span>
         <div class="switch${urgent?" on":""}" id="ctUrgent"><div class="knob"></div></div>
@@ -3851,17 +3881,19 @@ const Tasks = (() => {
         if(byDays){
           if(dayMode==="week"){
             if(!days.length) return "Elige al menos un día";
-            if(days.length===7) return "Todos los días, de 00:00 a 23:59";
-            return enumerar(days.slice().sort((a,b)=>a-b).map(i=>DAYS_LONG[i])).replace(/^./,c=>c.toUpperCase())+", de 00:00 a 23:59";
+            if(days.length===7) return "Todos los días, de "+hhmm(startHour)+" a 23:59";
+            return enumerar(days.slice().sort((a,b)=>a-b).map(i=>DAYS_LONG[i])).replace(/^./,c=>c.toUpperCase())+", de "+hhmm(startHour)+" a 23:59";
           }
           if(!monthDays.length) return "Elige al menos un día";
           return "Los días "+enumerar(monthDays.slice().sort((a,b)=>a-b).map(String))+" de cada mes";
         }
-        if(dueN===1 && dueUnit==="day") return "Todos los días, de 00:00 a 23:59";
+        if(dueN===1 && dueUnit==="day") return "Todos los días, de "+hhmm(startHour)+" a 23:59";
         return "Cada "+dueN+" "+unitLabel(dueUnit,dueN).toLowerCase();
       }
-      if(onceWhen==="today")    return "Una vez · hoy, hasta las 23:59";
-      if(onceWhen==="tomorrow") return "Una vez · mañana, de 00:00 a 23:59";
+      if(onceWhen==="today")    return startHour
+        ? "Una vez · hoy, de "+hhmm(startHour)+" a 23:59"
+        : "Una vez · hoy, hasta las 23:59";
+      if(onceWhen==="tomorrow") return "Una vez · mañana, de "+hhmm(startHour)+" a 23:59";
       if(onceWhen==="in")       return "Una vez · dentro de "+dueN+" "+unitLabel(dueUnit,dueN).toLowerCase();
       return "Una vez · entre las fechas que elijas";
     }
@@ -3925,6 +3957,7 @@ const Tasks = (() => {
       show("#ctInRow",     once && onceWhen==="in");
       show("#ctDateRows",  once && onceWhen==="date", "block");
       // dentro de "se repite", los días marcados sustituyen al intervalo
+      show("#ctHourRow",   !once || onceWhen==="today" || onceWhen==="tomorrow");
       show("#ctEveryRow",  !once && !byDays);
       show("#ctByDaysRow", !once);
       show("#ctDaysPick",  !once && byDays, "block");
@@ -3932,8 +3965,8 @@ const Tasks = (() => {
       show("#ctMonthDays", !once && byDays && dayMode==="month", "grid");
       const dh=$("#ctDaysHint",sheet);
       if(dh) dh.textContent = dayMode==="week"
-        ? "Aparecerá esos días a las 00:00 y vencerá a las 23:59 del mismo día."
-        : "Aparecerá esos días de cada mes, de 00:00 a 23:59.";
+        ? "Aparecerá esos días a las "+hhmm(startHour)+" y vencerá a las 23:59 del mismo día."
+        : "Aparecerá esos días de cada mes, de "+hhmm(startHour)+" a 23:59.";
       $$(".seg",$("#ctKind",sheet)).forEach(x=> x.classList.toggle("sel", x.getAttribute("data-k")===kind));
       $$(".chip",$("#ctWhen",sheet)).forEach(x=> x.classList.toggle("sel", x.getAttribute("data-w")===onceWhen));
       const dmw=$("#ctDayMode",sheet);
@@ -3946,8 +3979,12 @@ const Tasks = (() => {
        que es cuando el día empieza de verdad. Las dos acaban a las 23:59 de su
        propio día, que es lo que hace `eodMode`. */
     function applyWhen(){
-      if(onceWhen==="today")         startMs = Date.now();
-      else if(onceWhen==="tomorrow") startMs = startOfDayMs(addDaysKey(dateKey(),1));
+      // Con hora elegida manda ella; sin ella, "hoy" arranca AHORA (la tarea no
+      // existía esta mañana) y "mañana" a las 00:00, que es cuando empieza.
+      if(onceWhen==="today")
+        startMs = startHour ? (startOfDayMs(dateKey()) + startHour*60000) : Date.now();
+      else if(onceWhen==="tomorrow")
+        startMs = startOfDayMs(addDaysKey(dateKey(),1)) + startHour*60000;
       const sD=$("#ctStartDate",sheet), sT=$("#ctStartTime",sheet);
       if(sD) sD.value = dPart(startMs);
       if(sT) sT.value = tPart(startMs);
@@ -3988,6 +4025,14 @@ const Tasks = (() => {
     });
     repaintUnits();
 
+    const hourIn=$("#ctStartHour",sheet);
+    if(hourIn) hourIn.onchange=()=>{
+      const [h,m]=(hourIn.value||"00:00").split(":").map(Number);
+      startHour = (h||0)*60 + (m||0);
+      // syncRows además de repintar: la pista del selector de días también
+      // nombra la hora, y sin esto se quedaba diciendo 00:00.
+      applyWhen(); syncRows(); paintPreview(); validate();
+    };
     const dmWrap=$("#ctDayMode",sheet);
     if(dmWrap) $$(".seg",dmWrap).forEach(el=> el.onclick=()=>{
       dayMode=el.getAttribute("data-dm"); haptic();
@@ -4074,6 +4119,7 @@ const Tasks = (() => {
       const rec = {type:recType, days:outDays, dates:outDates};
       const dueFields = {
         emoji: emoji.trim(),
+        startHour,
         startAt:startMs, repeats:willRepeat, repeatFrom, endMode, eodMode, dueVer:3,
         dueN: endMode ? Math.max(1,Math.round(periodMs/60000)) : dueN,
         dueUnit: endMode ? "minute" : dueUnit,
@@ -7042,7 +7088,7 @@ window.addEventListener("pageshow",(e)=>{ if(e.persisted) repaintNudge(); });
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) repaintNudge(); });
 
 // exponer para depuración
-window.RachasApp = { Store, Router, UI, Cloud, Lightbox, Notifs, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
+window.RachasApp = { Store, Router, UI, Cloud, Lightbox, Notifs, occurrencesOf, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
 })();
 </script>
 </body>
