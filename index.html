@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v150";
+const APP_VERSION = "v151";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3857,6 +3857,11 @@ const Tasks = (() => {
       const useDays = (mode!=="enddate" && repeats && byDays);
       return {
         repeats: mode==="enddate" ? false : repeats,
+        // Sin la hora de arranque, computeStartFor colocaba la ventana a
+        // medianoche: el anillo de la vista previa medía 24 h donde la tarea
+        // iba a medir desde la hora elegida, y enseñaba un porcentaje que no
+        // era el que se iba a guardar.
+        startHour,
         dueN, dueUnit, repeatFrom,
         recurrence: { type: useDays ? (days.length?"weekly":"monthly") : (repeats?"daily":"once"),
                       days: useDays ? days.slice() : [],
@@ -3907,12 +3912,12 @@ const Tasks = (() => {
       const plus=$("#ctPlus",sheet);     if(plus) plus.style.display = vacio ? "block" : "none";
       const pv=$("#ctPv",sheet), arc=$("#ctPvArc",sheet);
       const due=dueNow(), period=periodNow(), now=Date.now();
-      const start=due-period;
-      const over = now>due;
-      const frac = over ? Math.max(0.05,Math.min(1,(now-due)/period))
-                        : (now<=start ? 1 : Math.max(0,Math.min(1,(due-now)/period)));
-      if(arc) arc.setAttribute("stroke-dashoffset", (RC*(1-frac)).toFixed(2));
-      if(pv) pv.classList.toggle("over", over);
+      // El anillo lo calcula la MISMA función que dibuja los de la lista: tenía
+      // aquí su propia copia de la fórmula, y dos copias acaban separándose.
+      const st = ringState({ start: due-period, due, period });
+      if(arc) arc.setAttribute("stroke-dashoffset", ringOffset(st.frac));
+      if(pv) pv.classList.toggle("over", st.over);
+      const over = st.over;
       const d=$("#ctPvDue",sheet);
       if(d) d.textContent = (over?"vencida hace ":"vence en ")
                           + (()=>{ const ms=Math.abs(due-now), dd=Math.floor(ms/86400000),
