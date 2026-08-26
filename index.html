@@ -466,7 +466,6 @@ img{display:block;}
 #taskFilter{margin-bottom:var(--gap);}
 /* En la hoja de crear, "Intervalo" y "Fecha de finalización" son de largos muy
    distintos: ahí sí se reparte a lo ancho del texto, o la larga no cabría. */
-#ctMode .seg{flex:1 1 auto;}
 
 .switch{position:relative;width:51px;height:31px;border-radius:var(--radius-pill);
   background:var(--card-3);flex:0 0 auto;transition:background var(--t-med) var(--ease-out);}
@@ -858,6 +857,8 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   width:40px;height:40px;color:var(--label-2);pointer-events:none;}
 .ring-plus svg{width:100%;height:100%;display:block;}
 .pv-due{margin-top:4px;font-size:14px;color:var(--label-2);}
+.pv-shape{margin-top:6px;font-size:13px;font-weight:600;color:var(--label-3);
+  letter-spacing:var(--track-body);}
 /* Sale solo mientras falta el emoji: una pista que aparece cuando hace falta
    explica por qué "Guardar" está apagado sin ocupar sitio el resto del tiempo. */
 .pv-need{margin-top:10px;font-size:13px;font-weight:600;color:var(--label-2);}
@@ -1266,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v147";
+const APP_VERSION = "v148";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2839,6 +2840,10 @@ const Tasks = (() => {
     return y===new Date().getFullYear() ? base : `${base} ${y}`;
   }
   const DAYS = ["Lu","Ma","Mi","Ju","Vi","Sá","Do"]; // 0=Lunes (etiquetas del selector)
+  const DAYS_LONG = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"];
+  // "a, b y c": la coma seca ("a, b, c") se lee como una lista de código.
+  const enumerar = (xs)=> xs.length<2 ? (xs[0]||"")
+    : xs.slice(0,-1).join(", ")+" y "+xs[xs.length-1];
   const DAYNAMES = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"];
   // Convierte un conjunto de días (0=lunes) en un texto natural
   function daysLabel(daysArr){
@@ -3509,16 +3514,33 @@ const Tasks = (() => {
     let monthDays = editing && existing.recurrence && existing.recurrence.dates ? existing.recurrence.dates.slice() : [];
     // "Solo ciertos días" está activo si la tarea ya tiene días marcados.
     let byDays = editing ? !!(days.length || monthDays.length) : false;
-    // --- intervalo de vencimiento ---
-    let mode       = editing && existing.endMode ? "enddate" : "interval";
+    /* LA FORMA DE LA TAREA, en los términos en que la piensa quien la crea:
+       de una vez (y para cuándo) o repetida (y cada cuánto). Todo lo demás
+       —endMode, eodMode, repeats, dueN— se DEDUCE de aquí al guardar, así que
+       el modelo de datos no cambia ni una coma: solo cambia por dónde se entra.
+
+       Al editar se hace el camino inverso: se mira la tarea guardada y se
+       coloca en la forma que le corresponde, para que abrir una tarea vieja
+       enseñe lo mismo que enseñaba antes. */
     let dueN       = editing && existing.dueN ? existing.dueN : 1;
     let dueUnit    = editing && existing.dueUnit ? existing.dueUnit : "day";
-    // Apagada por defecto: una tarea nueva es de una vez salvo que digas lo
-    // contrario. Encenderla la convierte en diaria de día entero.
-    let repeats    = editing ? !!existing.repeats : false;
+    let kind       = (editing && existing.repeats) ? "repeat" : "once";
+    let dayMode    = (editing && existing.recurrence && (existing.recurrence.dates||[]).length) ? "month" : "week";
+    let onceWhen   = "today";
+    if(editing && !existing.repeats){
+      if(!existing.endMode) onceWhen = "in";                 // ventana que rueda
+      else if(existing.eodMode){
+        const k = dateKey(new Date(existing.startAt||Date.now()));
+        onceWhen = (k===dateKey()) ? "today"
+                 : (k===addDaysKey(dateKey(),1)) ? "tomorrow" : "date";
+      } else onceWhen = "date";
+    }
     const repeatFrom = editing && existing.repeatFrom ? existing.repeatFrom : "fixed";
-    // "hasta que acabe el día": el fin lo pone la propia jornada, no tú.
-    let eod = editing ? !!existing.eodMode : false;
+    // Derivados de la forma. Se mantienen con estos nombres porque son los que
+    // lee el guardado, que no ha hecho falta tocar.
+    const isWholeDay = ()=> kind==="once" && (onceWhen==="today" || onceWhen==="tomorrow");
+    const modeNow    = ()=> (kind==="once" && onceWhen!=="in") ? "enddate" : "interval";
+    let mode = modeNow(), eod = isWholeDay(), repeats = (kind==="repeat");
     // Por defecto empieza AHORA (redondeado al minuto) y vence en un día.
     let startMs    = editing && existing.startAt ? existing.startAt : Date.now();
     let endMs      = editing && existing.endMode ? (existing.dueAt || startMs + 86400000) : startMs + 86400000;
@@ -3559,62 +3581,98 @@ const Tasks = (() => {
         <input class="pv-title" id="ctTitle" placeholder="Nueva tarea" maxlength="120"
                value="${editing?esc(existing.title):""}"/>
         <div class="pv-due" id="ctPvDue"></div>
+        <!-- La forma, en castellano. Es lo que convierte el formulario en algo
+             que se entiende sin interpretarlo: el anillo dice cuánto queda, y
+             esta línea dice QUÉ estás creando. -->
+        <div class="pv-shape" id="ctShape"></div>
         <div class="pv-need" id="ctNeedEmj">Toca el <b>+</b> y escribe un emoji para la tarea.</div>
       </div>
 
-      <div class="segmented" id="ctMode">
-        <div class="seg${mode==="interval"?" sel":""}" data-m="interval">Intervalo</div>
-        <div class="seg${mode==="enddate"?" sel":""}" data-m="enddate">Fecha de finalización</div>
+      <!-- LA PRIMERA PREGUNTA ES LA QUE DE VERDAD SE HACE UNO: ¿esto es algo
+           de una vez, o una costumbre? Antes el primer control elegía entre
+           "Intervalo" y "Fecha de finalización", que son dos maneras de decir
+           CUÁNDO ACABA — una pregunta de después, y planteada con palabras del
+           código. De ahí salía lo demás torcido: repetir vivía dentro de una de
+           las dos ramas, así que la mitad del formulario no podía repetirse. -->
+      <div class="segmented" id="ctKind">
+        <div class="seg${kind==="once"?" sel":""}" data-k="once">Una vez</div>
+        <div class="seg${kind==="repeat"?" sel":""}" data-k="repeat">Se repite</div>
       </div>
 
-      <div class="frow">
-        <span class="fl">Empieza</span>
-        <span class="fval">
-          <input type="date" class="chipv" id="ctStartDate" value="${esc(startDate)}"/>
-          <input type="time" class="chipv" id="ctStartTime" value="${esc(startTime)}"/>
-        </span>
+      <!-- ===== UNA VEZ ===== -->
+      <div id="ctOnce">
+        <div class="lbl-sm" style="margin-top:14px">Vence</div>
+        <div class="chips" id="ctWhen">
+          <button class="chip${onceWhen==="today"   ?" sel":""}" data-w="today">Hoy</button>
+          <button class="chip${onceWhen==="tomorrow"?" sel":""}" data-w="tomorrow">Mañana</button>
+          <button class="chip${onceWhen==="in"      ?" sel":""}" data-w="in">En un rato</button>
+          <button class="chip${onceWhen==="date"    ?" sel":""}" data-w="date">Otro día</button>
+        </div>
+        <!-- "En un rato": la ventana rueda desde ahora. Es el caso de "esto en
+             tres horas", que antes había que armar a mano con el intervalo. -->
+        <div class="frow" id="ctInRow">
+          <span class="fl">Vence en</span>
+          <span class="fval">
+            <span class="fsel"><select class="chipv" id="ctInN" aria-label="Cantidad">
+              ${Array.from({length:60},(_,i)=>i+1).map(n=>`<option value="${n}"${n===dueN?" selected":""}>${n}</option>`).join("")}
+            </select><span class="dd-chev">▾</span></span>
+            <span class="fsel"><select class="chipv" id="ctInUnit" aria-label="Unidad">
+              ${UNITS.map(u=>`<option value="${u[0]}"${u[0]===dueUnit?" selected":""}>${esc(unitLabel(u[0],dueN))}</option>`).join("")}
+            </select><span class="dd-chev">▾</span></span>
+          </span>
+        </div>
+        <!-- "Otro día": las fechas solo aparecen cuando de verdad hacen falta.
+             Antes "Empieza" era la tercera fila SIEMPRE, y en casi todos los
+             casos su valor era "ahora" o lo pisaba el propio día marcado. -->
+        <div id="ctDateRows">
+          <div class="frow">
+            <span class="fl">Empieza</span>
+            <span class="fval">
+              <input type="date" class="chipv" id="ctStartDate" value="${esc(startDate)}"/>
+              <input type="time" class="chipv" id="ctStartTime" value="${esc(startTime)}"/>
+            </span>
+          </div>
+          <div class="frow">
+            <span class="fl">Termina</span>
+            <span class="fval">
+              <input type="date" class="chipv" id="ctEndDate" value="${esc(endDate)}"/>
+              <input type="time" class="chipv" id="ctEndTime" value="${esc(endTime)}"/>
+            </span>
+          </div>
+        </div>
       </div>
-      <div class="frow" id="ctIntervalRow" style="display:${(mode==="interval"&&!byDays)?"flex":"none"}">
-        <span class="fl">Vence después de</span>
-        <span class="fval">
-          <span class="fsel"><select class="chipv" id="ctDueN" aria-label="Cantidad">
-            ${Array.from({length:60},(_,i)=>i+1).map(n=>`<option value="${n}"${n===dueN?" selected":""}>${n}</option>`).join("")}
-          </select><span class="dd-chev">▾</span></span>
-          <span class="fsel"><select class="chipv" id="ctDueUnit" aria-label="Unidad">
-            ${UNITS.map(u=>`<option value="${u[0]}"${u[0]===dueUnit?" selected":""}>${esc(unitLabel(u[0],dueN))}</option>`).join("")}
-          </select><span class="dd-chev">▾</span></span>
-        </span>
+
+      <!-- ===== SE REPITE ===== -->
+      <div id="ctRepeat">
+        <div class="frow" id="ctEveryRow">
+          <span class="fl">Cada</span>
+          <span class="fval">
+            <span class="fsel"><select class="chipv" id="ctDueN" aria-label="Cantidad">
+              ${Array.from({length:60},(_,i)=>i+1).map(n=>`<option value="${n}"${n===dueN?" selected":""}>${n}</option>`).join("")}
+            </select><span class="dd-chev">▾</span></span>
+            <span class="fsel"><select class="chipv" id="ctDueUnit" aria-label="Unidad">
+              ${UNITS.map(u=>`<option value="${u[0]}"${u[0]===dueUnit?" selected":""}>${esc(unitLabel(u[0],dueN))}</option>`).join("")}
+            </select><span class="dd-chev">▾</span></span>
+          </span>
+        </div>
+        <div class="frow" id="ctByDaysRow">
+          <span class="fl">Solo ciertos días</span>
+          <div class="switch${byDays?" on":""}" id="ctByDays"><div class="knob"></div></div>
+        </div>
+        <!-- Los días DEL MES ya existían en el modelo y hasta tenían su función
+             de dibujo y su CSS, pero nunca llegaron a tener marcado: no había
+             forma de crear "el día 1 de cada mes". Aquí está. -->
+        <div id="ctDaysPick" style="padding:2px 2px 14px;">
+          <div class="segmented" id="ctDayMode" style="margin-bottom:10px">
+            <div class="seg${dayMode==="week" ?" sel":""}" data-dm="week">De la semana</div>
+            <div class="seg${dayMode==="month"?" sel":""}" data-dm="month">Del mes</div>
+          </div>
+          <div class="daypicker"   id="ctDays"></div>
+          <div class="monthpicker" id="ctMonthDays"></div>
+          <div class="hint" id="ctDaysHint"></div>
+        </div>
       </div>
-      <!-- Lo más habitual dentro de "fecha de finalización" es "hoy hasta que
-           se acabe el día". Con el interruptor no hay que elegir fecha ni hora:
-           el anillo dura desde que la creas hasta las 23:59 de ese mismo día,
-           y la fila de "Termina" desaparece porque ya no decide nada. -->
-      <div class="frow" id="ctEodRow" style="display:${mode==="enddate"?"flex":"none"}">
-        <span class="fl">Hasta que acabe el día</span>
-        <div class="switch${eod?" on":""}" id="ctEod"><div class="knob"></div></div>
-      </div>
-      <div class="frow" id="ctEndRow" style="display:${(mode==="enddate"&&!eod)?"flex":"none"}">
-        <span class="fl">Termina</span>
-        <span class="fval">
-          <input type="date" class="chipv" id="ctEndDate" value="${esc(endDate)}"/>
-          <input type="time" class="chipv" id="ctEndTime" value="${esc(endTime)}"/>
-        </span>
-      </div>
-      <div class="frow" id="ctRepeatRow" style="display:${mode==="interval"?"flex":"none"}">
-        <span class="fl">Se repite</span>
-        <div class="switch${repeats?" on":""}" id="ctRepeats"><div class="knob"></div></div>
-      </div>
-      <!-- Días marcados: un ritmo ALTERNATIVO al intervalo. Con ellos activos
-           la tarea nace a las 00:00 del día marcado y vence a las 23:59 del
-           mismo día, así que el intervalo deja de tener sentido y se oculta. -->
-      <div class="frow" id="ctByDaysRow" style="display:${(mode==="interval"&&repeats)?"flex":"none"}">
-        <span class="fl">Solo ciertos días</span>
-        <div class="switch${byDays?" on":""}" id="ctByDays"><div class="knob"></div></div>
-      </div>
-      <div id="ctDaysPick" style="display:${(mode==="interval"&&repeats&&byDays)?"block":"none"};padding:2px 2px 14px;">
-        <div class="daypicker" id="ctDays"></div>
-        <div class="hint">Aparecerá esos días a las 00:00 y vencerá a las 23:59 del mismo día.</div>
-      </div>
+
       <div class="frow">
         <span class="fl">Urgente</span>
         <div class="switch${urgent?" on":""}" id="ctUrgent"><div class="knob"></div></div>
@@ -3667,7 +3725,29 @@ const Tasks = (() => {
       const f=previewFields(), due=dueNow();
       return Math.max(60000, due - computeStartFor(f, due));
     }
+    /* La forma dicha en castellano. Se arma de lo mismo que se va a guardar,
+       así que no puede prometer una cosa y guardar otra. */
+    function shapeLabel(){
+      if(kind==="repeat"){
+        if(byDays){
+          if(dayMode==="week"){
+            if(!days.length) return "Elige al menos un día";
+            if(days.length===7) return "Todos los días, de 00:00 a 23:59";
+            return enumerar(days.slice().sort((a,b)=>a-b).map(i=>DAYS_LONG[i])).replace(/^./,c=>c.toUpperCase())+", de 00:00 a 23:59";
+          }
+          if(!monthDays.length) return "Elige al menos un día";
+          return "Los días "+enumerar(monthDays.slice().sort((a,b)=>a-b).map(String))+" de cada mes";
+        }
+        if(dueN===1 && dueUnit==="day") return "Todos los días, de 00:00 a 23:59";
+        return "Cada "+dueN+" "+unitLabel(dueUnit,dueN).toLowerCase();
+      }
+      if(onceWhen==="today")    return "Una vez · hoy, hasta las 23:59";
+      if(onceWhen==="tomorrow") return "Una vez · mañana, de 00:00 a 23:59";
+      if(onceWhen==="in")       return "Una vez · dentro de "+dueN+" "+unitLabel(dueUnit,dueN).toLowerCase();
+      return "Una vez · entre las fechas que elijas";
+    }
     function paintPreview(){
+      const sh=$("#ctShape",sheet); if(sh) sh.textContent = shapeLabel();
       // El campo no se rellena solo: vacío enseña el "+", y vacío es
       // exactamente lo que impide guardar. Un emoji puesto por la app no sería
       // una elección, sería un relleno con el que todas acabarían iguales.
@@ -3712,23 +3792,58 @@ const Tasks = (() => {
       });
     }
 
-    // ---- modo: intervalo / fecha de finalización ----
-    const modeWrap=$("#ctMode",sheet);
+    /* ---- la forma manda: una sola función decide qué se ve ----
+       Antes cada control apagaba y encendía filas por su cuenta y `syncRows`
+       llegó a escribir dos veces el display de las mismas dos filas. Aquí solo
+       hay un sitio donde se decide, y se lee de arriba abajo. */
+    const show = (id,on,disp)=>{ const e=$(id,sheet); if(e) e.style.display = on ? (disp||"flex") : "none"; };
     function syncRows(){
-      $("#ctIntervalRow",sheet).style.display   = mode==="interval"?"flex":"none";
-      $("#ctEndRow",sheet).style.display        = mode==="enddate"?"flex":"none";
-      $("#ctRepeatRow",sheet).style.display     = mode==="interval"?"flex":"none";
-      const on = (mode==="interval"&&repeats);
-      $("#ctIntervalRow",sheet).style.display   = (mode==="interval"&&!byDays)?"flex":"none";
-      $("#ctByDaysRow",sheet).style.display     = on?"flex":"none";
-      $("#ctDaysPick",sheet).style.display      = (on&&byDays)?"block":"none";
-      $("#ctEodRow",sheet).style.display        = (mode==="enddate")?"flex":"none";
-      $("#ctEndRow",sheet).style.display        = (mode==="enddate"&&!eod)?"flex":"none";
+      mode = modeNow(); eod = isWholeDay(); repeats = (kind==="repeat");
+      const once = kind==="once";
+      show("#ctOnce",   once, "block");
+      show("#ctRepeat", !once, "block");
+      // dentro de "una vez", cada opción enseña SOLO lo suyo
+      show("#ctInRow",     once && onceWhen==="in");
+      show("#ctDateRows",  once && onceWhen==="date", "block");
+      // dentro de "se repite", los días marcados sustituyen al intervalo
+      show("#ctEveryRow",  !once && !byDays);
+      show("#ctByDaysRow", !once);
+      show("#ctDaysPick",  !once && byDays, "block");
+      show("#ctDays",      !once && byDays && dayMode==="week",  "flex");
+      show("#ctMonthDays", !once && byDays && dayMode==="month", "grid");
+      const dh=$("#ctDaysHint",sheet);
+      if(dh) dh.textContent = dayMode==="week"
+        ? "Aparecerá esos días a las 00:00 y vencerá a las 23:59 del mismo día."
+        : "Aparecerá esos días de cada mes, de 00:00 a 23:59.";
+      $$(".seg",$("#ctKind",sheet)).forEach(x=> x.classList.toggle("sel", x.getAttribute("data-k")===kind));
+      $$(".chip",$("#ctWhen",sheet)).forEach(x=> x.classList.toggle("sel", x.getAttribute("data-w")===onceWhen));
+      const dmw=$("#ctDayMode",sheet);
+      if(dmw) $$(".seg",dmw).forEach(x=> x.classList.toggle("sel", x.getAttribute("data-dm")===dayMode));
     }
-    $$(".seg",modeWrap).forEach(el=> el.onclick=()=>{
-      mode=el.getAttribute("data-m"); haptic();
-      $$(".seg",modeWrap).forEach(x=>x.classList.toggle("sel",x===el));
+
+    /* "Hoy" y "Mañana" no piden fecha ni hora: la ponen ellas. Hoy arranca
+       AHORA (la tarea no existía esta mañana, y arrancarla a las 00:00 dejaría
+       el anillo medio gastado antes de empezar); mañana arranca a las 00:00,
+       que es cuando el día empieza de verdad. Las dos acaban a las 23:59 de su
+       propio día, que es lo que hace `eodMode`. */
+    function applyWhen(){
+      if(onceWhen==="today")         startMs = Date.now();
+      else if(onceWhen==="tomorrow") startMs = startOfDayMs(addDaysKey(dateKey(),1));
+      const sD=$("#ctStartDate",sheet), sT=$("#ctStartTime",sheet);
+      if(sD) sD.value = dPart(startMs);
+      if(sT) sT.value = tPart(startMs);
+    }
+
+    $$(".seg",$("#ctKind",sheet)).forEach(el=> el.onclick=()=>{
+      kind=el.getAttribute("data-k"); haptic();
+      // Encender "Solo ciertos días" sin días elegidos no dice nada: se marca hoy.
+      if(kind==="repeat" && byDays && !days.length && !monthDays.length){ days=[weekdayOf(dateKey())]; renderDays(); }
+      if(kind==="once") applyWhen();
       syncRows(); paintPreview(); validate();
+    });
+    $$(".chip",$("#ctWhen",sheet)).forEach(el=> el.onclick=()=>{
+      onceWhen=el.getAttribute("data-w"); haptic();
+      applyWhen(); syncRows(); paintPreview(); validate();
     });
 
     const sD=$("#ctStartDate",sheet), sT=$("#ctStartTime",sheet);
@@ -3738,28 +3853,40 @@ const Tasks = (() => {
     [sD,sT].forEach(i=> i.onchange=()=>{ readStart(); paintPreview(); validate(); });
     [eD,eT].forEach(i=> i.onchange=()=>{ readEnd();   paintPreview(); validate(); });
 
-    const nSel=$("#ctDueN",sheet), uSel=$("#ctDueUnit",sheet);
-    const repaintUnits=()=>{ // "1 Día" / "3 Días": el plural depende del número
-      Array.from(uSel.options).forEach(o=> o.textContent = unitLabel(o.value, dueN));
-      fitSelectWidth(uSel);
-    };
-    nSel.onchange=()=>{ dueN=+nSel.value; haptic(); fitSelectWidth(nSel); repaintUnits(); paintPreview(); };
-    uSel.onchange=()=>{ dueUnit=uSel.value; haptic(); fitSelectWidth(uSel); syncRows(); paintPreview(); validate(); };
-    [nSel,uSel].forEach(fitSelectWidth); repaintUnits();
+    /* Los dos pares [cantidad][unidad] —"Vence en" y "Cada"— escriben en los
+       MISMOS dueN/dueUnit: son la misma magnitud contada desde sitios distintos,
+       y separarlos habría dejado dos verdades para un solo dato. */
+    const pairs = [[$("#ctInN",sheet), $("#ctInUnit",sheet)], [$("#ctDueN",sheet), $("#ctDueUnit",sheet)]];
+    function repaintUnits(){   // "1 Día" / "3 Días": el plural depende del número
+      pairs.forEach(([n,u])=>{ if(!n||!u) return;
+        n.value=String(dueN); u.value=dueUnit;
+        Array.from(u.options).forEach(o=> o.textContent = unitLabel(o.value, dueN));
+        fitSelectWidth(n); fitSelectWidth(u); });
+    }
+    pairs.forEach(([n,u])=>{
+      if(n) n.onchange=()=>{ dueN=+n.value; haptic(); repaintUnits(); syncRows(); paintPreview(); validate(); };
+      if(u) u.onchange=()=>{ dueUnit=u.value; haptic(); repaintUnits(); syncRows(); paintPreview(); validate(); };
+    });
+    repaintUnits();
 
-    const swRep=$("#ctRepeats",sheet);
-    swRep.onclick=()=>{ repeats=!repeats; swRep.classList.toggle("on",repeats); haptic(); syncRows(); validate(); };
-    const swEod=$("#ctEod",sheet);
-    if(swEod) swEod.onclick=()=>{ eod=!eod; swEod.classList.toggle("on",eod); haptic();
-      syncRows(); paintPreview(); validate(); };
+    const dmWrap=$("#ctDayMode",sheet);
+    if(dmWrap) $$(".seg",dmWrap).forEach(el=> el.onclick=()=>{
+      dayMode=el.getAttribute("data-dm"); haptic();
+      // Cambiar de semana a mes con lo otro marcado dejaría un ritmo fantasma.
+      if(dayMode==="week"){ monthDays=[]; if(!days.length) days=[weekdayOf(dateKey())]; }
+      else { days=[]; if(!monthDays.length) monthDays=[domOfKey(dateKey())]; }
+      renderDays(); renderMonthDays(); syncRows(); paintPreview(); validate();
+    });
     syncRows();
     const renderDays = ()=>{ const w=$("#ctDays",sheet); if(!w) return; w.innerHTML="";
       DAYS.forEach((d,i)=>{ const cell=el("div","day"+(days.includes(i)?" sel":""),d);
-        cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i); renderDays(); validate(); };
+        cell.onclick=()=>{ haptic(); if(days.includes(i)) days=days.filter(x=>x!==i); else days.push(i);
+          renderDays(); paintPreview(); validate(); };
         w.appendChild(cell); }); };
     const renderMonthDays = ()=>{ const w=$("#ctMonthDays",sheet); if(!w) return; w.innerHTML="";
       for(let i=1;i<=31;i++){ const cell=el("div","day"+(monthDays.includes(i)?" sel":""),String(i));
-        cell.onclick=()=>{ haptic(); if(monthDays.includes(i)) monthDays=monthDays.filter(x=>x!==i); else monthDays.push(i); renderMonthDays(); validate(); };
+        cell.onclick=()=>{ haptic(); if(monthDays.includes(i)) monthDays=monthDays.filter(x=>x!==i); else monthDays.push(i);
+          renderMonthDays(); paintPreview(); validate(); };
         w.appendChild(cell); } };
     const renderShare = ()=>{ const w=$("#ctShare",sheet); if(!w) return; w.innerHTML="";
       const friends=Store.get().friends.filter(f=>f.cloudId);
@@ -3782,7 +3909,7 @@ const Tasks = (() => {
       byDays=!byDays; swByDays.classList.toggle("on",byDays); haptic();
       // Activar sin elegir nada no sirve de nada: se marca el día de hoy.
       if(byDays && !days.length && !monthDays.length){ days=[weekdayOf(dateKey())]; renderDays(); }
-      syncRows(); paintPreview(); validate();
+      syncRows(); paintPreview(); validate();   // la frase se rehace con el ritmo
     };
 
     const titleInput = $("#ctTitle",sheet);
@@ -3810,12 +3937,12 @@ const Tasks = (() => {
       // El campo `recurrence` sigue existiendo porque de él dependen los
       // recordatorios (qué días toca), el calendario y las tareas compartidas.
       // Ahora se DEDUCE del intervalo en vez de elegirse a mano.
-      const endMode = (mode==="enddate");
-      const eodMode = endMode && eod;
+      const endMode = (modeNow()==="enddate");
+      const eodMode = endMode && isWholeDay();
       const endTarget = eodMode ? endOfDayMs(dateKey(new Date(startMs))) : endMs;
       const periodMs = endMode ? Math.max(60000, endTarget - startMs)
                                : Math.max(60000, dueN * (UNIT_MS[dueUnit]||UNIT_MS.day));
-      const willRepeat = endMode ? false : repeats;
+      const willRepeat = endMode ? false : (kind==="repeat");
       // Los días marcados solo cuentan si el interruptor está activo y la
       // tarea se repite: si no, se guardan vacíos para que nada quede a medias.
       const useDays  = (!endMode && willRepeat && byDays);
