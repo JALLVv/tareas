@@ -950,6 +950,17 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
   word-break:break-word;line-height:1.35;}
 .lb-c-item .when{font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;}
 .lb-c-del{color:rgba(255,120,120,0.9);cursor:pointer;}
+.lb-c-reply{color:rgba(255,255,255,0.62);font-weight:700;cursor:pointer;}
+/* Un solo escalón de sangrado, con una guía a la izquierda: basta para leer
+   "esto cuelga de lo de arriba" sin robarle ancho al texto. */
+.lb-c-item.reply{margin-left:22px;position:relative;}
+.lb-c-item.reply::before{content:"";position:absolute;left:-12px;top:14px;bottom:14px;
+  width:2px;border-radius:1px;background:rgba(255,255,255,0.14);}
+.lb-c-replyto{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:var(--gap-sm);padding:9px 13px;border-radius:var(--radius-sm);
+  background:var(--card-2);font-size:13px;color:rgba(255,255,255,0.75);}
+.lb-c-replyto b{color:#fff;}
+.lb-c-replyto .x{color:var(--green);font-weight:700;cursor:pointer;flex:0 0 auto;}
 .lb-c-empty{font-size:13.5px;color:rgba(255,255,255,0.45);padding:2px 0 4px;}
 .lb-c-input{display:flex;gap:var(--gap-xs);margin-top:var(--gap-sm);}
 .lb-c-input input{flex:1;min-width:0;background:var(--card);border:none;border-radius:var(--radius-sm);
@@ -1230,6 +1241,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
     <div class="lb-comments" id="lbComments" style="display:none">
       <div class="lb-c-title">Comentarios</div>
       <div class="lb-c-list" id="lbCList"></div>
+      <div class="lb-c-replyto" id="lbCReplyTo" style="display:none"></div>
       <div class="lb-c-input"><input id="lbCInput" type="text" placeholder="Escribe un comentario…" maxlength="300"/><button id="lbCSend">Enviar</button></div>
     </div>
   </div>
@@ -1248,7 +1260,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v144";
+const APP_VERSION = "v145";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3198,7 +3210,7 @@ const Tasks = (() => {
       // los borra por trigger; esto es para que se vea al instante).
       if(prunedNotifs){
         st.notifs=(st.notifs||[]).filter(n=>{
-          if(n.type!=='shared_done' && n.type!=='comment') return true;
+          if(n.type!=='shared_done' && n.type!=='comment' && n.type!=='comment_reply') return true;
           if(n.ref_key) return !goneKeys.has(n.ref_key);
           return !goneTitles.has((n.task_title||"").trim()); // avisos antiguos sin ref_key
         });
@@ -4555,6 +4567,7 @@ const Cloud = (() => {
       case 'friend_request': return (actorName||'Alguien')+' te ha enviado una solicitud de amistad';
       case 'shared_invite':  return (actorName||'Alguien')+' quiere agregarte a una tarea';
       case 'comment':        return (actorName||'Alguien')+' te comentó';
+      case 'comment_reply':  return (actorName||'Alguien')+' respondió tu comentario';
       case 'shared_done':    return (actorName||'Un amigo')+' completó una tarea';
       default:               return (actorName||'Alguien')+' te envió una notificación';
     }
@@ -4734,11 +4747,27 @@ const Cloud = (() => {
   // consulta en la nube: cubre tareas compartidas con varios implicados, no solo
   // el dueño que conoce el visor). Mismo tag que el trigger del servidor
   // ('comment-<completion_key>') → si llegan los dos caminos, se funden en uno.
-  async function addComment(key, text, ownerId){
+  async function addComment(key, text, ownerId, parentId, parentAuthorId){
     if(!enabled() || !await init() || !client || !key || !text) return false;
     const name=(Store.get().profile.name||"Atleta");
-    try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text }); if(error) throw error; }
+    try{ const { error }=await client.from('comments').insert({ completion_key:key, author_id:uid, author_name:name, text:text, parent_id:parentId||null }); if(error) throw error; }
     catch(e){ console.warn("addComment:", e && e.message); return false; }
+    /* Respaldo del aviso de RESPUESTA, igual que el de los dueños: si el
+       trigger no lo creó, lo crea este dispositivo, y esa fila dispara su
+       propio push. El antiduplicados del servidor se encarga de que no llegue
+       dos veces si el trigger sí funcionó. */
+    if(parentId && parentAuthorId && parentAuthorId!==uid){
+      try{
+        const { data:ex }=await client.from('notifications').select('id')
+          .eq('recipient_id',parentAuthorId).eq('actor_id',uid).eq('type','comment_reply').eq('ref_key',key)
+          .gt('created_at', new Date(Date.now()-120000).toISOString()).limit(1);
+        if(!(ex && ex.length)){
+          const { error }=await client.from('notifications').insert({ recipient_id:parentAuthorId, actor_id:uid,
+            actor_name:name, type:'comment_reply', ref_key:key });
+          if(error) throw error;
+        }
+      }catch(e){ backupPush(parentAuthorId, 'comment_reply', key, null); }
+    }
     // Respaldo de FILA (no push directo): si el trigger del comentario no creó
     // el aviso para algún dueño, lo crea este dispositivo — y esa inserción
     // dispara su propio push. Sin doble envío (duplicaba la notificación).
@@ -4747,7 +4776,7 @@ const Cloud = (() => {
       const { data:rows }=await client.from('completions').select('user_id,title').or(`id.eq.${key},shared_id.eq.${key}`);
       let ttl=""; (rows||[]).forEach(r=>{ if(r.user_id) owners.add(r.user_id); if(r.title) ttl=r.title; });
       for(const o of owners){
-        if(!o || o===uid) continue;
+        if(!o || o===uid || o===parentAuthorId) continue;   // ya avisado como respuesta
         try{
           const { data:ex }=await client.from('notifications').select('id')
             .eq('recipient_id',o).eq('actor_id',uid).eq('type','comment').eq('ref_key',key)
@@ -5615,8 +5644,9 @@ const Notifs = (() => {
         <button class="notif-del" data-del="${esc(n.id)}" aria-label="Eliminar">✕</button>
       </div>`;
     }
-    const done=n.type==='shared_done', comment=n.type==='comment';
-    const text = comment ? `<b>${esc(n.actor_name||"Alguien")}</b> te comentó`
+    const done=n.type==='shared_done', reply=n.type==='comment_reply', comment=n.type==='comment'||reply;
+    const text = reply ? `<b>${esc(n.actor_name||"Alguien")}</b> respondió tu comentario`
+      : comment ? `<b>${esc(n.actor_name||"Alguien")}</b> te comentó`
       : done ? `<b>${esc(n.actor_name||"Un amigo")}</b> completó una tarea`
       : `<b>${esc(n.actor_name||"Un amigo")}</b> te añadió a una tarea`;
     const withPhoto=(done||comment) && n.photo_url;
@@ -6178,6 +6208,7 @@ function shortTitle(s, maxWords=10, keep=7){
 const Lightbox = (() => {
   const box=$("#lightbox"), img=$("#lbImg"), t=$("#lbTitle"), m=$("#lbMeta");
   const scroll=$("#lbScroll"), cWrap=$("#lbComments"), cList=$("#lbCList"), cInput=$("#lbCInput"), cSend=$("#lbCSend");
+  const cChip=$("#lbCReplyTo");
   let curKey=null, curGen=0, curOwner=null, curPhoto=null, pollTimer=null, lastSig="";
   function ago(iso){ try{ const d=(Date.now()-new Date(iso).getTime())/1000;
     if(d<60) return "ahora"; if(d<3600) return `hace ${Math.floor(d/60)} min`;
@@ -6186,24 +6217,61 @@ const Lightbox = (() => {
     if(c.avatar) return `<div class="lb-c-av"><img src="${esc(c.avatar)}" alt=""></div>`;
     return `<div class="lb-c-av">${esc((c.author_name||"A").trim().charAt(0).toUpperCase()||"A")}</div>`;
   }
-  function renderComments(list){
-    if(!list || !list.length){ cList.innerHTML=`<div class="lb-c-empty">Sé el primero en comentar.</div>`; return; }
-    cList.innerHTML=list.map(c=>`
-      <div class="lb-c-item">
+  function itemHtml(c, isReply){
+    return `
+      <div class="lb-c-item${isReply?" reply":""}">
         ${avatarHtml(c)}
         <div class="lb-c-body">
           <div class="lb-c-head"><span class="a">${esc(c.author_name||"Alguien")}</span><span class="lb-c-streak">🔥 ${c.streak||0}</span></div>
           <div class="x">${esc(c.text||"")}</div>
-          <div class="when">${ago(c.created_at)}${c.mine?` · <span class="lb-c-del" data-cid="${esc(c.id)}">Borrar</span>`:""}</div>
+          <div class="when">${ago(c.created_at)}
+            · <span class="lb-c-reply" data-rid="${esc(c.id)}" data-rname="${esc(c.author_name||"Alguien")}" data-rauthor="${esc(c.author_id||"")}">Responder</span>
+            ${c.mine?` · <span class="lb-c-del" data-cid="${esc(c.id)}">Borrar</span>`:""}</div>
         </div>
-      </div>`).join("");
+      </div>`;
+  }
+  function renderComments(list){
+    if(!list || !list.length){ cList.innerHTML=`<div class="lb-c-empty">Sé el primero en comentar.</div>`; return; }
+    /* Un solo nivel de sangrado. Responder a una respuesta sigue avisando a
+       quien escribió ESA respuesta (parent_id apunta al comentario real), pero
+       se dibuja en el mismo hilo: anidar sin fondo, en una pantalla de móvil,
+       acaba en columnas de dos palabras. */
+    const byId={}; list.forEach(c=>byId[c.id]=c);
+    const rootOf=(c)=>{ let x=c, guard=0;
+      while(x && x.parent_id && byId[x.parent_id] && guard++<50) x=byId[x.parent_id];
+      return x ? x.id : c.id; };
+    const roots=list.filter(c=>!c.parent_id || !byId[c.parent_id]);
+    const kids={}; list.forEach(c=>{ if(c.parent_id && byId[c.parent_id]){
+      const r=rootOf(c); (kids[r]=kids[r]||[]).push(c); } });
+    cList.innerHTML = roots.map(r=>
+      itemHtml(r,false) + (kids[r.id]||[]).map(k=>itemHtml(k,true)).join("")
+    ).join("");
     $$(".lb-c-del",cList).forEach(b=> b.onclick=async ()=>{ haptic(); await Cloud.deleteComment(b.getAttribute("data-cid")); load(curKey, curGen); });
+    $$(".lb-c-reply",cList).forEach(b=> b.onclick=()=>{ haptic();
+      startReply(b.getAttribute("data-rid"), b.getAttribute("data-rname"), b.getAttribute("data-rauthor")); });
+  }
+  /* A quién se está respondiendo. Vive fuera del render porque el sondeo cada
+     5 s vuelve a pintar la lista: si se guardara ahí, escribir una respuesta
+     larga la perdería a mitad. */
+  let replyTo=null;
+  function startReply(id, name, authorId){
+    replyTo={ id, name, authorId };
+    if(cChip){ cChip.style.display="flex";
+      cChip.innerHTML=`<span>Respondiendo a <b>${esc(name)}</b></span><span class="x" id="lbCCancel">Cancelar</span>`;
+      const cx=$("#lbCCancel"); if(cx) cx.onclick=()=>{ haptic(); clearReply(); }; }
+    if(cInput){ cInput.placeholder=`Responder a ${name}…`;
+      try{ cInput.focus({preventScroll:true}); }catch(_){ cInput.focus(); } }
+  }
+  function clearReply(){
+    replyTo=null;
+    if(cChip){ cChip.style.display="none"; cChip.innerHTML=""; }
+    if(cInput) cInput.placeholder="Escribe un comentario…";
   }
   async function load(key, gen){
     if(!cList.children.length) cList.innerHTML=`<div class="lb-c-empty">Cargando…</div>`;
     const list=await Cloud.fetchComments(key);
     if(gen!==curGen) return;
-    const sig=JSON.stringify(list.map(c=>[c.id,c.text,c.author_name,c.avatar,c.streak]));
+    const sig=JSON.stringify(list.map(c=>[c.id,c.text,c.author_name,c.avatar,c.streak,c.parent_id]));
     if(sig!==lastSig){ lastSig=sig; renderComments(list); } // solo re-pinta si cambió (evita parpadeo)
   }
   function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
@@ -6215,7 +6283,7 @@ const Lightbox = (() => {
     if(scroll) scroll.scrollTop=0;
     curKey = (h.sharedId || h.id || h.key) || null; // clave de la completada
     curOwner = h.ownerId || null; curPhoto = (typeof data==="string" && data.indexOf("http")===0) ? data : (h.photoUrl||null);
-    curGen++; lastSig=""; cList.innerHTML="";
+    curGen++; lastSig=""; cList.innerHTML=""; clearReply();
     stopPoll();
     if(curKey && Cloud.enabled()){
       cWrap.style.display="block"; load(curKey, curGen);
@@ -6223,7 +6291,7 @@ const Lightbox = (() => {
       const g=curGen; pollTimer=setInterval(()=>{ if(g!==curGen || !box.classList.contains("show")){ stopPoll(); return; } load(curKey, g); }, 5000);
     } else { cWrap.style.display="none"; }
   }
-  function hide(){ box.classList.remove("show"); curKey=null; curOwner=null; curGen++; stopPoll(); if(cInput) cInput.value="";
+  function hide(){ box.classList.remove("show"); curKey=null; curOwner=null; curGen++; stopPoll(); clearReply(); if(cInput) cInput.value="";
     // limpiar la foto/comentarios anteriores para que al abrir otra tarea NO se
     // vea por un instante la que se abrió antes (evita el "arrastre" visual).
     img.removeAttribute("src"); t.textContent=""; m.textContent=""; if(cList) cList.innerHTML=""; lastSig=""; }
@@ -6231,10 +6299,11 @@ const Lightbox = (() => {
   box.onclick=(e)=>{ if(e.target===box) hide(); };
   async function send(){
     const txt=(cInput.value||"").trim(); if(!txt || !curKey) return;
-    cInput.value=""; cInput.blur();
+    const to=replyTo;
+    cInput.value=""; cInput.blur(); clearReply();
     const key=curKey, gen=curGen;
-    const ok=await Cloud.addComment(key, txt, curOwner);
-    if(!ok){ UI.toast("No se pudo comentar","bell","var(--red)"); }
+    const ok=await Cloud.addComment(key, txt, curOwner, to&&to.id, to&&to.authorId);
+    if(!ok){ UI.toast(to?"No se pudo responder":"No se pudo comentar","bell","var(--red)"); }
     if(gen===curGen) load(key, gen);
   }
   if(cSend) cSend.onclick=send;
@@ -6636,7 +6705,7 @@ window.addEventListener("pageshow",(e)=>{ if(e.persisted) repaintNudge(); });
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) repaintNudge(); });
 
 // exponer para depuración
-window.RachasApp = { Store, Router, UI, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
+window.RachasApp = { Store, Router, UI, Cloud, Lightbox, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
 })();
 </script>
 </body>
