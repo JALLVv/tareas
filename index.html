@@ -848,9 +848,15 @@ input[type=date].field{color-scheme:dark;font-size:16px;width:100%;}
   font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",inherit;
   caret-color:transparent;}
 /* El "+" del hueco vacío: grande y del color del texto, no un gris de aviso.
-   Es una invitación a poner algo, no un error. */
-.ring-emj::placeholder{color:var(--label-2);font-family:inherit;font-weight:300;
-  font-size:42px;opacity:1;}
+   Es una invitación a poner algo, no un error.
+
+   Va en SVG y no como placeholder del campo porque un glifo de texto se coloca
+   por la línea base de su tipografía, no por su centro: el "+" quedaba visible-
+   mente alto dentro del anillo. Un trazo dibujado en una caja cuadrada, centrada
+   sobre el mismo eje que el círculo, no depende de métricas de ninguna fuente. */
+.ring-plus{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:40px;height:40px;color:var(--label-2);pointer-events:none;}
+.ring-plus svg{width:100%;height:100%;display:block;}
 .pv-due{margin-top:4px;font-size:14px;color:var(--label-2);}
 /* Sale solo mientras falta el emoji: una pista que aparece cuando hace falta
    explica por qué "Guardar" está apagado sin ocupar sitio el resto del tiempo. */
@@ -1260,7 +1266,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v146";
+const APP_VERSION = "v147";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2000,18 +2006,34 @@ function defaultDueFields(rec){
    marcado, así que el día en que por fin aparecía el anillo ya venía medio
    gastado: el círculo y la lista contaban cosas distintas.
    --------------------------------------------------------------------- */
+/* Qué días "toca" una tarea, y con ello si su ventana es un DÍA ENTERO
+   (00:00 → 23:59) o un intervalo que rueda desde la hora en que la creaste.
+
+   "Se repite" a secas, con el intervalo en 1 día, es todos los días: la misma
+   ventana que los días marcados, solo que sin días que elegir. Antes esa tarea
+   empezaba a la hora de crearla y vencía a esa hora del día siguiente, lo que
+   partía el anillo entre dos días y hacía que "hoy" nunca coincidiera con el
+   día natural.
+
+   El intervalo mayor que un día se queda como estaba, rodando: "cada 3 días"
+   es un ritmo, no una casilla del calendario, y convertirlo en día entero le
+   quitaría la utilidad. */
 function markedDays(t){
   const r = (t && t.recurrence) || {};
   if(!t || !t.repeats) return null;
   if(r.days  && r.days.length)  return { kind:"week",  set:r.days  };
   if(r.dates && r.dates.length) return { kind:"month", set:r.dates };
+  const n = t.dueN||1, u = t.dueUnit||"day";
+  if(n===1 && u==="day") return { kind:"day", set:null };
   return null;
 }
 function nextMarkedKey(t, fromKey, strict){
   const m = markedDays(t); if(!m) return null;
   for(let i = strict?1:0; i<=400; i++){
     const k = addDaysKey(fromKey,i);
-    const hit = m.kind==="week" ? m.set.includes(weekdayOf(k)) : m.set.includes(domOfKey(k));
+    const hit = m.kind==="day"  ? true
+              : m.kind==="week" ? m.set.includes(weekdayOf(k))
+              : m.set.includes(domOfKey(k));
     if(hit) return k;
   }
   return null;
@@ -3491,7 +3513,9 @@ const Tasks = (() => {
     let mode       = editing && existing.endMode ? "enddate" : "interval";
     let dueN       = editing && existing.dueN ? existing.dueN : 1;
     let dueUnit    = editing && existing.dueUnit ? existing.dueUnit : "day";
-    let repeats    = editing ? !!existing.repeats : true;
+    // Apagada por defecto: una tarea nueva es de una vez salvo que digas lo
+    // contrario. Encenderla la convierte en diaria de día entero.
+    let repeats    = editing ? !!existing.repeats : false;
     const repeatFrom = editing && existing.repeatFrom ? existing.repeatFrom : "fixed";
     // "hasta que acabe el día": el fin lo pone la propia jornada, no tú.
     let eod = editing ? !!existing.eodMode : false;
@@ -3526,8 +3550,11 @@ const Tasks = (() => {
           <!-- El emoji se escribe con el teclado: tocar el centro del anillo
                abre el teclado y el último carácter que pongas es el icono de la
                tarea. Una rejilla de emojis fijos siempre se queda corta. -->
+          <span class="ring-plus" id="ctPlus" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M12 5v14M5 12h14"/></svg></span>
           <input class="ring-emj" id="ctEmoji" value="${esc(emoji)}"
-                 placeholder="+" maxlength="8" aria-label="Emoji de la tarea" autocomplete="off"/>
+                 maxlength="8" aria-label="Emoji de la tarea" autocomplete="off"/>
         </div>
         <input class="pv-title" id="ctTitle" placeholder="Nueva tarea" maxlength="120"
                value="${editing?esc(existing.title):""}"/>
@@ -3644,8 +3671,9 @@ const Tasks = (() => {
       // El campo no se rellena solo: vacío enseña el "+", y vacío es
       // exactamente lo que impide guardar. Un emoji puesto por la app no sería
       // una elección, sería un relleno con el que todas acabarían iguales.
-      const need=$("#ctNeedEmj",sheet);
-      if(need) need.style.display = emoji.trim() ? "none" : "block";
+      const vacio = !emoji.trim();
+      const need=$("#ctNeedEmj",sheet);  if(need) need.style.display = vacio ? "block" : "none";
+      const plus=$("#ctPlus",sheet);     if(plus) plus.style.display = vacio ? "block" : "none";
       const pv=$("#ctPv",sheet), arc=$("#ctPvArc",sheet);
       const due=dueNow(), period=periodNow(), now=Date.now();
       const start=due-period;
@@ -5578,10 +5606,13 @@ const Notifs = (() => {
       if(d<86400) return `hace ${Math.floor(d/3600)} h`; return `hace ${Math.floor(d/86400)} d`;
     }catch(e){ return ""; }
   }
-  // Los avisos viven 72 h (antes 24 h: tras una racha de avisos parecía que
-  // "desaparecían" de un día para otro). Solicitudes e invitaciones no caducan
-  // hasta que se responden.
-  const fresh = (n)=> n.type==='friend_request' || n.type==='shared_invite' || (Date.now()-new Date(n.created_at).getTime()) < 259200000;
+  /* Los avisos ya NO caducan solos. Tenían 24 h, luego 72 h, y las dos veces
+     pasó lo mismo: los que cumplían el plazo no se ocultaban, se BORRABAN de la
+     nube (Cloud.clearNotifs), así que volver tras unos días dejaba la lista
+     vacía sin que nadie hubiera tocado nada. Subir el número solo movía el día
+     en que ocurría. La lista se queda hasta que tú la borres; la consulta ya
+     trae como mucho los 100 más recientes, que es tope de sobra. */
+  const fresh = ()=> true;
   function updateBadge(){
     const list=(Store.get().notifs||[]).filter(fresh);
     const n=list.filter(x=>!x.read).length;
@@ -5592,10 +5623,6 @@ const Notifs = (() => {
     if(!Cloud.enabled()) return;
     let list=await Cloud.fetchNotifs();
     if(list===null) return; // fallo de red: conservar la lista local tal cual
-    // Vencen a las 24 h (excepto las solicitudes de amistad): se borran y no se muestran.
-    const old=list.filter(n=> !fresh(n));
-    list=list.filter(fresh);
-    if(old.length) Cloud.clearNotifs(old.map(n=>n.id));
     const prevSig = notifSig(listNow());
     Store.update(s=>{ s.notifs=list; s.notifSeen=list.map(n=>n.id); });
     updateBadge();
@@ -6749,7 +6776,7 @@ window.addEventListener("pageshow",(e)=>{ if(e.persisted) repaintNudge(); });
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) repaintNudge(); });
 
 // exponer para depuración
-window.RachasApp = { Store, Router, UI, Cloud, Lightbox, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
+window.RachasApp = { Store, Router, UI, Cloud, Lightbox, Notifs, Transfer:{ makeTransferCode, restoreFromCode }, computeDueFrom, computeStartFor, nextDueAfter, taskWindow, markedDays };
 })();
 </script>
 </body>
