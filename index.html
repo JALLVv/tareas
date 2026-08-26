@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v148";
+const APP_VERSION = "v149";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2028,16 +2028,64 @@ function markedDays(t){
   if(n===1 && u==="day") return { kind:"day", set:null };
   return null;
 }
+// ¿La tarea "toca" ese día? Estaba escrito dentro del bucle de abajo; sacarlo
+// permite preguntarlo por un día suelto, que es lo que necesitan las ocurrencias.
+function isMarkedKey(t, k){
+  const m = markedDays(t); if(!m) return false;
+  return m.kind==="day"  ? true
+       : m.kind==="week" ? m.set.includes(weekdayOf(k))
+       : m.set.includes(domOfKey(k));
+}
 function nextMarkedKey(t, fromKey, strict){
-  const m = markedDays(t); if(!m) return null;
+  if(!markedDays(t)) return null;
   for(let i = strict?1:0; i<=400; i++){
     const k = addDaysKey(fromKey,i);
-    const hit = m.kind==="day"  ? true
-              : m.kind==="week" ? m.set.includes(weekdayOf(k))
-              : m.set.includes(domOfKey(k));
-    if(hit) return k;
+    if(isMarkedKey(t,k)) return k;
   }
   return null;
+}
+
+/* ---------------------------------------------------------------------
+   OCURRENCIAS
+   Una tarea de días marcados no es UNA tarea con una ventana que rueda: es
+   una tarea POR DÍA. Mientras hubo una sola ventana, fallar el lunes dejaba
+   esa ventana clavada en el lunes —poniéndose roja para siempre— y el martes
+   no aparecía nada, porque la ventana solo rodaba al COMPLETARLA. Una tarea de
+   lunes a viernes sin hacer desaparecía del resto de la semana.
+
+   Las ocurrencias no se guardan: se deducen del calendario cada vez. Así no
+   hay filas duplicadas que sincronizar, ni un "generador" que pueda quedarse
+   atrás si no abres la app. El día manda, y el día siempre está ahí.
+
+   Vive una ocurrencia mientras su anillo rojo no se haya llenado; al llenarse
+   se cobra y se va (que es lo mismo que le pasa a cualquier vencida). Con una
+   tarea diaria eso deja a la vista dos como mucho: la de hoy y la de ayer.
+   --------------------------------------------------------------------- */
+function occurrencesOf(t, now){
+  now = now || Date.now();
+  const base = taskWindow(t);
+  // Las que no son de días marcados (una vez, "cada 3 días") siguen teniendo
+  // una sola ventana: un ritmo no es una casilla del calendario.
+  if(!t || !t.repeats || !markedDays(t))
+    return [{ start:base.start, due:base.due, period:base.period, key:null, over: now>base.due }];
+  const out=[];
+  const hoy = dateKey(new Date(now));
+  // Un día anterior a la propia tarea no existió: sin este suelo, crear una
+  // tarea diaria hoy la habría hecho nacer ya con la de ayer vencida.
+  const nacio = (t && (t.createdAt || t.startAt)) || 0;
+  // Se mira de hoy hacia atrás. En cuanto se topa con una cuyo rojo ya está
+  // lleno, las anteriores lo están todavía más: no hace falta seguir.
+  for(let i=0;i<10;i++){
+    const k = addDaysKey(hoy,-i);
+    if(!isMarkedKey(t,k)) continue;
+    const start = startOfDayMs(k), due = endOfDayMs(k);
+    if(due < nacio) break;
+    const period = Math.max(60000, due-start);
+    if(now < start) continue;
+    if(now >= due + period) break;
+    out.push({ start, due, period, key:k, over: now>due });
+  }
+  return out.reverse();   // la más antigua primero: es la que más corre prisa
 }
 function computeDueFrom(t, fromMs, strict){
   if(markedDays(t)){
@@ -2513,6 +2561,21 @@ const Store = (() => {
       if(back > 0) state.penalties = Math.max(0, (state.penalties||0) - back);
       state.ptsVer = 2;
     }
+    /* Los días marcados pasan a cobrarse UNO A UNO. Sin esto, abrir la versión
+       nueva con una tarea de lunes a viernes de hace meses cobraría de golpe
+       los últimos diez días programados: una factura por un tiempo que
+       transcurrió con otras reglas. Se dan por saldados todos los días ya
+       pasados; a partir de hoy el cobro cuenta con normalidad. */
+    if(state.ptsVer !== 3){
+      const hoyK = dateKey();
+      (state.tasks||[]).forEach(t=>{
+        if(!t.repeats || !markedDays(t)) return;
+        const ya = new Set(t.penalizedKeys||[]);
+        for(let i=1;i<=10;i++){ const k=addDaysKey(hoyK,-i); if(isMarkedKey(t,k)) ya.add(k); }
+        t.penalizedKeys = Array.from(ya).slice(-60);
+      });
+      state.ptsVer = 3;
+    }
     // Las recurrentes antiguas arrancan su contador de penalización desde ayer,
     // para no descontar retroactivamente días pasados antes de esta función.
     (state.tasks||[]).forEach(t=>{ const ty=t.recurrence&&t.recurrence.type;
@@ -2918,9 +2981,12 @@ const Tasks = (() => {
      y se vacía según pasa el tiempo. Al llegar a cero se vuelve rojo y se
      llena otra vez, midiendo el retraso: un intervalo entero de retraso deja
      el anillo rojo completo. */
+  /* Acepta una tarea (usa su ventana) o una ocurrencia ya calculada. Que sea
+     la misma función para las dos es lo que impide que el dibujo de un día y
+     el cobro de ese día midan cosas distintas. */
   function ringState(t){
     const now = Date.now();
-    const { start, due, period } = taskWindow(t);
+    const { start, due, period } = (t && typeof t.due==="number" && typeof t.start==="number") ? t : taskWindow(t);
     if(now <= due){
       // Antes de que empiece su ciclo el anillo se ve lleno, no vacío.
       const frac = now <= start ? 1 : (due - now) / period;
@@ -2933,7 +2999,7 @@ const Tasks = (() => {
      sí arranca en cero, para que vencer no sea un escalón. Dibujo y cobro miden
      lo mismo, pero el cobro sin suelo. */
   function overdueFrac(t){
-    const { due, period } = taskWindow(t);
+    const { due, period } = (t && typeof t.due==="number" && typeof t.period==="number") ? t : taskWindow(t);
     const now = Date.now();
     return now <= due ? 0 : Math.min(1, (now - due) / period);
   }
@@ -2945,15 +3011,16 @@ const Tasks = (() => {
      El cobro llega AL COMPLETAR, no antes: mientras la tarea está ahí vencida
      no se toca nada. Un goteo en segundo plano era lo que hacía aparecer
      "−18 pts" al abrir la app sin haber hecho nada. */
-  function pointsForNow(t){
-    const st = ringState(t);
+  function pointsForNow(t, occ){
+    const w = occ || t;
+    const st = ringState(w);
     if(!st.over) return Math.round(taskMaxPoints(t) * st.frac);
     /* Al llenarse del todo el anillo rojo ya se cobró el máximo (y la tarea se
        borró, salvo si se repite o es compartida). Esas dos siguen ahí, y
        completarlas no puede volver a cobrar lo mismo: se descuenta lo ya
        pagado por ESTE vencimiento, que es justo el máximo. */
-    const paid = (t.penalizedFor === taskDueAt(t)) ? taskMaxPoints(t) : 0;
-    return -Math.max(0, Math.round(taskMaxPoints(t) * overdueFrac(t)) - paid);
+    const paid = occPaid(t, occ) ? taskMaxPoints(t) : 0;
+    return -Math.max(0, Math.round(taskMaxPoints(t) * overdueFrac(w)) - paid);
   }
   const ringOffset = (frac)=> (RING_C * (1 - frac)).toFixed(2);
 
@@ -3098,6 +3165,17 @@ const Tasks = (() => {
        anillo se queda lleno hasta que la hagas, y ahí rueda al ciclo siguiente.
      · Las COMPARTIDAS tampoco. Borrarlas las borra para los dos, y la tarea de
        tu amigo no puede desaparecer porque tú la dejaras pudrirse. */
+  /* Lo ya cobrado. Con días marcados cada día lleva su cuenta aparte
+     (`penalizedKeys`), porque cada día es una tarea distinta y fallar el lunes
+     no debe eximir del martes. Sin días marcados sigue mandando `penalizedFor`,
+     que guarda el vencimiento cobrado. */
+  const occPaid = (t, occ)=> (occ && occ.key)
+    ? (t.penalizedKeys||[]).includes(occ.key)
+    : (t.penalizedFor === taskDueAt(t));
+  const occDone = (t, occ)=>{
+    if(!occ || !occ.key) return isDoneToday(t);
+    return (Store.get().history||[]).some(h=> h.taskId===t.id && h.date===occ.key);
+  };
   function isRotten(t, now){
     if(t.repeats || t.shared) return false;
     const { due, period } = taskWindow(t);
@@ -3121,6 +3199,24 @@ const Tasks = (() => {
     const s=Store.get(); const now=Date.now();
     let penalty=0; const marks=[], rotten=[];
     (s.tasks||[]).forEach(t=>{
+      if(t.repeats && markedDays(t)){
+        /* Días marcados: cada día se cobra por su cuenta, porque cada día es
+           una tarea distinta y fallar el lunes no exime del martes. Se mira una
+           ventana corta hacia atrás: más allá ya se cobró en su momento. */
+        const hoy = dateKey(new Date(now));
+        const nacio = t.createdAt || t.startAt || 0;
+        for(let i=1;i<=10;i++){
+          const k = addDaysKey(hoy,-i);
+          if(!isMarkedKey(t,k)) continue;
+          const due = endOfDayMs(k), period = Math.max(60000, due - startOfDayMs(k));
+          if(due < nacio) break;                                                  // antes de existir
+          if(now < due + period) continue;                                        // su rojo no está lleno
+          if((t.penalizedKeys||[]).includes(k)) continue;                         // ya cobrado
+          if((s.history||[]).some(h=> h.taskId===t.id && h.date===k)) continue;   // hecha ese día
+          penalty += taskMaxPoints(t); marks.push({ id:t.id, key:k });
+        }
+        return;   // la tarea NO se borra: lo que caduca son sus días, no ella
+      }
       const { due, period } = taskWindow(t);
       if(now < due + period || isDoneToday(t)) return;   // el rojo aún no está lleno
       if(t.penalizedFor !== due){ penalty += taskMaxPoints(t); marks.push({ id:t.id, due }); }
@@ -3129,7 +3225,9 @@ const Tasks = (() => {
     if(!marks.length && !rotten.length) return;
     const rotIds = new Set(rotten.map(t=>t.id));
     Store.update(st=>{
-      marks.forEach(m=>{ const t=st.tasks.find(x=>x.id===m.id); if(t) t.penalizedFor=m.due; });
+      marks.forEach(m=>{ const t=st.tasks.find(x=>x.id===m.id); if(!t) return;
+        if(m.key){ t.penalizedKeys=(t.penalizedKeys||[]).concat(m.key).slice(-60); }
+        else t.penalizedFor=m.due; });
       if(penalty>0){
         const sum=(st.history||[]).reduce((a,h)=>a+(h.points||0),0);
         st.penalties=Math.min((st.penalties||0)+penalty, sum);   // topada en lo ganado
@@ -3293,13 +3391,23 @@ const Tasks = (() => {
     if(filter==="done"){ renderDone(); return; }
     const wrap = $("#taskListWrap");
     const s = Store.get();
-    let list = s.tasks.filter(t=> !isDoneToday(t) && scheduledToday(t));
+    /* Una fila por OCURRENCIA, no por tarea: una de lunes a viernes sin hacer
+       enseña la de hoy y, si ayer también tocaba y no se hizo, la de ayer. */
+    let list = [];
+    s.tasks.forEach(t=>{
+      occurrencesOf(t).forEach(o=>{
+        if(o.key ? occDone(t,o) : (isDoneToday(t) || !scheduledToday(t))) return;
+        if(o.over && !View.showOverdue) return;      // filtro "Mostrar vencidas"
+        list.push({ t, o });
+      });
+    });
     // Sitio de cada tarea en la lista guardada: las nuevas entran por delante,
     // así que el array YA es el orden de creación. Sirve de desempate cuando
     // dos comparten `createdAt` (importadas juntas, creadas el mismo segundo):
     // sin él quedarían como las dejara el ordenador, que es lo que se lee como
     // "no ordena".
     const pos = new Map(s.tasks.map((t,i)=>[t.id,i]));
+    const byOcc = (f)=> (A,B)=> f(A.t,B.t) || (A.o.due - B.o.due);
     // Urgentes primero SIEMPRE; dentro de cada grupo, el orden que hayas elegido.
     const cmp = {
       due:     (a,b)=> (taskDueAt(a) - taskDueAt(b)) || (pos.get(b.id) - pos.get(a.id)),
@@ -3310,9 +3418,15 @@ const Tasks = (() => {
       // creaste. Iba al revés que las otras dos y parecía que no ordenaba.
       created: (a,b)=> ((a.createdAt||0) - (b.createdAt||0)) || (pos.get(b.id) - pos.get(a.id))
     }[View.sort] || ((a,b)=> taskDueAt(a) - taskDueAt(b));
-    list.sort((a,b)=>{ const ua=a.urgent?0:1, ub=b.urgent?0:1; return ua!==ub ? ua-ub : cmp(a,b); });
+    /* Las vencidas primero dentro de cada grupo: son las que corren prisa, y
+       enterrarlas debajo de las de hoy era la forma más segura de no hacerlas. */
+    list.sort((A,B)=>{
+      const ua=A.t.urgent?0:1, ub=B.t.urgent?0:1; if(ua!==ub) return ua-ub;
+      const oa=A.o.over?0:1,   ob=B.o.over?0:1;   if(oa!==ob) return oa-ob;
+      return byOcc(cmp)(A,B);
+    });
     // Encabezado de estado: dice de un vistazo si te queda algo o no.
-    const pend = list.filter(t=>!isDoneToday(t)).length;
+    const pend = list.length;
     const sub = $("#tasksStatus");
     if(sub) sub.textContent = pend ? (pend===1 ? "1 por hacer" : pend+" por hacer") : "Nada que hacer 🙌";
 
@@ -3329,8 +3443,8 @@ const Tasks = (() => {
       return;
     }
     wrap.innerHTML = View.mode==="list"
-      ? `<div class="tilelist">${list.map((t,i)=>rowHtml(t,i)).join("")}</div>`
-      : `<div class="tilegrid">${list.map((t,i)=>cardHtml(t,i)).join("")}</div>`;
+      ? `<div class="tilelist">${list.map((x,i)=>rowHtml(x.t,i,x.o)).join("")}</div>`
+      : `<div class="tilegrid">${list.map((x,i)=>cardHtml(x.t,i,x.o)).join("")}</div>`;
     bind(wrap);
     startRingClock();
   }
@@ -3357,15 +3471,15 @@ const Tasks = (() => {
     const dp=$("#doneDatePick",wrap); if(dp) dp.onchange=()=>{ if(dp.value){ haptic(); doneDate=dp.value; render(); } };
     const tb=$("#doneDateToday",wrap); if(tb) tb.onclick=()=>{ haptic(); doneDate=dateKey(); render(); };
   }
-  function cardHtml(t,i){
+  function cardHtml(t,i,occ){
     // La ficha es el ANILLO. Todo lo demás cuelga de él: el emoji va dentro,
     // el título debajo y el tiempo restante al pie.
     // Tocar el anillo = completar. El menú vive fuera, en su esquina, para que
     // tocar el anillo signifique siempre lo mismo y nada más.
-    const st = ringState(t);
+    const st = ringState(occ||t);
     return `
-      <div class="tile${t.urgent?" urgent":""}${st.over?" over":""}${isDoneToday(t)?" done":""}" data-id="${t.id}" data-check="${t.id}" role="button" style="animation-delay:${Math.min(i*40,240)}ms">
-        <button class="tile-menu" data-tap="${t.id}" aria-label="Opciones de la tarea">${dotsSvg()}</button>
+      <div class="tile${t.urgent?" urgent":""}${st.over?" over":""}" data-id="${t.id}" data-check="${t.id}" data-occ="${esc((occ&&occ.key)||"")}" role="button" style="animation-delay:${Math.min(i*40,240)}ms">
+        <button class="tile-menu" data-tap="${t.id}" data-occ="${esc((occ&&occ.key)||"")}" aria-label="Opciones de la tarea">${dotsSvg()}</button>
         ${ringHtml(t,st)}
         <div class="tile-title">${esc(t.title)}</div>
         <div class="tile-due">${esc(dueLabel(st.due))}</div>
@@ -3384,16 +3498,16 @@ const Tasks = (() => {
   }
   // Misma información, otra forma: en lista el anillo se reduce y el texto se
   // alinea a la izquierda, que es lo que hace que quepan más de un vistazo.
-  function rowHtml(t,i){
-    const st = ringState(t);
+  function rowHtml(t,i,occ){
+    const st = ringState(occ||t);
     return `
-      <div class="tilerow${t.urgent?" urgent":""}${st.over?" over":""}${isDoneToday(t)?" done":""}" data-id="${t.id}" data-check="${t.id}" role="button" style="animation-delay:${Math.min(i*40,240)}ms">
+      <div class="tilerow${t.urgent?" urgent":""}${st.over?" over":""}" data-id="${t.id}" data-check="${t.id}" data-occ="${esc((occ&&occ.key)||"")}" role="button" style="animation-delay:${Math.min(i*40,240)}ms">
         ${ringHtml(t,st)}
         <div class="rowbody">
           <div class="tile-title">${esc(t.title)}</div>
           <div class="tile-due">${esc(dueLabel(st.due))}</div>
         </div>
-        <button class="tile-menu" data-tap="${t.id}" aria-label="Opciones de la tarea">${dotsSvg()}</button>
+        <button class="tile-menu" data-tap="${t.id}" data-occ="${esc((occ&&occ.key)||"")}" aria-label="Opciones de la tarea">${dotsSvg()}</button>
       </div>`;
   }
   /* El anillo tiene que MOVERSE, o no es un reloj. Cada 30 s se recalcula sin
@@ -3425,21 +3539,26 @@ const Tasks = (() => {
   // Al volver del segundo plano el reloj puede llevar horas parado.
   document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) tickRings(); });
 
+  // La ficha sabe de qué DÍA es: sin eso, completar la vencida de ayer habría
+  // marcado la de hoy, que es la que estaba guardada en la tarea.
+  const occOf = (el)=>{
+    const t=Store.get().tasks.find(x=>x.id===el.getAttribute("data-id")||x.id===el.getAttribute("data-check")||x.id===el.getAttribute("data-tap"));
+    if(!t) return null;
+    const k=el.getAttribute("data-occ")||"";
+    const o=occurrencesOf(t).find(x=> (x.key||"")===k) || occurrencesOf(t)[0] || null;
+    return { t, o };
+  };
   function bind(wrap){
     $$("[data-check]",wrap).forEach(b=> b.onclick = (e)=>{
-      const id=b.getAttribute("data-check");
-      const t=Store.get().tasks.find(x=>x.id===id);
-      if(t) quickComplete(t);
+      const r=occOf(b); if(r) quickComplete(r.t, r.o);
     });
     $$("[data-tap]",wrap).forEach(b=> b.onclick = (e)=>{
       e.stopPropagation();                 // el menú NO debe abrir la cámara
-      const id=b.getAttribute("data-tap");
-      const t=Store.get().tasks.find(x=>x.id===id);
-      if(t){ haptic(); openTaskActions(t); }
+      const r=occOf(b); if(r){ haptic(); openTaskActions(r.t, r.o); }
     });
   }
-  function openTaskActions(task){
-    const done = isDoneToday(task);
+  function openTaskActions(task, occ){
+    const done = occ && occ.key ? occDone(task,occ) : isDoneToday(task);
     const head = `
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="taCancel">Cancelar</span><span class="title">Tarea</span><span class="act" style="opacity:0">•</span></div>
@@ -3453,7 +3572,7 @@ const Tasks = (() => {
       </div>`;
     Sheets.show(head);
     $("#taCancel").onclick = Sheets.close;
-    const de=$("#taDone"); if(de) de.onclick = ()=>{ haptic(); openComplete(task); };
+    const de=$("#taDone"); if(de) de.onclick = ()=>{ haptic(); openComplete(task, occ); };
     $("#taEdit").onclick   = ()=>{ haptic(); openTaskForm(task); };
     $("#taDelete").onclick = ()=>{ haptic(20); confirmDelete(task); };
   }
@@ -4010,12 +4129,12 @@ const Tasks = (() => {
   }
 
   /* ---------- COMPLETAR + FOTO ---------- */
-  function openComplete(task){
+  function openComplete(task, occ){
     let photoData = null;
     // Fuera de plazo la tarea sigue pudiendo hacerse —y hay que hacerla— pero
     // ya no suma: mientras estuvo vencida el anillo rojo fue cobrando. Hacerla
     // ahora no devuelve lo perdido; lo que hace es parar la sangría.
-    const pts  = pointsForNow(task);          // con signo: + a tiempo, − vencida
+    const pts  = pointsForNow(task, occ);     // con signo: + a tiempo, − vencida
     const late = pts < 0;
     const cost = -pts;
     const head = `
@@ -4055,23 +4174,23 @@ const Tasks = (() => {
       haptic(15);
       Sheets.close();
       confirm.disabled = true; // evita doble clic mientras cierra
-      commitCompletion(task, photoData, pts);
+      commitCompletion(task, photoData, pts, occ);
     };
   }
 
   /* Completar de un toque: tocar la tarjeta abre la cámara y, en cuanto hay
      foto, la tarea queda hecha. El menú intermedio sobraba —siempre acababas
      pulsando "Cámara"— y con él sobraban dos toques por tarea. */
-  function quickComplete(task){
-    if(isDoneToday(task)){ UI.toast("Ya completada","check","var(--green)"); return; }
+  function quickComplete(task, occ){
+    if(occ && occ.key ? occDone(task,occ) : isDoneToday(task)){ UI.toast("Ya completada","check","var(--green)"); return; }
     const fileCam=$("#fileCam");
     fileCam.onchange = (e)=>{
       const f = e.target.files && e.target.files[0];
       e.target.value = "";
       if(!f) return;                       // cancelaste la cámara: no pasa nada
       compressImage(f,(dataUrl)=>{
-        const pts = pointsForNow(task);
-        commitCompletion(task, dataUrl, pts);
+        const pts = pointsForNow(task, occ);
+        commitCompletion(task, dataUrl, pts, occ);
       });
     };
     haptic(12);
@@ -4081,9 +4200,13 @@ const Tasks = (() => {
   /* RESPONDER PRIMERO, trabajar después: el trabajo pesado (IndexedDB,
      localStorage, re-pintados, red) se hace con la animación ya en marcha.
      Antes el clic esperaba a guardar la foto (varios MB) antes de cerrar. */
-  function commitCompletion(task, photoData, pts){
+  function commitCompletion(task, photoData, pts, occ){
       const photoId = uid();
       const now = new Date();
+      // El día que se apunta es el de la OCURRENCIA, no el de hoy: completar la
+      // vencida del lunes tiene que caer en el lunes del calendario, y es esa
+      // fecha la que marca ese día como hecho.
+      const occKey = (occ && occ.key) || dateKey(now);
       /* `points` es lo GANADO y `penalty` lo PERDIDO, cada uno en su casilla y
          nunca negativos. Meter un número con signo en `points` habría bastado
          para el total, pero ese campo lo suman el resumen semanal, las cifras
@@ -4092,7 +4215,7 @@ const Tasks = (() => {
       const entry = {
         id:uid(), taskId:task.id, title:task.title, category:task.category,
         minutes:task.minutes, points:Math.max(0,pts), penalty:Math.max(0,-pts), random:task.random,
-        date:dateKey(now), time:timeLabel(now), photoId: photoData?photoId:null,
+        date:occKey, time:timeLabel(now), photoId: photoData?photoId:null,
         shared: !!task.shared, partnerName: task.shared?(task.partnerName||""):undefined,
         partnerId: task.shared?(task.partnerId||null):undefined,
         sharedId: task.shared?(task.sharedId||null):undefined
@@ -4106,7 +4229,17 @@ const Tasks = (() => {
           const at = now.getTime();
           t.lastDone   = dateKey(now);
           t.lastDoneAt = at;
-          if(t.repeats){
+          if(t.repeats && markedDays(t)){
+            /* Días marcados: no se rueda nada. Cada día tiene su ocurrencia y
+               el historial dice cuáles están hechas. Rodar la ventana aquí era
+               justo lo que hacía desaparecer los días siguientes. La ventana
+               guardada se deja en el día que toca ahora, que es de donde beben
+               el calendario, los recordatorios y la nube. */
+            const hoyK = nextMarkedKey(t, dateKey(), false) || dateKey();
+            t.dueAt   = endOfDayMs(hoyK);
+            t.startAt = startOfDayMs(hoyK);
+            delete t.doneUntil;
+          } else if(t.repeats){
             // Se abre el siguiente ciclo y la tarea se oculta hasta que ese
             // ciclo ARRANQUE (con intervalo fijo, al acabar el actual; con
             // "última finalización", ahora mismo).
@@ -6554,8 +6687,11 @@ const Router = (() => {
     const listIc = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>`;
     const row = (on,ic,lbl,attr,extra="") =>
       `<button class="vm-item" ${attr}><span class="vm-check">${on?check:""}</span><span class="vm-ic">${ic}</span><span class="vm-lbl">${lbl}</span>${extra}</button>`;
+    const overIc = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`;
     return row(View.mode==="grid", gridIc, "Cuadrícula", 'data-set="mode" data-val="grid"')
          + row(View.mode==="list", listIc, "Lista",      'data-set="mode" data-val="list"')
+         + `<div class="vm-sep"></div>`
+         + row(View.showOverdue, overIc, "Mostrar vencidas", 'data-toggle="showOverdue"')
          + `<div class="vm-sep"></div>`
          + row(false, "", "Orden: "+esc(View.sortLabel()), 'data-sort="1"', '<span class="vm-chev">›</span>');
   }
@@ -6600,7 +6736,9 @@ const Router = (() => {
    ===================================================================== */
 const View = (() => {
   const KEY="rachas_view_v1";
-  const def={ mode:"grid", sort:"due" };
+  // Encendido por defecto: esconder de entrada lo que va con retraso sería
+  // esconder justo lo que hay que hacer primero.
+  const def={ mode:"grid", sort:"due", showOverdue:true };
   let v;
   try{ v = Object.assign({}, def, JSON.parse(localStorage.getItem(KEY))||{}); }
   catch(e){ v = Object.assign({}, def); }
@@ -6608,6 +6746,7 @@ const View = (() => {
   const SORTS = [["due","Fecha de vencimiento"],["name","Nombre"],["created","Creación"]];
   return {
     get mode(){return v.mode;}, get sort(){return v.sort;},
+    get showOverdue(){ return v.showOverdue!==false; },
     sortLabel(){ return (SORTS.find(x=>x[0]===v.sort)||SORTS[0])[1]; },
     SORTS,
     set(k,val){ v[k]=val; save(); }
