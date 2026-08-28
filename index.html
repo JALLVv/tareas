@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v153";
+const APP_VERSION = "v154";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2081,9 +2081,13 @@ function occurrencesOf(t, now){
     const start = occStartMs(t, k), due = endOfDayMs(k);
     if(due < nacio) break;
     const period = Math.max(60000, due-start);
-    if(now < start) continue;
+    /* Con una hora de inicio por delante (una tarea de hoy que empieza a las
+       20:00), la ventana aún no ha arrancado. Antes eso la escondía de la lista
+       y parecía que la tarea había desaparecido: estaba programada para hoy y
+       no se veía en todo el día. Se enseña igual, con el anillo lleno —que es
+       lo que significa "no ha empezado a correr"— y la etiqueta lo dice. */
     if(now >= due + period) break;
-    out.push({ start, due, period, key:k, over: now>due });
+    out.push({ start, due, period, key:k, over: now>due, pending: now<start });
   }
   return out.reverse();   // la más antigua primero: es la que más corre prisa
 }
@@ -2499,6 +2503,11 @@ const Store = (() => {
     if(nf.length!==state.friends.length){ state.friends=nf; save(); }
     if(!state.cloud) state.cloud={ syncedCompletions:[], avatarUrl:null, avatarSrc:null };
     if(!Array.isArray(state.notifs)) state.notifs=[];
+    /* El diagnóstico del push dejaba un aviso falso ("Prueba del camino real")
+       cada vez que se usaba. Ya cumplió su función; se recogen los que dejó. */
+    const antesN = state.notifs.length;
+    state.notifs = state.notifs.filter(n=> (n && n.task_title) !== "Prueba del camino real");
+    if(state.notifs.length !== antesN) save();
     if(!Array.isArray(state.notifSeen)) state.notifSeen=[];
     if(!Array.isArray(state.deletedShared)) state.deletedShared=[];
     // Las tareas guardadas antes del intervalo no tienen ni inicio ni
@@ -3059,7 +3068,14 @@ const Tasks = (() => {
     if(h > 0) return m > 0 ? h+" h "+m+" min" : h+" h";
     return Math.max(1,m) + " min";
   }
-  function dueLabel(due){
+  function dueLabel(due, occ){
+    // Si aún no ha arrancado, lo que importa no es cuánto queda para vencer
+    // sino cuándo empieza: "vence en 6 h" en una tarea que no ha empezado se
+    // lee como si ya estuviera corriendo.
+    if(occ && occ.pending){
+      const d=new Date(occ.start);
+      return "empieza a las "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+    }
     const diff = due - Date.now();
     return diff >= 0 ? "vence en " + spanLabel(diff) : "vencida hace " + spanLabel(-diff);
   }
@@ -3094,7 +3110,13 @@ const Tasks = (() => {
     return t.lastDone === dateKey();   // respaldo para datos antiguos
   };
   // ¿la tarea aparece hoy en tu lista? Solo limita si "Mostrar solo esos días" está activo.
-  const scheduledToday = (t)=> Date.now() >= taskWindow(t).start;
+  /* Aparece si su ventana ya arrancó O si arranca HOY: una tarea puesta para
+     hoy a las 20:00 tiene que verse desde por la mañana. Lo que sigue oculto es
+     lo que empieza OTRO día, que es lo que de verdad no toca todavía. */
+  const scheduledToday = (t)=>{
+    const st = taskWindow(t).start;
+    return Date.now() >= st || dateKey(new Date(st)) === dateKey();
+  };
 
   /* ---------- RECORDATORIOS ----------
      Programa una notificación local a la hora elegida para las tareas con
@@ -3507,7 +3529,7 @@ const Tasks = (() => {
         <button class="tile-menu" data-tap="${t.id}" data-occ="${esc((occ&&occ.key)||"")}" aria-label="Opciones de la tarea">${dotsSvg()}</button>
         ${ringHtml(t,st)}
         <div class="tile-title">${esc(t.title)}</div>
-        <div class="tile-due">${esc(dueLabel(st.due))}</div>
+        <div class="tile-due">${esc(dueLabel(st.due, occ))}</div>
       </div>`;
   }
   function ringHtml(t,st){
@@ -3530,7 +3552,7 @@ const Tasks = (() => {
         ${ringHtml(t,st)}
         <div class="rowbody">
           <div class="tile-title">${esc(t.title)}</div>
-          <div class="tile-due">${esc(dueLabel(st.due))}</div>
+          <div class="tile-due">${esc(dueLabel(st.due, occ))}</div>
         </div>
         <button class="tile-menu" data-tap="${t.id}" data-occ="${esc((occ&&occ.key)||"")}" aria-label="Opciones de la tarea">${dotsSvg()}</button>
       </div>`;
@@ -3562,7 +3584,7 @@ const Tasks = (() => {
       if(tile){
         tile.classList.toggle("over", st.over);
         const due = tile.querySelector(".tile-due");
-        if(due) due.textContent = dueLabel(st.due);
+        if(due) due.textContent = dueLabel(st.due, occ);
       }
     });
     // Una ocurrencia que caduca mientras miras no se puede quedar dibujada.
@@ -5343,21 +5365,12 @@ const Cloud = (() => {
         if(!why && data && data.errors && data.errors.length) why="el servicio de push rechazó el envío ("+String(data.errors[0]).slice(0,80)+")";
         return { ok:false, error:why||"se envió a 0 dispositivos (activa el push en este teléfono)" };
       }
-      /* SEGUNDO ENVÍO, POR EL CAMINO DE VERDAD.
-         El de arriba llama a la función desde el teléfono, así que prueba la
-         suscripción y la función — pero NO el camino que recorre un aviso real:
-         fila en `notifications` → trigger → pg_net → función. Si ese tramo está
-         roto (pg_net sin instalar, `push_hook_secret` sin poner), la prueba
-         salía bien y los avisos de un amigo no llegaban nunca. Que es justo lo
-         que pasaba. Se manda uno por cada camino y se cuentan los que llegan. */
-      let fila=false;
-      try{
-        const { error:e2 } = await client.from('notifications').insert({
-          recipient_id:uid, actor_id:uid, actor_name:"Prueba",
-          type:'comment', task_title:"Prueba del camino real", ref_key:"test-"+Date.now() });
-        fila = !e2;
-      }catch(_){ }
-      return { ok:true, sent, fila };
+      /* Un solo envío. Hubo un segundo que recorría el camino del servidor
+         (fila → trigger → pg_net → función) para localizar dónde se perdían los
+         avisos; sirvió —llegan los dos, con la app abierta y cerrada— y con eso
+         dejó de hacer falta. Además dejaba un aviso falso en la lista, que es
+         un precio que una prueba no debe cobrar. */
+      return { ok:true, sent };
     }catch(e){ return { ok:false, error:(e&&e.message)||"error" }; }
   }
 
@@ -5990,6 +6003,10 @@ const Notifs = (() => {
     if(!Cloud.enabled()) return;
     let list=await Cloud.fetchNotifs();
     if(list===null) return; // fallo de red: conservar la lista local tal cual
+    // Los avisos falsos que dejó el diagnóstico del push se borran también de
+    // la nube; si no, volverían a bajarse en cada refresco.
+    const basura = list.filter(n=> n && n.task_title === "Prueba del camino real");
+    if(basura.length){ Cloud.clearNotifs(basura.map(n=>n.id)); list = list.filter(n=> basura.indexOf(n)<0); }
     const prevSig = notifSig(listNow());
     Store.update(s=>{ s.notifs=list; s.notifSeen=list.map(n=>n.id); });
     updateBadge();
@@ -6491,16 +6508,7 @@ function openSettingsSheet(){
     haptic();
     const el=$("#setTestSub"); if(el) el.textContent="Enviando prueba…";
     const r=await Cloud.testPush();
-    if(r && r.ok && r.sent>0){
-      /* Se mandan DOS avisos por caminos distintos, y el que falte señala dónde
-         está la avería: el directo prueba la suscripción y la función; el "real"
-         prueba además el trigger de la base de datos, que es el que dispara los
-         avisos de tus amigos. Recibir uno solo es el diagnóstico. */
-      if(el) el.textContent = r.fila
-        ? `Enviadas 2 pruebas a ${r.sent} dispositivo(s): una directa y otra por el camino real. Si solo llega UNA, el trigger del servidor no está enviando.`
-        : `Prueba directa enviada a ${r.sent} dispositivo(s), pero no se pudo escribir el aviso para probar el camino real.`;
-      UI.toast(r.fila?"2 pruebas enviadas ✅":"Prueba directa enviada","check", r.fila?"var(--green)":"var(--orange)");
-    }
+    if(r && r.ok && r.sent>0){ if(el) el.textContent=`Prueba enviada a ${r.sent} dispositivo(s) · debería sonar YA`; UI.toast("Prueba enviada ✅","check","var(--green)"); }
     else if(r && r.ok){ if(el) el.textContent="⚠️ La función respondió pero no hay dispositivos suscritos"; UI.toast("Sin dispositivos suscritos","bell","var(--red)"); }
     else { if(el) el.textContent="❌ "+((r&&r.error)||"falló el envío"); UI.toast("Prueba fallida: "+((r&&r.error)||""),"bell","var(--red)"); }
   };
