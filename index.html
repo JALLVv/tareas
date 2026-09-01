@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v155";
+const APP_VERSION = "v156";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2067,7 +2067,7 @@ function occurrencesOf(t, now){
   // Las que no son de días marcados (una vez, "cada 3 días") siguen teniendo
   // una sola ventana: un ritmo no es una casilla del calendario.
   if(!t || !t.repeats || !markedDays(t))
-    return [{ start:base.start, due:base.due, period:base.period, key:null, over: now>base.due }];
+    return [{ start:base.start, due:base.due, period:base.period, late:base.late, key:null, over: now>base.due }];
   const out=[];
   const hoy = dateKey(new Date(now));
   // Un día anterior a la propia tarea no existió: sin este suelo, crear una
@@ -2081,13 +2081,14 @@ function occurrencesOf(t, now){
     const start = occStartMs(t, k), due = endOfDayMs(k);
     if(due < nacio) break;
     const period = Math.max(60000, due-start);
+    const late   = Math.max(period, latePeriod(t));
     /* Con una hora de inicio por delante (una tarea de hoy que empieza a las
        20:00), la ventana aún no ha arrancado. Antes eso la escondía de la lista
        y parecía que la tarea había desaparecido: estaba programada para hoy y
        no se veía en todo el día. Se enseña igual, con el anillo lleno —que es
        lo que significa "no ha empezado a correr"— y la etiqueta lo dice. */
-    if(now >= due + period) break;
-    out.push({ start, due, period, key:k, over: now>due, pending: now<start });
+    if(now >= due + late) break;
+    out.push({ start, due, period, late, key:k, over: now>due, pending: now<start });
   }
   return out.reverse();   // la más antigua primero: es la que más corre prisa
 }
@@ -2120,11 +2121,23 @@ function taskDueAt(t){
 /* La VENTANA es la única fuente de verdad: de ella salen el anillo, la
    etiqueta de tiempo, la penalización y el momento en que la tarea aparece.
    Mientras se calculaban por separado, podían contradecirse. */
+/* Cuánto tarda en llenarse el anillo ROJO, que es también lo que la tarea
+   vencida se queda en la lista. NO es lo que quedaba de verde: una tarea
+   creada a las 23:50 tenía diez minutos de verde y, midiendo igual, diez
+   minutos de rojo — vencía y se borraba sola de madrugada, así que por la
+   mañana había desaparecido sin haberla visto nunca en rojo.
+   El rojo dura el ciclo PROPIO de la tarea: un día para las de cada día,
+   tres horas para una de tres horas. Con días marcados el ciclo es el día
+   (cada día marcado es una tarea distinta), no la semana del recurrence. */
+function latePeriod(t){
+  return markedDays(t) ? UNIT_MS.day : taskPeriod(t||{});
+}
 function taskWindow(t){
   const due = taskDueAt(t);
   let start = (t && typeof t.startAt === "number") ? t.startAt : computeStartFor(t, due);
   if(!(start < due)) start = computeStartFor(t, due);   // datos incoherentes
-  return { start, due, period: Math.max(60000, due - start) };
+  const period = Math.max(60000, due - start);
+  return { start, due, period, late: Math.max(period, latePeriod(t)) };
 }
 // Al completar, el siguiente vencimiento. "intervalo fijo" mantiene el ritmo
 // original (aunque la hagas tarde); "última finalización" cuenta desde ahora.
@@ -3020,22 +3033,24 @@ const Tasks = (() => {
      el cobro de ese día midan cosas distintas. */
   function ringState(t){
     const now = Date.now();
-    const { start, due, period } = (t && typeof t.due==="number" && typeof t.start==="number") ? t : taskWindow(t);
+    const w = (t && typeof t.due==="number" && typeof t.start==="number") ? t : taskWindow(t);
+    const { start, due, period } = w;
+    const late = w.late || period;
     if(now <= due){
       // Antes de que empiece su ciclo el anillo se ve lleno, no vacío.
       const frac = now <= start ? 1 : (due - now) / period;
       return { over:false, frac: Math.max(0, Math.min(1, frac)), due };
     }
     // Vencida: el rojo arranca con un trocito visible, no desde la nada.
-    return { over:true, frac: Math.max(0.05, Math.min(1, (now - due) / period)), due };
+    return { over:true, frac: Math.max(0.05, Math.min(1, (now - due) / late)), due };
   }
   /* El anillo rojo nunca se DIBUJA por debajo del 5%, o no se vería; el cobro
      sí arranca en cero, para que vencer no sea un escalón. Dibujo y cobro miden
      lo mismo, pero el cobro sin suelo. */
   function overdueFrac(t){
-    const { due, period } = (t && typeof t.due==="number" && typeof t.period==="number") ? t : taskWindow(t);
+    const w = (t && typeof t.due==="number" && typeof t.period==="number") ? t : taskWindow(t);
     const now = Date.now();
-    return now <= due ? 0 : Math.min(1, (now - due) / period);
+    return now <= w.due ? 0 : Math.min(1, (now - w.due) / (w.late || w.period));
   }
   /* Lo que vale completarla AHORA, con signo. La regla es una sola y el anillo
      la dice entera: cuanto más verde quede, más suma; cuanto más rojo se haya
@@ -3225,8 +3240,8 @@ const Tasks = (() => {
   };
   function isRotten(t, now){
     if(t.repeats || t.shared) return false;
-    const { due, period } = taskWindow(t);
-    return now >= due + period;
+    const { due, late } = taskWindow(t);
+    return now >= due + late;
   }
   /* ---------- PENALIZACIÓN por tareas vencidas ----------
      El castigo es un solo cobro, y llega cuando el anillo rojo se COMPLETA:
@@ -3255,17 +3270,18 @@ const Tasks = (() => {
         for(let i=1;i<=10;i++){
           const k = addDaysKey(hoy,-i);
           if(!isMarkedKey(t,k)) continue;
-          const due = endOfDayMs(k), period = Math.max(60000, due - occStartMs(t,k));
+          const due = endOfDayMs(k);
+          const late = Math.max(60000, due - occStartMs(t,k), latePeriod(t));
           if(due < nacio) break;                                                  // antes de existir
-          if(now < due + period) continue;                                        // su rojo no está lleno
+          if(now < due + late) continue;                                          // su rojo no está lleno
           if((t.penalizedKeys||[]).includes(k)) continue;                         // ya cobrado
           if((s.history||[]).some(h=> h.taskId===t.id && h.date===k)) continue;   // hecha ese día
           penalty += taskMaxPoints(t); marks.push({ id:t.id, key:k });
         }
         return;   // la tarea NO se borra: lo que caduca son sus días, no ella
       }
-      const { due, period } = taskWindow(t);
-      if(now < due + period || isDoneToday(t)) return;   // el rojo aún no está lleno
+      const { due, late } = taskWindow(t);
+      if(now < due + late || isDoneToday(t)) return;     // el rojo aún no está lleno
       if(t.penalizedFor !== due){ penalty += taskMaxPoints(t); marks.push({ id:t.id, due }); }
       if(isRotten(t, now)) rotten.push(t);
     });
