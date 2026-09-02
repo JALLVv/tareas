@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v156";
+const APP_VERSION = "v157";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3456,11 +3456,14 @@ const Tasks = (() => {
     const s = Store.get();
     /* Una fila por OCURRENCIA, no por tarea: una de lunes a viernes sin hacer
        enseña la de hoy y, si ayer también tocaba y no se hizo, la de ayer. */
-    let list = [];
+    let list = [], ocultas = 0;
     s.tasks.forEach(t=>{
       occurrencesOf(t).forEach(o=>{
         if(o.key ? occDone(t,o) : (isDoneToday(t) || !scheduledToday(t))) return;
-        if(o.over && !View.showOverdue) return;      // filtro "Mostrar vencidas"
+        // Filtro "Mostrar vencidas". Se CUENTAN las que esconde: apagado sin
+        // querer, una tarea vencida desaparecía sin dejar rastro y la pantalla
+        // llegaba a decir "has completado todo lo de hoy" teniéndola pendiente.
+        if(o.over && !View.showOverdue){ ocultas++; return; }
         list.push({ t, o });
       });
     });
@@ -3491,7 +3494,13 @@ const Tasks = (() => {
     // Encabezado de estado: dice de un vistazo si te queda algo o no.
     const pend = list.length;
     const sub = $("#tasksStatus");
-    if(sub) sub.textContent = pend ? (pend===1 ? "1 por hacer" : pend+" por hacer") : "Nada que hacer 🙌";
+    const vencOcultas = ocultas===1 ? "1 vencida oculta" : ocultas+" vencidas ocultas";
+    if(sub){
+      const partes=[];
+      if(pend) partes.push(pend===1 ? "1 por hacer" : pend+" por hacer");
+      if(ocultas) partes.push(vencOcultas);
+      sub.textContent = partes.length ? partes.join(" · ") : "Nada que hacer 🙌";
+    }
 
     if (!s.tasks.length){
       wrap.innerHTML = emptyState("Aún no tienes tareas","Genera una o crea la tuya con el botón +");
@@ -3502,7 +3511,16 @@ const Tasks = (() => {
       return;
     }
     if (!list.length){
-      wrap.innerHTML = emptyState("Nada por hacer 🙌","Has completado todo lo de hoy");
+      // Decir "no te queda nada" con tareas vencidas escondidas es mentir. Se
+      // dice cuántas hay y se ofrece el interruptor que las tapó.
+      wrap.innerHTML = ocultas
+        ? emptyState(ocultas===1 ? "Tienes 1 tarea vencida" : `Tienes ${ocultas} tareas vencidas`,
+            "El filtro “Mostrar vencidas” las está escondiendo")
+          + `<div style="padding:0 16px"><button class="btn secondary" id="verVencidas">Mostrarlas</button></div>`
+        : emptyState("Nada por hacer 🙌","Has completado todo lo de hoy");
+      const vv=$("#verVencidas");
+      if(vv) vv.onclick=()=>{ haptic(); View.set("showOverdue", true); render(); };
+      if($("#view-tasks").classList.contains("active")) $("#fab").classList.add("show");
       return;
     }
     wrap.innerHTML = View.mode==="list"
