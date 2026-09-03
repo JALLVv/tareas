@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v157";
+const APP_VERSION = "v158";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2552,7 +2552,12 @@ const Store = (() => {
         const newDue  = computeDueFrom(t, anchor, false);
         t.dueAt   = newDue;
         t.startAt = computeStartFor(t, newDue);
-        if(newDue < Date.now()) t.penalizedFor = newDue;
+        /* Indulto, NO cobro. Recalcular una ventana no puede cobrarte por un
+           tiempo que pasó con otras reglas, así que este vencimiento se marca
+           para que el cobro EN SEGUNDO PLANO no salte. Pero marcarlo como
+           "ya pagado" (penalizedFor) lo eximía también al COMPLETARLA: la
+           tarea enseñaba medio anillo rojo y al hacerla no restaba nada. */
+        if(newDue < Date.now()) t.pardonedFor = newDue;
         t.dueVer  = 3;
       }
     });
@@ -2594,7 +2599,7 @@ const Store = (() => {
 
        Las tareas con `penalizedFor` pero SIN `penalizedPts` no se tocan: son
        cobros enteros de antes del goteo, y esos sí fueron correctos. */
-    if(state.ptsVer !== 2){
+    if(!(state.ptsVer >= 2)){
       const nowMs = Date.now();
       let back = 0;
       (state.tasks||[]).forEach(t=>{
@@ -2613,7 +2618,7 @@ const Store = (() => {
        los últimos diez días programados: una factura por un tiempo que
        transcurrió con otras reglas. Se dan por saldados todos los días ya
        pasados; a partir de hoy el cobro cuenta con normalidad. */
-    if(state.ptsVer !== 3){
+    if(!(state.ptsVer >= 3)){
       const hoyK = dateKey();
       (state.tasks||[]).forEach(t=>{
         if(!t.repeats || !markedDays(t)) return;
@@ -2622,6 +2627,25 @@ const Store = (() => {
         t.penalizedKeys = Array.from(ya).slice(-60);
       });
       state.ptsVer = 3;
+    }
+    /* Reparación. Hasta aquí, recalcular la ventana marcaba la tarea como "ya
+       cobrada", y eso apagaba también el cobro al completarla: una tarea con el
+       anillo rojo a medias no restaba ni un punto al hacerla.
+       Se distinguen las dos cosas mirando el anillo: el cobro en segundo plano
+       SOLO ocurre con el rojo lleno, así que una marcada con el rojo a medias
+       no puede haberse cobrado — es un indulto de la migración y pasa a
+       `pardonedFor`. Las que sí tienen el rojo lleno se quedan como están, para
+       no cobrarlas dos veces. */
+    if(!(state.ptsVer >= 4)){
+      const ahora = Date.now();
+      (state.tasks||[]).forEach(t=>{
+        if(typeof t.penalizedFor !== "number") return;
+        const w = taskWindow(t);
+        if(t.penalizedFor === w.due && ahora < w.due + w.late){
+          t.pardonedFor = t.penalizedFor; delete t.penalizedFor;
+        }
+      });
+      state.ptsVer = 4;
     }
     // Las recurrentes antiguas arrancan su contador de penalización desde ayer,
     // para no descontar retroactivamente días pasados antes de esta función.
@@ -3282,7 +3306,9 @@ const Tasks = (() => {
       }
       const { due, late } = taskWindow(t);
       if(now < due + late || isDoneToday(t)) return;     // el rojo aún no está lleno
-      if(t.penalizedFor !== due){ penalty += taskMaxPoints(t); marks.push({ id:t.id, due }); }
+      // El indulto de una migración vale para NO cobrar por sorpresa; el cobro
+      // al completarla sigue vivo (lo mira occPaid, que solo lee penalizedFor).
+      if(t.penalizedFor !== due && t.pardonedFor !== due){ penalty += taskMaxPoints(t); marks.push({ id:t.id, due }); }
       if(isRotten(t, now)) rotten.push(t);
     });
     if(!marks.length && !rotten.length) return;
@@ -4260,6 +4286,11 @@ const Tasks = (() => {
     const pts  = pointsForNow(task, occ);     // con signo: + a tiempo, − vencida
     const late = pts < 0;
     const cost = -pts;
+    /* Vencida pero sin nada que cobrar = su anillo rojo ya se llenó y el cobro
+       se hizo en su momento. Decir aquí "gana 0 pts", como se decía, sonaba a
+       que el castigo no funcionaba: la tarea estaba roja entera y completarla
+       no movía el marcador. Merece su propio mensaje. */
+    const yaCobrada = !late && ringState(occ || task).over;
     const head = `
       <div class="grabber"></div>
       <div class="sheet-head"><span class="act cancel" id="pcCancel">Cancelar</span><span class="title">Completar</span><span class="act" style="opacity:0">•</span></div>
@@ -4268,6 +4299,8 @@ const Tasks = (() => {
         <h3>${esc(task.title)}</h3>
         <p>${late
           ? `Esta tarea está <b style="color:var(--red)">vencida</b>: completarla ahora te resta <b style="color:var(--red)">${cost} pts</b>, y cuanto más se llene el anillo rojo, más será (hasta ${taskMaxPoints(task)}).`
+          : yaCobrada
+          ? `Su anillo rojo se llenó del todo, así que ya se te descontaron <b style="color:var(--red)">${taskMaxPoints(task)} pts</b>. Completarla ahora no resta nada más.`
           : `Sube una foto como evidencia para completar la tarea y ganar <b style="color:var(--yellow)">${pts} pts</b>.`}</p>
         <div class="photo-preview" id="pcPreview"><img id="pcImg" alt="evidencia"/><div class="retake" id="pcRetake">Cambiar foto</div></div>
         <div class="photo-btns">
