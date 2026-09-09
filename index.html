@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v158";
+const APP_VERSION = "v159";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -2067,7 +2067,12 @@ function occurrencesOf(t, now){
   // Las que no son de días marcados (una vez, "cada 3 días") siguen teniendo
   // una sola ventana: un ritmo no es una casilla del calendario.
   if(!t || !t.repeats || !markedDays(t))
-    return [{ start:base.start, due:base.due, period:base.period, late:base.late, key:null, over: now>base.due }];
+    /* `pending` vivía solo en la rama de los días marcados, así que una tarea
+       de una sola ventana con hora de arranque por delante ("hoy a partir de
+       las 20:00") decía "vence en 18 h" a las seis de la mañana: una cuenta
+       atrás de algo que ni siquiera había empezado. */
+    return [{ start:base.start, due:base.due, period:base.period, late:base.late,
+              key:null, over: now>base.due, pending: now<base.start }];
   const out=[];
   const hoy = dateKey(new Date(now));
   // Un día anterior a la propia tarea no existió: sin este suelo, crear una
@@ -3951,9 +3956,23 @@ const Tasks = (() => {
        guardaría y pregunta a las mismas funciones que usa la lista. Cuando
        tenía su propia fórmula, decía "vence en 23 h 59 min" mientras la tarea
        ya guardada decía otra cosa. */
+    /* La PROGRAMACIÓN de una tarea (cada cuánto, qué días, desde qué hora) es
+       lo único que puede mover su ventana. Cambiar el título o el emoji, no.
+       Sin esta firma, editar recalculaba el vencimiento desde el arranque
+       guardado y lo dejaba en el pasado: la vista previa salía en rojo y, al
+       guardar, la tarea heredaba un vencimiento inventado ("vencida hace
+       1 min" en una que llevaba doce horas vencida). */
+    const schedSig = (f)=>{ const r=(f&&f.recurrence)||{};
+      return JSON.stringify([!!f.repeats, f.dueN||1, f.dueUnit||"day", f.startHour||0, !!f.endMode,
+        r.type||"once", (r.days||[]).slice().sort((a,b)=>a-b), (r.dates||[]).slice().sort((a,b)=>a-b)]); };
+    const sigOrig = editing ? schedSig(existing) : null;
+    const ventanaFirme = ()=> editing
+      && typeof existing.startAt === "number" && typeof existing.dueAt === "number"
+      && sigOrig === schedSig(previewFields());
     function previewFields(){
       const useDays = (mode!=="enddate" && repeats && byDays);
       return {
+        endMode: mode==="enddate",
         repeats: mode==="enddate" ? false : repeats,
         // Sin la hora de arranque, computeStartFor colocaba la ventana a
         // medianoche: el anillo de la vista previa medía 24 h donde la tarea
@@ -3969,14 +3988,20 @@ const Tasks = (() => {
     // 23:59:59.999 del día en que empieza la tarea.
     function endOfStartDay(){ return endOfDayMs(dateKey(new Date(startMs))); }
     function dueNow(){
+      if(ventanaFirme()) return existing.dueAt;
       if(mode==="enddate") return eod ? endOfStartDay() : endMs;
-      return computeDueFrom(previewFields(), startMs, false);
+      /* Un ciclo que empieza no puede empezar en el pasado. Al cambiar la
+         programación de una tarea vieja, el arranque guardado (de hace días)
+         daba un vencimiento ya cumplido nada más guardar: cambiabas "cada 2
+         días" y nacía vencida. */
+      return computeDueFrom(previewFields(), Math.max(startMs, Date.now()), false);
     }
-    function periodNow(){
-      if(mode==="enddate") return Math.max(60000, dueNow() - startMs);
-      const f=previewFields(), due=dueNow();
-      return Math.max(60000, due - computeStartFor(f, due));
+    function startNow(){
+      if(ventanaFirme()) return existing.startAt;
+      if(mode==="enddate") return startMs;
+      return computeStartFor(previewFields(), dueNow());
     }
+    function periodNow(){ return Math.max(60000, dueNow() - startNow()); }
     /* La forma dicha en castellano. Se arma de lo mismo que se va a guardar,
        así que no puede prometer una cosa y guardar otra. */
     function shapeLabel(){
@@ -4012,17 +4037,16 @@ const Tasks = (() => {
       const due=dueNow(), period=periodNow(), now=Date.now();
       // El anillo lo calcula la MISMA función que dibuja los de la lista: tenía
       // aquí su propia copia de la fórmula, y dos copias acaban separándose.
-      const st = ringState({ start: due-period, due, period });
+      const start = startNow();
+      const occ = { start, due, period, pending: now < start };
+      const st = ringState(occ);
       if(arc) arc.setAttribute("stroke-dashoffset", ringOffset(st.frac));
       if(pv) pv.classList.toggle("over", st.over);
-      const over = st.over;
       const d=$("#ctPvDue",sheet);
-      if(d) d.textContent = (over?"vencida hace ":"vence en ")
-                          + (()=>{ const ms=Math.abs(due-now), dd=Math.floor(ms/86400000),
-                                   hh=Math.floor((ms%86400000)/3600000), mm=Math.floor((ms%3600000)/60000);
-                                   if(dd>0) return hh>0?dd+"d "+hh+" h":dd+"d";
-                                   if(hh>0) return mm>0?hh+" h "+mm+" min":hh+" h";
-                                   return Math.max(1,mm)+" min"; })();
+      // La etiqueta la escribe la misma función que la de las fichas: tenía
+      // aquí su propia copia y por eso una tarea que aún no había empezado
+      // enseñaba una cuenta atrás en vez de su hora de arranque.
+      if(d) d.textContent = dueLabel(due, occ);
     }
 
     const emjInput=$("#ctEmoji",sheet);
@@ -4230,8 +4254,12 @@ const Tasks = (() => {
       };
       // Con días marcados manda el próximo día marcado (00:00 → 23:59), no la
       // suma del intervalo; y el arranque se ajusta a esa misma ventana.
-      dueFields.dueAt   = endMode ? endTarget : computeDueFrom(dueFields, startMs, false);
-      dueFields.startAt = endMode ? startMs : computeStartFor(dueFields, dueFields.dueAt);
+      /* Se guarda EXACTAMENTE la ventana que enseña la vista previa (dueNow /
+         startNow): si no tocaste la programación, la de siempre; si la
+         cambiaste, la nueva. Calcularla aquí por segunda vez es como acaban
+         separándose las dos. */
+      dueFields.dueAt   = dueNow();
+      dueFields.startAt = startNow();
       const reminder = remind ? { time: (remindTime||"09:00") } : null;
       const newId = uid();
       setTimeout(()=>{
