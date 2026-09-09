@@ -340,7 +340,7 @@ img{display:block;}
 .ring-track{fill:none;stroke:var(--ring-track);stroke-width:7;}
 .ring-arc{fill:none;stroke:var(--green);stroke-width:7;stroke-linecap:round;
   transition:stroke-dashoffset var(--t-slow) var(--ease-out), stroke var(--t-med) var(--ease-out);}
-.tile.over .ring-arc,.tilerow.over .ring-arc{stroke:var(--red);}
+.tile.over .ring-arc,.tilerow.over .ring-arc,.pv.over .ring-arc{stroke:var(--red);}
 .ring-ic{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
   font-size:30px;line-height:1;pointer-events:none;}
 .ring-ic svg{width:30px;height:30px;color:var(--label);transform:none;}
@@ -1267,7 +1267,7 @@ input.chipv::-webkit-date-and-time-value{text-align:left;}
 // Versión visible en el perfil (abajo del calendario). Mantener igual al
 // número de caché de service-worker.js al subir cada cambio: así se puede
 // confirmar si el teléfono ya cargó la versión nueva sin tener que adivinar.
-const APP_VERSION = "v159";
+const APP_VERSION = "v160";
 
 /* ---------------------------------------------------------------------
    Icons — set monoline tipo SF Symbols (stroke = currentColor)
@@ -3963,12 +3963,26 @@ const Tasks = (() => {
        guardar, la tarea heredaba un vencimiento inventado ("vencida hace
        1 min" en una que llevaba doce horas vencida). */
     const schedSig = (f)=>{ const r=(f&&f.recurrence)||{};
+      /* Sin `type`: el formulario lo vuelve a deducir ("weekly") y las tareas
+         viejas lo tienen escrito de otra forma ("custom"), así que compararlo
+         daba "programación cambiada" en ediciones donde no se tocó nada. Lo que
+         de verdad la define son los días, las fechas y el ritmo. */
       return JSON.stringify([!!f.repeats, f.dueN||1, f.dueUnit||"day", f.startHour||0, !!f.endMode,
-        r.type||"once", (r.days||[]).slice().sort((a,b)=>a-b), (r.dates||[]).slice().sort((a,b)=>a-b)]); };
+        (r.days||[]).slice().sort((a,b)=>a-b), (r.dates||[]).slice().sort((a,b)=>a-b)]); };
     const sigOrig = editing ? schedSig(existing) : null;
     const ventanaFirme = ()=> editing
       && typeof existing.startAt === "number" && typeof existing.dueAt === "number"
       && sigOrig === schedSig(previewFields());
+    /* La ventana que hay que enseñar es la que enseña la LISTA, y en una tarea
+       que se repite ésa se deduce (una ocurrencia por día); el `dueAt` guardado
+       puede haberse quedado en un día viejo. Leyéndolo a pelo, editar una tarea
+       perfectamente al día sacaba "vencida hace 2d" con el anillo lleno. */
+    function ventanaVigente(){
+      const oc = occurrencesOf(existing);
+      const o  = oc.length ? oc[oc.length-1] : null;   // la vigente es la última
+      return o ? { start:o.start, due:o.due }
+               : { start:existing.startAt, due:existing.dueAt };
+    }
     function previewFields(){
       const useDays = (mode!=="enddate" && repeats && byDays);
       return {
@@ -3988,7 +4002,7 @@ const Tasks = (() => {
     // 23:59:59.999 del día en que empieza la tarea.
     function endOfStartDay(){ return endOfDayMs(dateKey(new Date(startMs))); }
     function dueNow(){
-      if(ventanaFirme()) return existing.dueAt;
+      if(ventanaFirme()) return ventanaVigente().due;
       if(mode==="enddate") return eod ? endOfStartDay() : endMs;
       /* Un ciclo que empieza no puede empezar en el pasado. Al cambiar la
          programación de una tarea vieja, el arranque guardado (de hace días)
@@ -3997,7 +4011,7 @@ const Tasks = (() => {
       return computeDueFrom(previewFields(), Math.max(startMs, Date.now()), false);
     }
     function startNow(){
-      if(ventanaFirme()) return existing.startAt;
+      if(ventanaFirme()) return ventanaVigente().start;
       if(mode==="enddate") return startMs;
       return computeStartFor(previewFields(), dueNow());
     }
